@@ -36,7 +36,7 @@ type Option struct {
 
 func (o *Option) Validate() bool {
 	o.Path = Path(o.Path).Clean()
-	if o.Path == "." || o.Path != o.Path {
+	if o.Path == "." {
 		return false
 	}
 
