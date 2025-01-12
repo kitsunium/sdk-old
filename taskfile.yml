@@ -8,7 +8,6 @@ tasks:
     desc: Update the go modules
     cmds:
       - go get -u ./...
-      - go mod vendor
       - go mod tidy
   tests:
     desc: Run the tests
