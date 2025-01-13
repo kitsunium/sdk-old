@@ -89,3 +89,11 @@ jobs:
             -Dsonar.qualitygate.wait=true
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out
+
+      - name: Enable auto-merge for pull requests
+        if: ${{ github.event_name == 'pull_request' && success() }}
+        uses: peter-evans/enable-pull-request-automerge@v2
+        with:
+          pull-request-number: ${{ github.event.pull_request.number }} # Récupération du numéro de la PR
+          token: ${{ secrets.GITHUB_TOKEN }}
+          merge-method: squash
