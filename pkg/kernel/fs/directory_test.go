@@ -134,4 +134,51 @@ func TestDirectory(t *testing.T) {
 			assert.GreaterOrEqual(t, size, int64(0))
 		})
 	})
+
+	t.Run("Has", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "testdir")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		subDir := filepath.Join(tmpDir, "subdir")
+		err = os.Mkdir(subDir, 0755)
+		assert.NoError(t, err)
+
+		tmpFile, err := os.CreateTemp(tmpDir, "testfile")
+		assert.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+
+		outsideDir := "/tmp/outsideDir"
+		err = os.Mkdir(outsideDir, 0755)
+		assert.NoError(t, err)
+		defer os.RemoveAll(outsideDir)
+
+		outsideFile, err := os.CreateTemp(outsideDir, "outsidefile")
+		assert.NoError(t, err)
+		defer os.Remove(outsideFile.Name())
+
+		dir, err := fs.NewDirectory(fs.Option{Path: tmpDir})
+		assert.NoError(t, err)
+
+		t.Run("File inside directory", func(t *testing.T) {
+			assert.True(t, dir.Has(tmpFile.Name()), "Expected file to be within the directory")
+		})
+
+		t.Run("Subdirectory inside directory", func(t *testing.T) {
+			assert.True(t, dir.Has(subDir), "Expected subdirectory to be within the directory")
+		})
+
+		t.Run("File outside directory", func(t *testing.T) {
+			assert.False(t, dir.Has(outsideFile.Name()), "Expected file to not be within the directory")
+		})
+
+		t.Run("Directory outside directory", func(t *testing.T) {
+			assert.False(t, dir.Has(outsideDir), "Expected directory to not be within the directory")
+		})
+
+		t.Run("Directory has itself", func(t *testing.T) {
+			assert.True(t, dir.Has(tmpDir), "Expected directory to contain itself")
+		})
+	})
+
 }

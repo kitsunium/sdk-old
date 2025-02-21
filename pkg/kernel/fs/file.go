@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -24,6 +26,7 @@ type File interface {
 	Exists() bool
 	Size() int64
 	Read() ([]byte, error)
+	IsDotFile() bool
 }
 
 // file struct represents a file with its path and metadata
@@ -99,6 +102,12 @@ func (f *file) Exists() bool {
 	return f.stats.Exists()
 }
 
+// IsDotFile checks if the file is a dotfile (hidden file).
+func (f *file) IsDotFile() bool {
+	base := filepath.Base(f.path)
+	return strings.HasPrefix(base, ".") && len(base) > 1
+}
+
 // Create ensures the file exists, creating it if necessary, and optionally overwrites it.
 // If Overwrite is true, the file is truncated, and permissions and ownership are updated.
 //
@@ -106,6 +115,10 @@ func (f *file) Exists() bool {
 // - File: The created or updated file object.
 // - error: Error if the operation fails.
 func (f *file) Create() (File, error) {
+	if err := os.MkdirAll(filepath.Dir(f.path), os.FileMode(DefaultDirPerm)); err != nil {
+		return nil, fmt.Errorf("failed to create parent directories: %w", err)
+	}
+
 	flags := unix.O_CREAT | unix.O_WRONLY
 	if f.overwrite {
 		flags |= unix.O_TRUNC

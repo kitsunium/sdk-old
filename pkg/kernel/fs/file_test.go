@@ -97,6 +97,19 @@ func TestFile(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotNil(t, f)
 		})
+
+		t.Run("is dot file", func(t *testing.T) {
+			dotFile := tmpDir + "/.dotfile"
+
+			f, err := fs.NewFile(fs.Option{
+				Path: dotFile,
+			})
+
+			assert.NoError(t, err)
+			assert.NotNil(t, f)
+
+			assert.True(t, f.IsDotFile())
+		})
 	})
 
 	t.Run("Path", func(t *testing.T) {
