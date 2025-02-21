@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -19,6 +20,7 @@ type Directory interface {
 	Create() (Directory, error)
 	Remove() error
 	Exists() bool
+	Has(string) bool
 	Size() int64
 	List() ([]File, []Directory, error)
 }
@@ -66,6 +68,22 @@ func NewDirectory(option Option) (Directory, error) {
 // Path returns the directory's path
 func (d *directory) Path() string {
 	return d.path
+}
+
+// Has checks if a given System (file or directory) is within the current directory.
+func (d *directory) Has(s string) bool {
+	dirPath := d.path
+	sysPath := s
+
+	// Check if the directory path is a prefix of the system path
+	// and ensure it's a proper directory boundary using `filepath.Rel`
+	rel, err := filepath.Rel(dirPath, sysPath)
+	if err != nil {
+		return false
+	}
+
+	// `rel` will not contain ".." if sysPath is within dirPath
+	return !strings.HasPrefix(rel, "..")
 }
 
 // Parent retrieves the parent directory of the current directory
