@@ -17,8 +17,8 @@ go_test(
         "buffer_test.go",
         "pool_test.go",
     ],
-    embed = [":buffer"],
     deps = [
+        ":buffer",
         "@com_github_stretchr_testify//assert",
     ],
 )

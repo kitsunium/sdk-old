@@ -72,11 +72,11 @@ tasks:
       - bazel run //:gazelle
       - echo "✅ BUILD files updated"
 
-  gazelle-update-repos:
-    desc: Update Bazel repository rules from go.mod
+  gazelle-fix:
+    desc: Fix and update all BUILD.bazel files
     cmds:
-      - bazel run //:gazelle-update-repos
-      - echo "✅ Repository rules updated"
+      - bazel run //:gazelle -- fix
+      - echo "✅ BUILD files fixed"
 
   tidy:
     desc: Run bazel mod tidy to fix dependencies

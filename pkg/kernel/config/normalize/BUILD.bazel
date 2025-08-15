@@ -19,8 +19,8 @@ go_test(
         "map_test.go",
         "value_test.go",
     ],
-    embed = [":normalize"],
     deps = [
+        ":normalize",
         "@com_github_stretchr_testify//assert",
     ],
 )

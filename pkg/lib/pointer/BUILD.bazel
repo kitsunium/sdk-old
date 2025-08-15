@@ -11,8 +11,8 @@ go_test(
     name = "pointer_test",
     size = "small",
     srcs = ["pointer_test.go"],
-    embed = [":pointer"],
     deps = [
+        ":pointer",
         "@com_github_stretchr_testify//assert",
     ],
 )

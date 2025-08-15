@@ -15,7 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/lib/pointer",
-        "@org_golang_x_sys//unix:go_default_library",
+        "@org_golang_x_sys//unix",
     ],
 )
 
@@ -28,8 +28,9 @@ go_test(
         "file_test.go",
         "stats_test.go",
     ],
-    embed = [":fs"],
     deps = [
+        ":fs",
+        "//pkg/lib/pointer",
         "@com_github_stretchr_testify//assert",
     ],
 )

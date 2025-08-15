@@ -5,17 +5,14 @@ go_library(
     srcs = ["config.go"],
     importpath = "github.com/kistunium/sdk/pkg/kernel/config",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/kernel/config/parser",
-    ],
 )
 
 go_test(
     name = "config_test",
     size = "small",
     srcs = ["config_test.go"],
-    embed = [":config"],
     deps = [
+        ":config",
         "//pkg/kernel/config/parser",
         "@com_github_stretchr_testify//assert",
     ],
