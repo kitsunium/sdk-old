@@ -45,14 +45,24 @@ jobs:
       
       - name: Coverage
         run: |
-          bazel coverage //pkg/... --combined_report=lcov || true
-          go test -race -coverprofile=coverage.out -covermode=atomic ./pkg/... || true
+          bazel coverage //pkg/... \
+            --combined_report=lcov \
+            --instrumentation_filter="//pkg[/:]" \
+            --test_output=errors
+          
+      - name: Convert LCOV to Go coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          # Bazel génère du LCOV, on le convertit pour SonarCloud
+          if [ -f "bazel-out/_coverage/_coverage_report.dat" ]; then
+            cp bazel-out/_coverage/_coverage_report.dat coverage.lcov
+          fi
           
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'pull_request'
         with:
           name: coverage
-          path: coverage.out
+          path: coverage.lcov
           retention-days: 1
 
   security:
@@ -96,4 +106,4 @@ jobs:
           args: >
             -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
-            -Dsonar.go.coverage.reportPaths=coverage.out
+            -Dsonar.lcov.reportPaths=coverage.lcov
