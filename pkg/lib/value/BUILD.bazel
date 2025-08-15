@@ -13,6 +13,6 @@ go_test(
     srcs = ["value_test.go"],
     deps = [
         ":value",
-        "@com_github_stretchr_testify//assert:assert",
+        "@com_github_stretchr_testify//assert",
     ],
 )

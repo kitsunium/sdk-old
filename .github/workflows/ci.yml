@@ -60,13 +60,25 @@ jobs:
         run: task test
 
       - name: Generate coverage report
-        run: task coverage
+        run: |
+          task coverage || true
+          # Copy coverage report to root for artifact upload
+          if [ -f "bazel-out/_coverage/_coverage_report.dat" ]; then
+            cp bazel-out/_coverage/_coverage_report.dat _coverage_report.dat
+          fi
 
-      - name: Upload coverage
+      - name: Generate Go coverage for Sonar
+        run: |
+          # Generate Go-style coverage report for SonarCloud
+          go test -coverprofile=coverage.out -covermode=atomic ./pkg/... || true
+
+      - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: bazel-out/_coverage/_coverage_report.dat
+          path: |
+            _coverage_report.dat
+            coverage.out
           if-no-files-found: warn
 
       - name: Upload project to Artifacts
@@ -148,16 +160,20 @@ jobs:
           path: .
         continue-on-error: true
 
-      - name: Convert LCOV to Go coverage format
+      - name: Verify coverage files
         run: |
-          if [ -f "_coverage_report.dat" ]; then
-            # Bazel generates LCOV format, convert to Go format for Sonar
-            cp _coverage_report.dat coverage.out
+          echo "Checking for coverage files..."
+          if [ -f "coverage.out" ]; then
+            echo "Found Go coverage report: coverage.out"
+            head -5 coverage.out
           else
-            echo "No coverage report found, creating empty file"
-            touch coverage.out
+            echo "No Go coverage report found"
           fi
-        continue-on-error: true
+          if [ -f "_coverage_report.dat" ]; then
+            echo "Found Bazel LCOV report: _coverage_report.dat"
+          else
+            echo "No Bazel LCOV report found"
+          fi
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v4
@@ -174,9 +190,20 @@ jobs:
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out
 
+      - name: Enable auto-merge for pull requests
+        if: ${{ github.event_name == 'pull_request' && success() }}
+        uses: peter-evans/enable-pull-request-automerge@v2
+        with:
+          pull-request-number: ${{ github.event.pull_request.number }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          merge-method: squash
+
   security-scan:
     name: Security Scan
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -203,13 +230,12 @@ jobs:
         continue-on-error: true
 
       - name: Run gosec security scanner
-        uses: securego/gosec@master
+        uses: securego/gosec@v2.22.0
         with:
-          args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
-        continue-on-error: true
+          args: '-fmt sarif -out gosec-results.sarif -severity high ./...'
 
       - name: Upload gosec results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'gosec-results.sarif'
-        continue-on-error: true
+        if: always()

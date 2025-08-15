@@ -19,6 +19,6 @@ go_test(
     ],
     deps = [
         ":buffer",
-        "@com_github_stretchr_testify//assert:assert",
+        "@com_github_stretchr_testify//assert",
     ],
 )

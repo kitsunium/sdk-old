@@ -13,6 +13,6 @@ go_test(
     srcs = ["pointer_test.go"],
     deps = [
         ":pointer",
-        "@com_github_stretchr_testify//assert:assert",
+        "@com_github_stretchr_testify//assert",
     ],
 )
