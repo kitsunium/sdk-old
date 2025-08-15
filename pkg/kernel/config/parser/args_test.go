@@ -14,7 +14,10 @@ func TestArgsLoad(t *testing.T) {
 	originalArgs := os.Args                   // Save the original arguments for restoration after the test.
 	defer func() { os.Args = originalArgs }() // Restore the original arguments after the test.
 
-	os.Args = []string{"cmd", "key1=value1", "key2=value2", "key3=value3", "key4", "value4", "K_E_Y5=value5", "key6", "'val=ue6'"}
+	os.Args = []string{
+		"cmd", "key1=value1", "key2=value2", "key3=value3",
+		"key4", "value4", "K_E_Y5=value5", "key6", "'val=ue6'",
+	}
 
 	// Create an instance of Args and load the configuration.
 	argsParser := &parser.ARGS{}

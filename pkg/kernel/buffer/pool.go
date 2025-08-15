@@ -53,7 +53,7 @@ func (p *BufferPool) Put(buf *Buffer) {
 
 	// Protect access to the pools map
 	p.mu.Lock()
-	pool, _ := p.pools[buf.Cap()]
+	pool := p.pools[buf.Cap()]
 	p.mu.Unlock()
 
 	buf.Free()

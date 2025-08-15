@@ -22,7 +22,7 @@ type YAML struct {
 // - None
 //
 // Returns:
-// - string: file type "yaml"
+// - string: file type "yaml".
 func (y *YAML) Type() string {
 	return "yaml"
 }
@@ -37,7 +37,7 @@ func (y *YAML) Type() string {
 //
 // Returns:
 // - map[string]string: normalized configuration map from the YAML content
-// - error: error if any issues occurred during loading or deserialization
+// - error: error if any issues occurred during loading or deserialization.
 func (y *YAML) Load() (map[string]string, error) {
 	if ext := path.Ext(y.Path); ext != ".yaml" && ext != ".yml" {
 		return nil, fmt.Errorf("invalid file extension: %s", ext)

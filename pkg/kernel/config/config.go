@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -15,7 +16,7 @@ type Config struct {
 	mu      sync.RWMutex
 }
 
-// New creates a new Config instance
+// New creates a new Config instance.
 func New(parsers ...Parser) *Config {
 	return &Config{
 		parsers: parsers,
@@ -29,12 +30,12 @@ func New(parsers ...Parser) *Config {
 // - sources: ...Source - A list of sources to load configuration from
 //
 // Returns:
-// - err: error - Error if any issue occurs during loading
+// - err: error - Error if any issue occurs during loading.
 func (c *Config) Load() error {
 	for _, source := range c.parsers {
 		data, err := source.Load()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load config from %s parser: %w", source.Type(), err)
 		}
 
 		for key, value := range data {
@@ -49,7 +50,7 @@ func (c *Config) Load() error {
 //
 // Parameters:
 // - key: string - The configuration key to set
-// - value: any - The configuration value to set
+// - value: any - The configuration value to set.
 func (c *Config) Set(key string, value any) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -63,7 +64,7 @@ func (c *Config) Set(key string, value any) {
 // - key: string - The configuration key to retrieve
 //
 // Returns:
-// - value: any - The configuration value
+// - value: any - The configuration value.
 func (c *Config) Get(key string, defaultValue any) any {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

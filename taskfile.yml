@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 silent: true
 
 tasks:
@@ -9,7 +9,25 @@ tasks:
     desc: Format code
     cmds:
       - go fmt ./...
+      - npx prettier --write .
       - bazel run //:gazelle
+
+  lint:
+    desc: Run linters
+    cmds:
+      - golangci-lint run ./...
+
+  sec:
+    desc: Run security checks
+    cmds:
+      - gosec -quiet -fmt text ./pkg/...
+
+  check:
+    desc: Run all checks (format, lint, security)
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: sec
 
   update:
     desc: Update dependencies

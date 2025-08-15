@@ -32,13 +32,14 @@ func (e *ARGS) Load() (map[string]string, error) {
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if strings.Contains(arg, "=") {
+		switch {
+		case strings.Contains(arg, "="):
 			parts := strings.SplitN(arg, "=", 2)
 			config[normalize.Key(parts[0])] = normalize.Value(parts[1])
-		} else if i+1 < len(args) {
+		case i+1 < len(args):
 			config[normalize.Key(arg)] = normalize.Value(args[i+1])
 			i++
-		} else {
+		default:
 			return nil, errors.New("invalid argument format, expected a value after key")
 		}
 	}

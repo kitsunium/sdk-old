@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['*']
+    tags: ["*"]
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -23,28 +23,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Needed for SonarCloud
-      
+          fetch-depth: 0 # Needed for SonarCloud
+
       - uses: actions/setup-go@v5
         with:
           go-version: 1.24.x
           cache: true
-      
+
       - uses: bazel-contrib/setup-bazel@0.15.0
         with:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
           repository-cache: true
-          
+
       - name: Validate
         run: |
           go mod verify
           go fmt ./...
           git diff --exit-code || (echo "❌ Files need formatting" && exit 1)
-      
+
       - name: Test
         run: bazel test //pkg/... --test_output=errors
-      
+
       - name: Coverage
         if: github.event_name == 'pull_request'
         run: |
@@ -52,7 +52,7 @@ jobs:
             --combined_report=lcov \
             --instrumentation_filter="//pkg[/:]" \
             --test_output=errors
-          
+
       - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
         uses: SonarSource/sonarcloud-github-action@v3
@@ -65,7 +65,7 @@ jobs:
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
             -Dsonar.lcov.reportPaths=bazel-out/_coverage/_coverage_report.dat
         continue-on-error: true
-      
+
       - name: Security Scan
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -73,7 +73,7 @@ jobs:
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
-          
+
       - name: Upload Security Results
         uses: github/codeql-action/upload-sarif@v3
         if: always()

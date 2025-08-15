@@ -176,7 +176,8 @@ func TestStats(t *testing.T) {
 			assert.NoError(t, err)
 
 			stats.Refresh()
-			assert.False(t, stats.IsExecutable(uint32(uid), uint32(gid)), "File without execute permissions should not be executable")
+			assert.False(t, stats.IsExecutable(uint32(uid), uint32(gid)),
+				"File without execute permissions should not be executable")
 		})
 	})
 
@@ -197,7 +198,8 @@ func TestStats(t *testing.T) {
 			assert.NoError(t, err)
 
 			stats.Refresh()
-			assert.False(t, stats.IsExecutable(uint32(uid), uint32(gid)), "File without execute permissions should not be executable")
+			assert.False(t, stats.IsExecutable(uint32(uid), uint32(gid)),
+				"File without execute permissions should not be executable")
 		})
 	})
 
