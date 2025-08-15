@@ -2,6 +2,9 @@ version: '3'
 silent: true
 
 tasks:
+  default:
+    cmds:
+      - task -l
   fmt:
     desc: Format code
     cmds:
