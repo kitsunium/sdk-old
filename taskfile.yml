@@ -2,151 +2,44 @@ version: '3'
 silent: true
 
 tasks:
-  default:
+  # Main commands
+  build:
+    desc: Build all packages
     cmds:
-      - task -l
+      - bazel build //pkg/...
 
-  # Go module management
+  test:
+    desc: Run all tests
+    cmds:
+      - bazel test //pkg/... --test_output=errors
+
+  coverage:
+    desc: Generate coverage report
+    cmds:
+      - bazel coverage //pkg/... --combined_report=lcov
+      - echo "📊 Coverage: bazel-out/_coverage/_coverage_report.dat"
+
+  # Maintenance
+  gazelle:
+    desc: Update BUILD files
+    cmds:
+      - bazel run //:gazelle
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+      - bazel run //:gazelle
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - bazel clean
+
+  # Utilities
   update:
-    desc: Update Go modules and Bazel dependencies
+    desc: Update dependencies
     cmds:
       - go get -u ./...
       - go mod tidy
       - bazel mod tidy
-      - echo "✅ Dependencies updated"
-
-  # Build tasks
-  build:
-    desc: Build all packages with Bazel
-    cmds:
-      - bazel build //pkg/...
-      - echo "✅ Build successful"
-
-  build-package:
-    desc: "Build a specific package (usage: task build-package PKG=//pkg/kernel/config)"
-    cmds:
-      - bazel build {{.PKG}}
-      - echo "✅ Package {{.PKG}} built"
-    requires:
-      vars: [PKG]
-
-  # Test tasks
-  test:
-    desc: Run all tests with Bazel
-    cmds:
-      - bazel test //pkg/... --test_output=errors
-      - echo "✅ All tests passed"
-
-  test-package:
-    desc: "Test a specific package (usage: task test-package PKG=//pkg/kernel/config:config_test)"
-    cmds:
-      - bazel test {{.PKG}} --test_output=all
-      - echo "✅ Test {{.PKG}} passed"
-    requires:
-      vars: [PKG]
-
-  test-verbose:
-    desc: Run all tests with verbose output
-    cmds:
-      - bazel test //pkg/... --test_output=all
-      - echo "✅ All tests passed"
-
-  # Coverage tasks
-  coverage:
-    desc: Generate test coverage report
-    cmds:
-      - bazel coverage //pkg/... --combined_report=lcov
-      - echo "✅ Coverage report generated at bazel-out/_coverage/_coverage_report.dat"
-
-  coverage-html:
-    desc: Generate HTML coverage report
-    cmds:
-      - bazel coverage //pkg/... --combined_report=lcov
-      - genhtml bazel-out/_coverage/_coverage_report.dat -o coverage-html
-      - echo "✅ HTML coverage report generated in coverage-html/"
-
-  # Bazel maintenance
-  gazelle:
-    desc: Update BUILD.bazel files with gazelle
-    cmds:
-      - bazel run //:gazelle
-      - echo "✅ BUILD files updated"
-
-  gazelle-fix:
-    desc: Fix and update all BUILD.bazel files
-    cmds:
-      - bazel run //:gazelle -- fix
-      - echo "✅ BUILD files fixed"
-
-  tidy:
-    desc: Run bazel mod tidy to fix dependencies
-    cmds:
-      - bazel mod tidy
-      - echo "✅ Bazel dependencies tidied"
-
-  # Cleanup
-  clean:
-    desc: Clean Bazel build artifacts
-    cmds:
-      - bazel clean
-      - echo "✅ Build artifacts cleaned"
-
-  clean-expunge:
-    desc: Clean all Bazel artifacts including external dependencies
-    cmds:
-      - bazel clean --expunge
-      - echo "✅ All Bazel artifacts cleaned"
-
-  # CI/CD tasks
-  ci:
-    desc: Run CI pipeline (build + test)
-    cmds:
-      - bazel build //pkg/... --config=ci
-      - bazel test //pkg/... --config=ci
-      - echo "✅ CI pipeline completed"
-
-  # Development helpers
-  check:
-    desc: Run all checks (build + test + gazelle)
-    cmds:
-      - task: gazelle
-      - task: build
-      - task: test
-      - echo "✅ All checks passed"
-
-  fmt:
-    desc: Format Go code
-    cmds:
-      - go fmt ./...
-      - bazel run @rules_go//go -- fmt ./...
-      - echo "✅ Code formatted"
-
-  lint:
-    desc: Run linters
-    cmds:
-      - bazel run @rules_go//go -- vet ./...
-      - echo "✅ Linting completed"
-
-  # Info tasks
-  info:
-    desc: Show Bazel and Go versions
-    cmds:
-      - echo "Bazel version:"
-      - bazel version
-      - echo ""
-      - echo "Go version:"
-      - go version
-      - echo ""
-      - echo "Module:"
-      - go list -m
-
-  deps:
-    desc: Show dependency tree
-    cmds:
-      - bazel query "deps(//pkg/...)" --output graph
-
-  # Legacy compatibility (redirects to Bazel)
-  tests:
-    desc: Run tests (legacy - redirects to test task)
-    cmds:
-      - task: test
