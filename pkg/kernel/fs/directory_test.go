@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/fs"
+	"github.com/kitsunium/sdk/pkg/kernel/fs"
 	"github.com/stretchr/testify/assert"
 )
 

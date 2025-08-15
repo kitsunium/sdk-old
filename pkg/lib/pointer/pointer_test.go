@@ -4,7 +4,7 @@ import (
 	"math/cmplx"
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/lib/pointer"
+	"github.com/kitsunium/sdk/pkg/lib/pointer"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/buffer"
+	"github.com/kitsunium/sdk/pkg/kernel/buffer"
 	"github.com/stretchr/testify/assert"
 )
 

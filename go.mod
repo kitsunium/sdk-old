@@ -1,4 +1,4 @@
-module github.com/kistunium/sdk
+module github.com/kitsunium/sdk
 
 go 1.24
 

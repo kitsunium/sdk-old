@@ -7,7 +7,7 @@ go_library(
         "map.go",
         "value.go",
     ],
-    importpath = "github.com/kistunium/sdk/pkg/kernel/config/normalize",
+    importpath = "github.com/kitsunium/sdk/pkg/kernel/config/normalize",
     visibility = ["//visibility:public"],
 )
 

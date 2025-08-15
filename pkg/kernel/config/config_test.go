@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/config"
-	"github.com/kistunium/sdk/pkg/kernel/config/parser"
+	"github.com/kitsunium/sdk/pkg/kernel/config"
+	"github.com/kitsunium/sdk/pkg/kernel/config/parser"
 	"github.com/stretchr/testify/assert"
 )
 

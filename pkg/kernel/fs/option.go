@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kistunium/sdk/pkg/lib/pointer"
+	"github.com/kitsunium/sdk/pkg/lib/pointer"
 )
 
 // Path represents a file or directory path.

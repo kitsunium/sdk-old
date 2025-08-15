@@ -11,7 +11,7 @@ go_library(
         "stats.go",
         "system.go",
     ],
-    importpath = "github.com/kistunium/sdk/pkg/kernel/fs",
+    importpath = "github.com/kitsunium/sdk/pkg/kernel/fs",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/lib/pointer",

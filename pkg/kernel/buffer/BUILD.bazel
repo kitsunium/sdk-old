@@ -6,7 +6,7 @@ go_library(
         "buffer.go",
         "pool.go",
     ],
-    importpath = "github.com/kistunium/sdk/pkg/kernel/buffer",
+    importpath = "github.com/kitsunium/sdk/pkg/kernel/buffer",
     visibility = ["//visibility:public"],
 )
 

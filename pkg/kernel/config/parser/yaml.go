@@ -6,7 +6,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/kistunium/sdk/pkg/kernel/config/normalize"
+	"github.com/kitsunium/sdk/pkg/kernel/config/normalize"
 	"gopkg.in/yaml.v3"
 )
 

@@ -3,7 +3,7 @@ package errors_test
 import (
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/errors"
+	"github.com/kitsunium/sdk/pkg/kernel/errors"
 	"github.com/stretchr/testify/assert"
 )
 

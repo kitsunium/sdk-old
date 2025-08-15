@@ -9,7 +9,7 @@ go_library(
         "xml.go",
         "yaml.go",
     ],
-    importpath = "github.com/kistunium/sdk/pkg/kernel/config/parser",
+    importpath = "github.com/kitsunium/sdk/pkg/kernel/config/parser",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kernel/config/normalize",

@@ -3,7 +3,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "value",
     srcs = ["value.go"],
-    importpath = "github.com/kistunium/sdk/pkg/lib/value",
+    importpath = "github.com/kitsunium/sdk/pkg/lib/value",
     visibility = ["//visibility:public"],
 )
 

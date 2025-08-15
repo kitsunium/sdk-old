@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/fs"
-	"github.com/kistunium/sdk/pkg/lib/pointer"
+	"github.com/kitsunium/sdk/pkg/kernel/fs"
+	"github.com/kitsunium/sdk/pkg/lib/pointer"
 	"github.com/stretchr/testify/assert"
 )
 
