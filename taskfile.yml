@@ -2,7 +2,19 @@ version: '3'
 silent: true
 
 tasks:
-  # Main commands
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+      - bazel run //:gazelle
+
+  update:
+    desc: Update dependencies
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+      - bazel mod tidy
+
   build:
     desc: Build all packages
     cmds:
@@ -12,34 +24,3 @@ tasks:
     desc: Run all tests
     cmds:
       - bazel test //pkg/... --test_output=errors
-
-  coverage:
-    desc: Generate coverage report
-    cmds:
-      - bazel coverage //pkg/... --combined_report=lcov
-      - echo "📊 Coverage: bazel-out/_coverage/_coverage_report.dat"
-
-  # Maintenance
-  gazelle:
-    desc: Update BUILD files
-    cmds:
-      - bazel run //:gazelle
-
-  fmt:
-    desc: Format code
-    cmds:
-      - go fmt ./...
-      - bazel run //:gazelle
-
-  clean:
-    desc: Clean build artifacts
-    cmds:
-      - bazel clean
-
-  # Utilities
-  update:
-    desc: Update dependencies
-    cmds:
-      - go get -u ./...
-      - go mod tidy
-      - bazel mod tidy
