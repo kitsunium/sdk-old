@@ -11,7 +11,7 @@ bazel_dep(name = "gazelle", version = "0.41.0")
 
 # Go SDK setup
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
-go_sdk.download(version = "1.24.0")
+go_sdk.download(version = "1.24.6")
 
 # Go dependencies
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
