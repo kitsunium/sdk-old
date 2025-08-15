@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Git hook to prevent pushing commits with Claude-related mentions
+# This hook is called before a push to a remote repository
+
+# Colors for output
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Define patterns to check
+patterns=(
+    "[Cc]laude"
+    "Anthropic"
+    "anthropic"
+    "🤖.*[Cc]laude"
+    "Co-[Aa]uthored-[Bb]y:.*[Cc]laude"
+    "Co-[Aa]uthored-[Bb]y:.*noreply@anthropic"
+    "[Gg]enerated with.*[Cc]laude"
+    "claude\.ai"
+)
+
+# Read the range of commits being pushed
+while read local_ref local_sha remote_ref remote_sha
+do
+    # Check if we're deleting a branch
+    if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+        continue
+    fi
+    
+    # Get the range of commits
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+        # New branch, check all commits
+        range="$local_sha"
+    else
+        # Existing branch, check new commits only
+        range="$remote_sha..$local_sha"
+    fi
+    
+    # Check each commit message
+    commits=$(git rev-list "$range" 2>/dev/null)
+    
+    for commit in $commits; do
+        commit_msg=$(git log --format=%B -n 1 "$commit")
+        
+        # Check each pattern
+        for pattern in "${patterns[@]}"; do
+            if echo "$commit_msg" | grep -qE "$pattern"; then
+                echo -e "${RED}ERROR: Commit $commit contains forbidden reference to AI assistant.${NC}"
+                echo -e "${RED}Pattern matched: $pattern${NC}"
+                echo ""
+                echo "Commit message:"
+                echo "---"
+                git log --format='%h %s' -n 1 "$commit"
+                echo "---"
+                echo ""
+                echo "Please amend the commit to remove references to:"
+                echo "  - Claude or Anthropic"
+                echo "  - AI assistant mentions"
+                echo "  - Co-authored-by with AI"
+                echo "  - Generated with AI tools"
+                echo ""
+                echo "Use: git commit --amend to fix the last commit"
+                echo "Or: git rebase -i to fix older commits"
+                exit 1
+            fi
+        done
+        
+        # Warning for robot emoji
+        if echo "$commit_msg" | grep -q "🤖"; then
+            echo -e "${YELLOW}WARNING: Commit $commit contains robot emoji (🤖).${NC}"
+            echo "This might indicate AI-generated content."
+        fi
+    done
+done
+
+exit 0
