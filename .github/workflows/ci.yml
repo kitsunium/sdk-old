@@ -18,10 +18,12 @@ concurrency:
 
 jobs:
   test:
-    name: Test & Coverage
+    name: Test & Analysis
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for SonarCloud
       
       - uses: actions/setup-go@v5
         with:
@@ -44,18 +46,25 @@ jobs:
         run: bazel test //pkg/... --test_output=errors
       
       - name: Coverage
+        if: github.event_name == 'pull_request'
         run: |
           bazel coverage //pkg/... \
             --combined_report=lcov \
             --instrumentation_filter="//pkg[/:]" \
             --test_output=errors
           
-      - uses: actions/upload-artifact@v4
+      - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
+        uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          name: coverage
-          path: bazel-out/_coverage/_coverage_report.dat
-          retention-days: 1
+          args: >
+            -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+            -Dsonar.lcov.reportPaths=bazel-out/_coverage/_coverage_report.dat
+        continue-on-error: true
 
   security:
     name: Security
@@ -76,26 +85,3 @@ jobs:
         if: always()
         with:
           sarif_file: trivy.sarif
-
-  sonar:
-    name: SonarCloud
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - uses: actions/download-artifact@v4
-        with:
-          name: coverage
-          
-      - uses: SonarSource/sonarcloud-github-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
-            -Dsonar.lcov.reportPaths=_coverage_report.dat
