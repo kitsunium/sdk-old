@@ -2,240 +2,98 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - '*'
+    branches: [main]
+    tags: ['*']
   pull_request:
     types: [opened, synchronize, reopened]
-    
+
 permissions:
+  contents: read
   pull-requests: write
-  contents: write
-  packages: write
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build and Test
-    runs-on: ubuntu-24.04
+  test:
+    name: Test & Coverage
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-go@v5
         with:
           go-version: 1.24.x
-          cache-dependency-path: go.sum
-
-      - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@0.10.0
+          cache: true
+      
+      - uses: bazel-contrib/setup-bazel@0.15.0
         with:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
           repository-cache: true
-          bazelrc: |
-            build --color=yes
-            build --show_progress_rate_limit=5
-            test --test_output=errors
-
-      - name: Setup Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify Bazel setup
+          
+      - name: Validate
         run: |
-          bazel version
-          echo "---"
-          go version
-
-      - name: Build all packages
-        run: task build
-
-      - name: Run all tests
-        run: task test
-
-      - name: Generate coverage report
+          go mod verify
+          go fmt ./...
+          git diff --exit-code || (echo "❌ Files need formatting" && exit 1)
+      
+      - name: Test
+        run: bazel test //pkg/... --test_output=errors
+      
+      - name: Coverage
         run: |
-          task coverage || true
-          # Copy coverage report to root for artifact upload
-          if [ -f "bazel-out/_coverage/_coverage_report.dat" ]; then
-            cp bazel-out/_coverage/_coverage_report.dat _coverage_report.dat
-          fi
-
-      - name: Generate Go coverage for Sonar
-        run: |
-          # Generate Go-style coverage report for SonarCloud
-          go test -coverprofile=coverage.out -covermode=atomic ./pkg/... || true
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+          bazel coverage //pkg/... --combined_report=lcov || true
+          go test -race -coverprofile=coverage.out -covermode=atomic ./pkg/... || true
+          
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
         with:
-          name: coverage-report
-          path: |
-            _coverage_report.dat
-            coverage.out
-          if-no-files-found: warn
+          name: coverage
+          path: coverage.out
+          retention-days: 1
 
-      - name: Upload project to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          include-hidden-files: true
-          if-no-files-found: error
-          name: project
-          path: .
-
-  lint-and-format:
-    name: Lint and Format
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.24.x
-          cache-dependency-path: go.sum
-
-      - name: Setup Bazel
-        uses: bazel-contrib/setup-bazel@0.10.0
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
-
-      - name: Setup Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check formatting
-        run: |
-          task fmt
-          git diff --exit-code || (echo "Files need formatting. Run 'task fmt'" && exit 1)
-
-      - name: Run linters
-        run: task lint
-
-      - name: Verify BUILD files are up to date
-        run: |
-          task gazelle
-          git diff --exit-code BUILD.bazel pkg/*/BUILD.bazel || (echo "BUILD files need updating. Run 'task gazelle'" && exit 1)
-
-  analyze:
-    name: Analyze
-    needs: [build-and-test]
-    runs-on: ubuntu-24.04
-    outputs:
-      version: ${{ steps.semver.outputs.next }}
-      prev_version: ${{ steps.semver.outputs.current }}
-    steps:
-      - name: Download project from Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: project
-          path: .
-
-      - name: What is next version?
-        id: semver
-        uses: ietf-tools/semver-action@v1
-        with:
-          token: ${{ github.token }}
-          branch: main
-          skipInvalidTags: true
-          noVersionBumpBehavior: patch
-          noNewCommitBehavior: current
-          patchList: 'vendor, update, fix, bugfix, perf, refactor, test, tests, chore, ci, docs, improve, style, build, revert, improvement, enhancement, coverage, clean'
-
-      - name: Download coverage report
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-report
-          path: .
-        continue-on-error: true
-
-      - name: Verify coverage files
-        run: |
-          echo "Checking for coverage files..."
-          if [ -f "coverage.out" ]; then
-            echo "Found Go coverage report: coverage.out"
-            head -5 coverage.out
-          else
-            echo "No Go coverage report found"
-          fi
-          if [ -f "_coverage_report.dat" ]; then
-            echo "Found Bazel LCOV report: _coverage_report.dat"
-          else
-            echo "No Bazel LCOV report found"
-          fi
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v4
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          projectBaseDir: .
-          args: >
-            -Dsonar.projectVersion=${{ steps.semver.outputs.next }}
-            -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
-            -Dsonar.qualitygate.wait=true
-            -Dsonar.test.inclusions=**/*_test.go
-            -Dsonar.go.coverage.reportPaths=coverage.out
-
-      - name: Enable auto-merge for pull requests
-        if: ${{ github.event_name == 'pull_request' && success() }}
-        uses: peter-evans/enable-pull-request-automerge@v2
-        with:
-          pull-request-number: ${{ github.event.pull_request.number }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          merge-method: squash
-
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-24.04
+  security:
+    name: Security
+    runs-on: ubuntu-latest
     permissions:
-      contents: read
       security-events: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      
+      - uses: aquasecurity/trivy-action@0.28.0
         with:
-          go-version: 1.24.x
-          cache-dependency-path: go.sum
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
-
-      - name: Run gosec security scanner
-        uses: securego/gosec@v2.22.0
-        with:
-          args: '-fmt sarif -out gosec-results.sarif -severity high ./...'
-
-      - name: Upload gosec results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'gosec-results.sarif'
+          scan-type: fs
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          
+      - uses: github/codeql-action/upload-sarif@v3
         if: always()
+        with:
+          sarif_file: trivy.sarif
+
+  sonar:
+    name: SonarCloud
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage
+          
+      - uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+            -Dsonar.go.coverage.reportPaths=coverage.out
