@@ -15,8 +15,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/lib/pointer",
-        "@org_golang_x_sys//unix",
-    ],
+    ] + select({
+        "@rules_go//go/platform:darwin": ["@org_golang_x_sys//unix"],
+        "@rules_go//go/platform:linux": ["@org_golang_x_sys//unix"],
+        "@rules_go//go/platform:freebsd": ["@org_golang_x_sys//unix"],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
@@ -31,6 +35,6 @@ go_test(
     deps = [
         ":fs",
         "//pkg/lib/pointer",
-        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//assert:assert",
     ],
 )

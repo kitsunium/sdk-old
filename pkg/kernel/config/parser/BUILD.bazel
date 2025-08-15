@@ -30,7 +30,7 @@ go_test(
     ],
     deps = [
         ":parser",
-        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//assert:assert",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

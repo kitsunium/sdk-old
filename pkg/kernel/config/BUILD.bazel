@@ -14,6 +14,6 @@ go_test(
     deps = [
         ":config",
         "//pkg/kernel/config/parser",
-        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//assert:assert",
     ],
 )
