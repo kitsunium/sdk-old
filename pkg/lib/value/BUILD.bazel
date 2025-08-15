@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "value",
+    srcs = ["value.go"],
+    importpath = "github.com/kistunium/sdk/pkg/lib/value",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "value_test",
+    size = "small",
+    srcs = ["value_test.go"],
+    embed = [":value"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+    ],
+)

@@ -1,0 +1,5 @@
+# Library packages - utility functions
+package_group(
+    name = "lib",
+    packages = ["//pkg/lib/..."],
+)

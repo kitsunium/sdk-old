@@ -1,0 +1,48 @@
+# Bazel configuration for Kitsunium SDK
+
+# Enable bzlmod (Bazel modules)
+common --enable_bzlmod
+
+# Build configuration
+build --jobs=auto
+build --incompatible_strict_action_env
+build --sandbox_default_allow_network=false
+build --guard_against_concurrent_changes
+
+# Go-specific settings
+build --@rules_go//go/config:pure
+build --@rules_go//go/config:race=false
+
+# Test configuration
+test --test_output=errors
+test --test_verbose_timeout_warnings
+test --cache_test_results=yes
+# Default size for Go tests
+test --test_size_filters=small,medium
+
+# Coverage configuration
+coverage --combined_report=lcov
+coverage --instrumentation_filter="^//pkg[/:]"
+
+# CI configuration
+build:ci --build_event_json_file=build_events.json
+build:ci --noshow_progress
+test:ci --test_output=all
+test:ci --nocache_test_results
+
+# Debug configuration
+build:debug --strip=never
+build:debug --copt=-g
+build:debug --@rules_go//go/config:race=true
+
+# Release configuration
+build:release --compilation_mode=opt
+build:release --strip=always
+
+# Remote cache (uncomment and configure if needed)
+# build --remote_cache=grpc://cache.example.com:9092
+# build --remote_download_minimal
+
+# Local development settings
+build:local --disk_cache=~/.cache/bazel-disk-cache
+build:local --repository_cache=~/.cache/bazel-repo-cache

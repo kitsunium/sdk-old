@@ -1,0 +1,24 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "buffer",
+    srcs = [
+        "buffer.go",
+        "pool.go",
+    ],
+    importpath = "github.com/kistunium/sdk/pkg/kernel/buffer",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "buffer_test",
+    size = "small",
+    srcs = [
+        "buffer_test.go",
+        "pool_test.go",
+    ],
+    embed = [":buffer"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+    ],
+)
