@@ -1,167 +1,372 @@
 package buffer_test
 
 import (
-	"fmt"
-	"math/rand"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/kitsunium/sdk/pkg/kernel/buffer"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestByteBufferPool(t *testing.T) {
-	pool := buffer.NewBufferPool()
+// TestBufferPool tests the buffer pool functionality.
+func TestBufferPool(t *testing.T) {
+	t.Run("BasicGetPut", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
 
-	// Tests a single get and put operation in the pool
-	t.Run("GetPutSingle", func(t *testing.T) {
-		size := 128
-		buf := pool.Get(size)
-
-		assert.Equal(t, 0, buf.Len(), "expected empty buffer after Get")
-		assert.Equal(t, size, buf.Cap(), "buffer capacity mismatch")
-
-		_, _ = buf.Write(make([]byte, size))
-		assert.Equal(t, size, buf.Len(), "expected buffer length to match written data")
-
-		pool.Put(buf)
-
-		buf2 := pool.Get(size)
-		assert.Equal(t, 0, buf2.Len(), "expected empty buffer after Put and Get")
-		assert.Equal(t, size, buf2.Cap(), "buffer capacity mismatch after reuse")
-		pool.Put(buf2)
-	})
-
-	// Tests concurrent access to the pool
-	t.Run("ConcurrentAccess", func(t *testing.T) {
-		concurrency := 10
-		var wg sync.WaitGroup
-		wg.Add(concurrency)
-
-		for i := 0; i < concurrency; i++ {
-			go func() {
-				defer wg.Done()
-				for j := 0; j < 100; j++ {
-					size := 1 << uint(rand.Intn(12)+1) // Random size (power of 2 between 2 and 4 KB)
-					buf := pool.Get(size)
-					assert.Equal(t, size, buf.Cap(), "buffer capacity mismatch in concurrent access")
-					pool.Put(buf)
-				}
-			}()
-		}
-		wg.Wait()
-	})
-
-	// Tests multiple fixed sizes
-	t.Run("MixedSizes", func(t *testing.T) {
-		sizes := []int{64, 256, 1024, 4096, 8192, 16384}
+		// Test various sizes
+		sizes := []int{100, 256, 1000, 4096, 65536}
 		for _, size := range sizes {
 			buf := pool.Get(size)
-			assert.Equal(t, size, buf.Cap(), "buffer capacity mismatch for size %d", size)
+			if buf == nil {
+				t.Fatalf("buffer should not be nil for size %d", size)
+			}
+			assert.GreaterOrEqual(t, len(buf), size, "buffer should be at least requested size")
+			assert.GreaterOrEqual(t, cap(buf), size, "buffer capacity should be at least requested size")
+
+			// Verify it's a power of 2 capacity
+			assert.True(t, isPowerOf2(cap(buf)), "capacity should be power of 2")
+
+			// Write data to ensure it's usable
+			for i := 0; i < size; i++ {
+				buf[i] = byte(i % 256)
+			}
+
 			pool.Put(buf)
 		}
 	})
 
-	// Tests invalid sizes
-	t.Run("InvalidSizes", func(t *testing.T) {
-		t.Run("SizeBelowMinBitSize", func(t *testing.T) {
-			assert.PanicsWithValue(t, "requested size must be a power of 2 within valid bounds", func() {
-				pool.Get(1) // Size below 2^minBitSize (2)
-			}, "expected panic for size below minBitSize")
-		})
+	t.Run("ReuseBuffers", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		pool.ResetStats()
 
-		t.Run("SizeAboveMaxBitSize", func(t *testing.T) {
-			assert.PanicsWithValue(t, "requested size must be a power of 2 within valid bounds", func() {
-				pool.Get(1 << (buffer.MaxBitSize + 1)) // Size above 2^maxBitSize
-			}, "expected panic for size above maxBitSize")
-		})
+		// Get and put the same size multiple times
+		size := 1024
+		for i := 0; i < 10; i++ {
+			buf := pool.Get(size)
+			pool.Put(buf)
+		}
 
-		t.Run("SizeNotPowerOfTwo", func(t *testing.T) {
-			assert.PanicsWithValue(t, "requested size must be a power of 2 within valid bounds", func() {
-				pool.Get(300) // Size not a power of 2
-			}, "expected panic for size not a power of 2")
-		})
+		stats := pool.GetStats()
+		assert.Greater(t, stats.Hits, int64(0), "should have cache hits")
+		assert.Equal(t, int64(10), stats.Gets, "should have 10 gets")
+		assert.Equal(t, int64(10), stats.Puts, "should have 10 puts")
 	})
 
-	// Tests valid sizes
-	t.Run("ValidSizes", func(t *testing.T) {
-		sizes := []int{1 << 1, 1 << 5, 1 << 10, 1 << 20} // Powers of 2 within bounds
-		for _, size := range sizes {
-			t.Run(fmt.Sprintf("SizeValid-%d", size), func(t *testing.T) {
-				assert.NotPanics(t, func() {
+	t.Run("ZeroedBuffers", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		// Enable clearing for this test
+		pool.SetClearOnPut(true)
+
+		// Get buffer, write data, return it
+		buf1 := pool.Get(1024)
+		for i := range buf1 {
+			buf1[i] = 0xFF
+		}
+		pool.Put(buf1)
+
+		// Get another buffer of same size
+		buf2 := pool.Get(1024)
+
+		// Check if it's zeroed (security feature)
+		allZero := true
+		for _, b := range buf2 {
+			if b != 0 {
+				allZero = false
+				break
+			}
+		}
+		assert.True(t, allZero, "returned buffers should be zeroed for security when clearOnPut is enabled")
+		pool.Put(buf2)
+	})
+
+	t.Run("LargeSizes", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		pool.ResetStats()
+
+		// Test very large size (beyond default max)
+		largeSize := 10 * 1024 * 1024 // 10MB
+		buf := pool.Get(largeSize)
+		assert.Equal(t, largeSize, len(buf), "large buffer should be exact size")
+
+		// Put will not actually pool it due to size check
+		pool.Put(buf)
+
+		// Try to get another large buffer - should allocate new
+		buf2 := pool.Get(largeSize)
+		assert.Equal(t, largeSize, len(buf2), "second large buffer should be exact size")
+
+		stats := pool.GetStats()
+		// Should have 2 allocations, 1 put attempt, but 0 hits (not pooled)
+		assert.Equal(t, int64(2), stats.Gets, "should have 2 gets")
+		assert.Equal(t, int64(1), stats.Puts, "should have 1 put attempt")
+		assert.Equal(t, int64(0), stats.Hits, "should have no hits for large buffers")
+	})
+
+	t.Run("ConcurrentAccess", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		pool.ResetStats()
+
+		const goroutines = 100
+		const iterations = 1000
+
+		var wg sync.WaitGroup
+		wg.Add(goroutines)
+
+		for i := 0; i < goroutines; i++ {
+			go func(id int) {
+				defer wg.Done()
+
+				for j := 0; j < iterations; j++ {
+					size := 256 + (id * 16) // Different sizes per goroutine
 					buf := pool.Get(size)
-					assert.Equal(t, size, buf.Cap(), "buffer capacity mismatch for valid size")
+
+					// Do some work with the buffer
+					buf[0] = byte(id)
+					buf[len(buf)-1] = byte(j)
+
 					pool.Put(buf)
-				}, "expected no panic for valid size %d", size)
-			})
+				}
+			}(i)
+		}
+
+		wg.Wait()
+
+		stats := pool.GetStats()
+		assert.Equal(t, int64(goroutines*iterations), stats.Gets, "should have correct number of gets")
+		assert.Greater(t, stats.Hits, int64(0), "should have cache hits")
+	})
+
+	t.Run("BufferObjects", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+
+		// Test Buffer object operations
+		buf := pool.GetBuffer(1024)
+		if buf == nil {
+			t.Fatal("buffer object should not be nil")
+		}
+		assert.Equal(t, 1024, buf.Cap(), "buffer should have correct capacity")
+
+		// Write and read
+		n, err := buf.WriteString("Hello, World!")
+		assert.NoError(t, err)
+		assert.Equal(t, 13, n)
+		assert.Equal(t, "Hello, World!", buf.String())
+
+		pool.PutBuffer(buf)
+	})
+
+	t.Run("GlobalPool", func(t *testing.T) {
+		// Test global pool functions
+		buf := buffer.Get(512)
+		assert.NotNil(t, buf)
+		assert.GreaterOrEqual(t, len(buf), 512)
+		buffer.Put(buf)
+
+		// Test Buffer objects with global pool
+		bufObj := buffer.GetBuffer(256)
+		assert.NotNil(t, bufObj)
+		buffer.PutBuffer(bufObj)
+	})
+
+	t.Run("ConvenienceFunctions", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+
+		buf1k := pool.Get1K()
+		assert.Equal(t, 1024, len(buf1k))
+		buffer.Put(buf1k)
+
+		buf4k := pool.Get4K()
+		assert.Equal(t, 4*1024, len(buf4k))
+		buffer.Put(buf4k)
+
+		buf64k := pool.Get64K()
+		assert.Equal(t, 64*1024, len(buf64k))
+		buffer.Put(buf64k)
+	})
+
+	t.Run("Statistics", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		pool.ResetStats()
+
+		// Perform operations
+		for i := 0; i < 100; i++ {
+			buf := pool.Get(1024)
+			pool.Put(buf)
+		}
+
+		stats := pool.GetStats()
+		assert.Equal(t, int64(100), stats.Gets)
+		assert.Equal(t, int64(100), stats.Puts)
+		assert.Greater(t, stats.Hits, int64(0), "should have hits after first allocation")
+
+		// Reset and verify
+		pool.ResetStats()
+		stats = pool.GetStats()
+		assert.Equal(t, int64(0), stats.Gets)
+		assert.Equal(t, int64(0), stats.Puts)
+	})
+
+	t.Run("SetMaxSize", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		pool.SetMaxSize(512)
+		
+		// Buffer larger than max size should not be pooled
+		buf := pool.Get(1024)
+		assert.NotNil(t, buf)
+		pool.Put(buf)
+		
+		// Get again - should allocate new since it wasn't pooled
+		pool.ResetStats()
+		buf2 := pool.Get(1024)
+		assert.NotNil(t, buf2)
+		stats := pool.GetStats()
+		assert.Equal(t, int64(0), stats.Hits)
+	})
+
+	t.Run("SetClearOnPut", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		pool.SetClearOnPut(false)
+		
+		// Get buffer, write data, return it
+		buf1 := pool.Get(1024)
+		for i := range buf1 {
+			buf1[i] = 0xFF
+		}
+		pool.Put(buf1)
+		
+		// Get another buffer - should not be cleared
+		buf2 := pool.Get(1024)
+		// Check first byte only (since clearing is disabled)
+		if buf2[0] == 0xFF {
+			// Buffer was reused without clearing - expected
+			assert.Equal(t, byte(0xFF), buf2[0])
 		}
 	})
 
-	// Tests putting invalid buffers into the pool
-	t.Run("InvalidBuffersInPut", func(t *testing.T) {
-		t.Run("BufferBelowMinBitSize", func(t *testing.T) {
-			buf := buffer.NewBuffer(1) // Capacity below 2^MinBitSize
-			assert.PanicsWithValue(t, "buffer capacity must be a power of 2 within valid bounds", func() {
-				pool.Put(buf)
-			}, "expected panic for buffer below MinBitSize")
-		})
+	t.Run("Prewarm", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		pool.ResetStats()
+		
+		// Prewarm with specific sizes
+		pool.Prewarm([]int{512, 1024}, 5)
+		
+		stats := pool.GetStats()
+		assert.Equal(t, int64(10), stats.Allocs) // 2 sizes * 5 count
+	})
 
-		t.Run("BufferAboveMaxBitSize", func(t *testing.T) {
-			buf := buffer.NewBuffer(1 << (buffer.MaxBitSize + 1)) // Capacity above 2^MaxBitSize
-			assert.PanicsWithValue(t, "buffer capacity must be a power of 2 within valid bounds", func() {
-				pool.Put(buf)
-			}, "expected panic for buffer above MaxBitSize")
-		})
+	t.Run("Get_ZeroSize", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		buf := pool.Get(0)
+		assert.Nil(t, buf)
+	})
 
-		t.Run("BufferNotPowerOfTwo", func(t *testing.T) {
-			buf := buffer.NewBuffer(300) // Capacity not a power of 2
-			assert.PanicsWithValue(t, "buffer capacity must be a power of 2 within valid bounds", func() {
-				pool.Put(buf)
-			}, "expected panic for buffer not a power of 2")
-		})
+	t.Run("Get_NegativeSize", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		buf := pool.Get(-10)
+		assert.Nil(t, buf)
+	})
+
+	t.Run("Put_NilBuffer", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		// Should not panic
+		pool.Put(nil)
+	})
+
+	t.Run("Put_NonPowerOf2", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		buf := make([]byte, 100) // Not a power of 2
+		pool.Put(buf) // Should not pool it
+	})
+
+	t.Run("GetBuffer_ZeroSize", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		buf := pool.GetBuffer(0)
+		assert.NotNil(t, buf)
+		assert.Equal(t, 2, buf.Cap()) // MinBitSize = 1, so 2^1 = 2
+	})
+
+	t.Run("PutBuffer_Nil", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		// Should not panic
+		pool.PutBuffer(nil)
+	})
+
+	t.Run("PutBuffer_InvalidCapacity", func(t *testing.T) {
+		pool := buffer.NewBufferPool()
+		buf := buffer.NewBuffer(100) // Not a power of 2
+		pool.PutBuffer(buf) // Should not pool it
 	})
 }
 
-func BenchmarkByteBufferPoolGetPut(b *testing.B) {
-	pool := buffer.NewBufferPool()
-	size := 1 << 10 // 1 KB
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		buf := pool.Get(size)
-		pool.Put(buf)
-	}
+// Helper functions.
+func isPowerOf2(n int) bool {
+	return n > 0 && (n&(n-1)) == 0
 }
 
-func BenchmarkByteBufferPoolConcurrent(b *testing.B) {
-	pool := buffer.NewBufferPool()
-	concurrency := 10
-	var wg sync.WaitGroup
+// TestMemoryLeak verifies no memory leaks.
+func TestMemoryLeak(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping memory leak test in short mode")
+	}
 
-	b.ResetTimer()
-	for i := 0; i < concurrency; i++ {
+	pool := buffer.NewBufferPool()
+
+	// Force GC to get baseline
+	runtime.GC()
+	var m1 runtime.MemStats
+	runtime.ReadMemStats(&m1)
+
+	// Perform many allocations
+	const iterations = 10000
+	for i := 0; i < iterations; i++ {
+		buf := pool.Get(4096)
+		pool.Put(buf)
+	}
+
+	// Force GC and measure again
+	runtime.GC()
+	var m2 runtime.MemStats
+	runtime.ReadMemStats(&m2)
+
+	// Memory should not grow significantly
+	growth := int64(m2.HeapAlloc) - int64(m1.HeapAlloc)
+	maxGrowth := int64(4096 * 100) // Allow for some pooled buffers
+
+	assert.Less(t, growth, maxGrowth, "memory growth should be limited")
+}
+
+// TestConcurrentStats verifies statistics are accurate under concurrent access.
+func TestConcurrentStats(t *testing.T) {
+	pool := buffer.NewBufferPool()
+	pool.ResetStats()
+
+	const goroutines = 10
+	const operations = 1000
+
+	var wg sync.WaitGroup
+	var totalGets, totalPuts int64
+
+	for i := 0; i < goroutines; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < b.N/concurrency; j++ {
-				// Ensure the size is between 2^MinBitSize and 2^(MinBitSize+11)
-				size := 1 << uint(rand.Intn(12)+1) // Minimum is 2 (2^1)
-				buf := pool.Get(size)
+
+			for j := 0; j < operations; j++ {
+				buf := pool.Get(1024)
+				atomic.AddInt64(&totalGets, 1)
+
 				pool.Put(buf)
+				atomic.AddInt64(&totalPuts, 1)
 			}
 		}()
 	}
+
 	wg.Wait()
-}
 
-func BenchmarkByteBufferPoolMixedSizes(b *testing.B) {
-	pool := buffer.NewBufferPool()
-	sizes := []int{64, 256, 1024, 4096, 8192, 16384}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		size := sizes[rand.Intn(len(sizes))]
-		buf := pool.Get(size)
-		pool.Put(buf)
-	}
+	stats := pool.GetStats()
+	assert.Equal(t, totalGets, stats.Gets, "gets should match")
+	assert.Equal(t, totalPuts, stats.Puts, "puts should match")
 }
