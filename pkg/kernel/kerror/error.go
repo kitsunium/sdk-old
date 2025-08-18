@@ -3,7 +3,6 @@ package kerror
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"runtime"
 	"strings"
 	"sync"
@@ -13,15 +12,15 @@ import (
 // KConfig represents configuration for defining a KError
 type KConfig struct {
 	Package string // Package name (auto-detected if empty)
-	Code    int    // Error code (HTTP status code, also used as exit code)
-	Message string // Optional message (auto-filled from HTTP status if empty)
+	Code    int    // Error code (can be used as exit code)
+	Message string // Error message
 }
 
 // KError represents a unique error identifier that can be used as a constant
 type KError struct {
 	id      uint32 // Unique identifier (auto-incremented)
 	pkg     string // Package name
-	code    int    // Error code (HTTP status code, also used as exit code)
+	code    int    // Error code (can be used as exit code)
 	message string // Default message
 }
 
@@ -86,18 +85,10 @@ func Define(config KConfig) KError {
 	// Generate ID first
 	id := atomic.AddUint32(&errorCounter, 1)
 
-	// Get message with caching for HTTP status text
+	// Get message or generate default
 	message := config.Message
 	if message == "" {
-		if cached, found := httpStatusTextCache.Load(config.Code); found {
-			message = cached.(string)
-		} else {
-			message = http.StatusText(config.Code)
-			if message == "" {
-				message = fmt.Sprintf("error %d", config.Code)
-			}
-			httpStatusTextCache.Store(config.Code, message)
-		}
+		message = fmt.Sprintf("error %d", config.Code)
 	}
 
 	err := &KError{
@@ -135,7 +126,7 @@ func (e KError) Package() string {
 	return e.pkg
 }
 
-// Code returns the error code (HTTP status code)
+// Code returns the error code
 func (e KError) Code() int {
 	return e.code
 }
@@ -184,16 +175,16 @@ func (e *KError) UnmarshalJSON(data []byte) error {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	}
-	
+
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return err
 	}
-	
+
 	e.id = temp.ID
 	e.pkg = temp.Package
 	e.code = temp.Code
 	e.message = temp.Message
-	
+
 	return nil
 }
 

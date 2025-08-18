@@ -103,9 +103,9 @@ func TestNewf(t *testing.T) {
 		},
 		{
 			name:     "number formatting",
-			format:   "status %d: %s",
+			format:   "error %d: %s",
 			args:     []any{500, "internal"},
-			expected: "status 500: internal",
+			expected: "error 500: internal",
 		},
 	}
 	
@@ -1023,3 +1023,356 @@ func TestMaxLimits(t *testing.T) {
 		t.Errorf("Should have max 2 details, got %d", len(inst.Details()))
 	}
 }
+
+func TestBatchWithTags(t *testing.T) {
+	ClearRegistry()
+	
+	// Test without validation
+	Configure(GlobalConfig{EnableValidation: false})
+	err := Define(KConfig{Code: 400})
+	inst := err.New()
+	defer inst.Release()
+	
+	tags := []struct{ Key, Value string }{
+		{Key: "env", Value: "test"},
+		{Key: "version", Value: "1.0.0"},
+		{Key: "service", Value: "api"},
+	}
+	
+	result := inst.BatchWithTags(tags...)
+	if result != inst {
+		t.Error("BatchWithTags should return the same instance")
+	}
+	
+	if v, ok := inst.Tag("env"); !ok || v != "test" {
+		t.Error("Tag 'env' should be 'test'")
+	}
+	if v, ok := inst.Tag("version"); !ok || v != "1.0.0" {
+		t.Error("Tag 'version' should be '1.0.0'")
+	}
+	if v, ok := inst.Tag("service"); !ok || v != "api" {
+		t.Error("Tag 'service' should be 'api'")
+	}
+	
+	// Test with validation and limits
+	Configure(GlobalConfig{
+		EnableValidation: true,
+		MaxTags:          2,
+		MaxTagKeyLen:     5,
+		MaxTagValueLen:   5,
+	})
+	
+	inst2 := err.New()
+	defer inst2.Release()
+	
+	tags2 := []struct{ Key, Value string }{
+		{Key: "tag1", Value: "val1"},
+		{Key: "tag2", Value: "val2"},
+		{Key: "tag3", Value: "val3"}, // Should be ignored (over max)
+		{Key: "longkey", Value: "val"}, // Should be ignored (key too long)
+		{Key: "key", Value: "verylongvalue"}, // Should be ignored (value too long)
+	}
+	
+	inst2.BatchWithTags(tags2...)
+	
+	if len(inst2.Tags()) != 2 {
+		t.Errorf("Should have 2 tags with validation, got %d", len(inst2.Tags()))
+	}
+	if _, ok := inst2.Tag("tag3"); ok {
+		t.Error("tag3 should not be added (over limit)")
+	}
+	if _, ok := inst2.Tag("longkey"); ok {
+		t.Error("longkey should not be added (key too long)")
+	}
+}
+
+func TestBatchWithDetails(t *testing.T) {
+	ClearRegistry()
+	
+	// Test without validation
+	Configure(GlobalConfig{EnableValidation: false})
+	err := Define(KConfig{Code: 500})
+	inst := err.New()
+	defer inst.Release()
+	
+	details := []struct{ Key string; Value any }{
+		{Key: "user_id", Value: 123},
+		{Key: "request_id", Value: "abc-123"},
+		{Key: "retry_count", Value: 3},
+	}
+	
+	result := inst.BatchWithDetails(details...)
+	if result != inst {
+		t.Error("BatchWithDetails should return the same instance")
+	}
+	
+	if v, ok := inst.Detail("user_id"); !ok || v != 123 {
+		t.Error("Detail 'user_id' should be 123")
+	}
+	if v, ok := inst.Detail("request_id"); !ok || v != "abc-123" {
+		t.Error("Detail 'request_id' should be 'abc-123'")
+	}
+	if v, ok := inst.Detail("retry_count"); !ok || v != 3 {
+		t.Error("Detail 'retry_count' should be 3")
+	}
+	
+	// Test with validation and limits
+	Configure(GlobalConfig{
+		EnableValidation: true,
+		MaxDetails:       2,
+	})
+	
+	inst2 := err.New()
+	defer inst2.Release()
+	
+	details2 := []struct{ Key string; Value any }{
+		{Key: "detail1", Value: "val1"},
+		{Key: "detail2", Value: "val2"},
+		{Key: "detail3", Value: "val3"}, // Should be ignored (over max)
+	}
+	
+	inst2.BatchWithDetails(details2...)
+	
+	if len(inst2.Details()) != 2 {
+		t.Errorf("Should have 2 details with validation, got %d", len(inst2.Details()))
+	}
+	if _, ok := inst2.Detail("detail3"); ok {
+		t.Error("detail3 should not be added (over limit)")
+	}
+}
+
+func TestDetailAs(t *testing.T) {
+	ClearRegistry()
+	err := Define(KConfig{Code: 404})
+	inst := err.New()
+	defer inst.Release()
+	
+	type User struct {
+		ID   int
+		Name string
+	}
+	
+	user := User{ID: 42, Name: "Alice"}
+	inst.WithDetail("user", user)
+	
+	// Test successful conversion
+	retrievedUser, ok := DetailAs[User](inst, "user")
+	if !ok {
+		t.Error("DetailAs should return true for existing detail")
+	}
+	if retrievedUser.ID != 42 || retrievedUser.Name != "Alice" {
+		t.Error("DetailAs should retrieve the correct user")
+	}
+	
+	// Test non-existent key
+	_, ok = DetailAs[User](inst, "nonexistent")
+	if ok {
+		t.Error("DetailAs should return false for non-existent key")
+	}
+	
+	// Test wrong type
+	inst.WithDetail("number", 123)
+	_, ok = DetailAs[string](inst, "number")
+	if ok {
+		t.Error("DetailAs should return false for type mismatch")
+	}
+}
+
+func TestDetailResult(t *testing.T) {
+	ClearRegistry()
+	err := Define(KConfig{Code: 400})
+	inst := err.New()
+	defer inst.Release()
+	
+	inst.WithDetail("count", 10)
+	
+	// Test existing detail
+	result := inst.DetailResult("count")
+	if !result.Ok {
+		t.Error("DetailResult should have Ok=true for existing detail")
+	}
+	if result.Value != 10 {
+		t.Error("DetailResult should return correct value")
+	}
+	if result.Unwrap() != 10 {
+		t.Error("Unwrap should return the value")
+	}
+	
+	// Test non-existent detail
+	missing := inst.DetailResult("missing")
+	if missing.Ok {
+		t.Error("DetailResult should have Ok=false for non-existent detail")
+	}
+	if missing.UnwrapOr("default") != "default" {
+		t.Error("UnwrapOr should return default for missing detail")
+	}
+}
+
+func TestTagResult(t *testing.T) {
+	ClearRegistry()
+	err := Define(KConfig{Code: 500})
+	inst := err.New()
+	defer inst.Release()
+	
+	inst.WithTag("env", "production")
+	
+	// Test existing tag
+	result := inst.TagResult("env")
+	if !result.Ok {
+		t.Error("TagResult should have Ok=true for existing tag")
+	}
+	if result.Value != "production" {
+		t.Error("TagResult should return correct value")
+	}
+	
+	// Test non-existent tag
+	missing := inst.TagResult("missing")
+	if missing.Ok {
+		t.Error("TagResult should have Ok=false for non-existent tag")
+	}
+	if missing.UnwrapOr("default") != "default" {
+		t.Error("UnwrapOr should return default for missing tag")
+	}
+}
+
+func TestClone(t *testing.T) {
+	ClearRegistry()
+	err := Define(KConfig{Code: 403, Message: "forbidden"})
+	original := err.New()
+	defer original.Release()
+	
+	original.WithTag("env", "test")
+	original.WithDetail("user_id", 999)
+	original.WithContext(context.Background())
+	
+	cloned := original.Clone()
+	defer cloned.Release()
+	
+	// Verify clone has same properties
+	if cloned.Error() != original.Error() {
+		t.Error("Clone should have same error message")
+	}
+	
+	if v, ok := cloned.Tag("env"); !ok || v != "test" {
+		t.Error("Clone should have same tags")
+	}
+	
+	if v, ok := cloned.Detail("user_id"); !ok || v != 999 {
+		t.Error("Clone should have same details")
+	}
+	
+	// Verify modifications don't affect original
+	cloned.WithTag("new", "value")
+	if _, ok := original.Tag("new"); ok {
+		t.Error("Modifying clone should not affect original")
+	}
+	
+	original.WithTag("original", "value")
+	if _, ok := cloned.Tag("original"); ok {
+		t.Error("Modifying original should not affect clone")
+	}
+}
+
+func TestMapTags(t *testing.T) {
+	ClearRegistry()
+	err := Define(KConfig{Code: 400})
+	inst := err.New()
+	defer inst.Release()
+	
+	inst.WithTag("env", "test")
+	inst.WithTag("version", "1.0")
+	
+	result := inst.MapTags(func(key, value string) (string, string) {
+		return key, strings.ToUpper(value)
+	})
+	
+	if result != inst {
+		t.Error("MapTags should return the same instance")
+	}
+	
+	if v, ok := inst.Tag("env"); !ok || v != "TEST" {
+		t.Error("Tag 'env' should be uppercase")
+	}
+	if v, ok := inst.Tag("version"); !ok || v != "1.0" {
+		t.Error("Tag 'version' should be '1.0'")
+	}
+	
+	// Test with empty tags
+	inst2 := err.New()
+	defer inst2.Release()
+	inst2.MapTags(func(key, value string) (string, string) {
+		return key, "should not be called"
+	})
+}
+
+func TestFilterTags(t *testing.T) {
+	ClearRegistry()
+	Configure(GlobalConfig{EnableValidation: false})
+	err := Define(KConfig{Code: 500})
+	inst := err.New()
+	defer inst.Release()
+	
+	inst.WithTag("env", "production")
+	inst.WithTag("debug", "true")
+	inst.WithTag("version", "2.0")
+	
+	result := inst.FilterTags(func(key, value string) bool {
+		return key != "debug"
+	})
+	
+	if result != inst {
+		t.Error("FilterTags should return the same instance")
+	}
+	
+	if _, ok := inst.Tag("env"); !ok {
+		t.Error("Tag 'env' should exist")
+	}
+	if _, ok := inst.Tag("version"); !ok {
+		t.Error("Tag 'version' should exist")
+	}
+	if _, ok := inst.Tag("debug"); ok {
+		t.Error("Tag 'debug' should be filtered out")
+	}
+}
+
+func TestMergeTags(t *testing.T) {
+	ClearRegistry()
+	Configure(GlobalConfig{EnableValidation: false})
+	err := Define(KConfig{Code: 404})
+	inst1 := err.New()
+	defer inst1.Release()
+	
+	inst1.WithTag("env", "test")
+	inst1.WithTag("service", "api")
+	
+	inst2 := err.New()
+	defer inst2.Release()
+	
+	inst2.WithTag("version", "1.0")
+	inst2.WithTag("env", "production") // This should override
+	
+	result := inst1.MergeTags(inst2)
+	if result != inst1 {
+		t.Error("MergeTags should return the same instance")
+	}
+	
+	// Check merged tags
+	if v, ok := inst1.Tag("env"); !ok || v != "production" {
+		t.Error("Tag 'env' should be overridden to 'production'")
+	}
+	if v, ok := inst1.Tag("service"); !ok || v != "api" {
+		t.Error("Tag 'service' should remain 'api'")
+	}
+	if v, ok := inst1.Tag("version"); !ok || v != "1.0" {
+		t.Error("Tag 'version' should be merged")
+	}
+	
+	// inst2 should remain unchanged
+	if _, ok := inst2.Tag("service"); ok {
+		t.Error("inst2 should not have 'service' tag")
+	}
+	
+	// Test with nil
+	inst1.MergeTags(nil) // Should not panic
+}
+

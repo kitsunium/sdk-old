@@ -17,7 +17,7 @@ func FromContext(ctx context.Context) (*Instance, bool) {
 	if ctx == nil {
 		return nil, false
 	}
-	
+
 	val := ctx.Value(errorContextKey)
 	if inst, ok := val.(*Instance); ok && inst != nil {
 		return inst, true

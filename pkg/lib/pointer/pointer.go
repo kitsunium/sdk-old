@@ -1,6 +1,17 @@
 package pointer
 
+// Convert returns a generic pointer to the given value.
+// This single function replaces all type-specific functions for better performance.
+//
+//go:inline
+func Convert[T any](v T) *T {
+	return &v
+}
+
 // String returns a pointer to the given string value.
+// Deprecated: Use Convert[string](v) instead.
+//
+//go:inline
 func String(v string) *string {
 	return &v
 }

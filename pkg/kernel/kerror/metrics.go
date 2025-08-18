@@ -39,7 +39,7 @@ func NewSimpleMetrics() *SimpleMetrics {
 func (m *SimpleMetrics) RecordErrorDefinition(pkg string, code int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.definitions[pkg] == nil {
 		m.definitions[pkg] = make(map[int]uint64)
 	}
@@ -50,7 +50,7 @@ func (m *SimpleMetrics) RecordErrorDefinition(pkg string, code int) {
 func (m *SimpleMetrics) RecordErrorInstance(pkg string, code int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.instances[pkg] == nil {
 		m.instances[pkg] = make(map[int]uint64)
 	}
@@ -61,7 +61,7 @@ func (m *SimpleMetrics) RecordErrorInstance(pkg string, code int) {
 func (m *SimpleMetrics) RecordErrorWrapped(pkg string, code int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.wrapped[pkg] == nil {
 		m.wrapped[pkg] = make(map[int]uint64)
 	}
@@ -72,7 +72,7 @@ func (m *SimpleMetrics) RecordErrorWrapped(pkg string, code int) {
 func (m *SimpleMetrics) GetMetrics() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	return map[string]any{
 		"definitions": copyNestedMap(m.definitions),
 		"instances":   copyNestedMap(m.instances),

@@ -433,24 +433,13 @@ func TestCacheOperations(t *testing.T) {
 	ClearRegistry()
 	
 	// Clear caches
-	httpStatusTextCache = sync.Map{}
 	callerPackageCache = sync.Map{}
 	
 	// Define error to populate caches
 	_ = Define(KConfig{Code: 200})
 	
-	// Check HTTP status cache
-	cached := false
-	httpStatusTextCache.Range(func(key, value interface{}) bool {
-		cached = true
-		return false
-	})
-	if !cached {
-		t.Error("HTTP status text should be cached")
-	}
-	
 	// Check caller package cache
-	cached = false
+	cached := false
 	callerPackageCache.Range(func(key, value interface{}) bool {
 		cached = true
 		return false
@@ -463,15 +452,6 @@ func TestCacheOperations(t *testing.T) {
 	ClearRegistry()
 	
 	count := 0
-	httpStatusTextCache.Range(func(key, value interface{}) bool {
-		count++
-		return true
-	})
-	if count != 0 {
-		t.Error("HTTP status cache not cleared")
-	}
-	
-	count = 0
 	callerPackageCache.Range(func(key, value interface{}) bool {
 		count++
 		return true

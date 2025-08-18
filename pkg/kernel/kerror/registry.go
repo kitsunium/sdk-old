@@ -12,9 +12,6 @@ var (
 	registryByID      sync.Map // map[uint32]*KError
 	registryByPkgCode sync.Map // map[string]*sync.Map (package -> code -> *KError)
 
-	// Cache for HTTP status text to avoid repeated lookups
-	httpStatusTextCache sync.Map
-
 	// Cache for caller package names
 	callerPackageCache sync.Map
 )
@@ -95,7 +92,6 @@ func ClearRegistry() {
 	// Clear registries
 	registryByID = sync.Map{}
 	registryByPkgCode = sync.Map{}
-	httpStatusTextCache = sync.Map{}
 	callerPackageCache = sync.Map{}
 
 	atomic.StoreUint32(&errorCounter, 0)

@@ -192,17 +192,19 @@ func TestConfigureConcurrency(t *testing.T) {
 }
 
 func TestInitializePools(t *testing.T) {
-	// Test that initializePools can be called multiple times safely
-	initializePools()
-	initializePools()
-	
-	// Test with different configurations
+	// Test that configuration works correctly
 	Configure(GlobalConfig{
 		MaxInstancePool: 100,
 		DefaultPackage:  "pools",
 	})
 	
-	initializePools()
+	cfg := GetConfig()
+	if cfg.MaxInstancePool != 100 {
+		t.Error("MaxInstancePool should be 100")
+	}
+	if cfg.DefaultPackage != "pools" {
+		t.Error("DefaultPackage should be 'pools'")
+	}
 }
 
 func TestConfigureOnce(t *testing.T) {

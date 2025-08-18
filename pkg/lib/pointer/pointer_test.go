@@ -8,6 +8,39 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestConvert(t *testing.T) {
+	t.Run("String", func(t *testing.T) {
+		value := "test"
+		ptr := pointer.Convert(value)
+		assert.NotNil(t, ptr, "pointer should not be nil")
+		assert.Equal(t, value, *ptr, "value mismatch for string pointer")
+	})
+
+	t.Run("Int", func(t *testing.T) {
+		value := 42
+		ptr := pointer.Convert(value)
+		assert.NotNil(t, ptr, "pointer should not be nil")
+		assert.Equal(t, value, *ptr, "value mismatch for int pointer")
+	})
+
+	t.Run("Struct", func(t *testing.T) {
+		type TestStruct struct {
+			Field string
+		}
+		value := TestStruct{Field: "test"}
+		ptr := pointer.Convert(value)
+		assert.NotNil(t, ptr, "pointer should not be nil")
+		assert.Equal(t, value, *ptr, "value mismatch for struct pointer")
+	})
+
+	t.Run("Slice", func(t *testing.T) {
+		value := []int{1, 2, 3}
+		ptr := pointer.Convert(value)
+		assert.NotNil(t, ptr, "pointer should not be nil")
+		assert.Equal(t, value, *ptr, "value mismatch for slice pointer")
+	})
+}
+
 func TestPointerFunctions(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
 		value := "test"

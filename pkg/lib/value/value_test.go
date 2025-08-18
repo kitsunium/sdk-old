@@ -8,6 +8,82 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestConvert(t *testing.T) {
+	t.Run("String", func(t *testing.T) {
+		var nilPtr *string
+		v := "test"
+		ptr := &v
+
+		assert.Equal(t, "", value.Convert(nilPtr), "expected empty string for nil pointer")
+		assert.Equal(t, v, value.Convert(ptr), "value mismatch for string pointer")
+	})
+
+	t.Run("Int", func(t *testing.T) {
+		var nilPtr *int
+		v := 42
+		ptr := &v
+
+		assert.Equal(t, 0, value.Convert(nilPtr), "expected 0 for nil pointer")
+		assert.Equal(t, v, value.Convert(ptr), "value mismatch for int pointer")
+	})
+
+	t.Run("Struct", func(t *testing.T) {
+		type TestStruct struct {
+			Field string
+		}
+		var nilPtr *TestStruct
+		v := TestStruct{Field: "test"}
+		ptr := &v
+
+		assert.Equal(t, TestStruct{}, value.Convert(nilPtr), "expected zero struct for nil pointer")
+		assert.Equal(t, v, value.Convert(ptr), "value mismatch for struct pointer")
+	})
+
+	t.Run("Slice", func(t *testing.T) {
+		var nilPtr *[]int
+		v := []int{1, 2, 3}
+		ptr := &v
+
+		assert.Nil(t, value.Convert(nilPtr), "expected nil slice for nil pointer")
+		assert.Equal(t, v, value.Convert(ptr), "value mismatch for slice pointer")
+	})
+}
+
+func TestConvertOr(t *testing.T) {
+	t.Run("String", func(t *testing.T) {
+		var nilPtr *string
+		v := "test"
+		ptr := &v
+		defaultValue := "default"
+
+		assert.Equal(t, defaultValue, value.ConvertOr(nilPtr, defaultValue), "expected default for nil pointer")
+		assert.Equal(t, v, value.ConvertOr(ptr, defaultValue), "value mismatch for string pointer")
+	})
+
+	t.Run("Int", func(t *testing.T) {
+		var nilPtr *int
+		v := 42
+		ptr := &v
+		defaultValue := 100
+
+		assert.Equal(t, defaultValue, value.ConvertOr(nilPtr, defaultValue), "expected default for nil pointer")
+		assert.Equal(t, v, value.ConvertOr(ptr, defaultValue), "value mismatch for int pointer")
+	})
+
+	t.Run("Struct", func(t *testing.T) {
+		type TestStruct struct {
+			Field string
+		}
+		var nilPtr *TestStruct
+		v := TestStruct{Field: "test"}
+		ptr := &v
+		defaultValue := TestStruct{Field: "default"}
+
+		assert.Equal(t, defaultValue, value.ConvertOr(nilPtr, defaultValue), "expected default for nil pointer")
+		assert.Equal(t, v, value.ConvertOr(ptr, defaultValue), "value mismatch for struct pointer")
+	})
+}
+
 func TestValueFunctions(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
 		var nilPtr *string
