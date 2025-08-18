@@ -1,3 +1,6 @@
+// Package kerror provides advanced error management for the Kitsunium SDK.
+// It offers constant error definitions with unique IDs, comprehensive error tracking,
+// and integration with observability tools.
 package kerror
 
 import (
@@ -10,14 +13,17 @@ import (
 	"github.com/kitsunium/sdk/pkg/kernel/kcache"
 )
 
-// KConfig represents configuration for defining a KError
+// KConfig represents configuration for defining a KError.
+// It allows specifying the package, error code, and message for error definitions.
 type KConfig struct {
 	Package string // Package name (auto-detected if empty)
 	Code    int    // Error code (can be used as exit code)
 	Message string // Error message
 }
 
-// KError represents a unique error identifier that can be used as a constant
+// KError represents a unique error identifier that can be used as a constant.
+// Each KError has a globally unique ID and can be used to create error instances
+// with additional context like stack traces, tags, and details.
 type KError struct {
 	id      uint32 // Unique identifier (auto-incremented)
 	pkg     string // Package name

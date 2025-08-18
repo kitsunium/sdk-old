@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kbuffer",
+    srcs = [
+        "buffer.go",
+        "pool.go",
+    ],
+    importpath = "github.com/kitsunium/sdk/pkg/kernel/kbuffer",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "kbuffer_test",
+    size = "small",
+    srcs = [
+        "benchmark_test.go",
+        "buffer_test.go",
+        "pool_test.go",
+    ],
+    deps = [
+        ":kbuffer",
+        "//pkg/kernel/kcache",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

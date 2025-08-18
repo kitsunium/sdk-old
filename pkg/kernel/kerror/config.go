@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 )
 
-// GlobalConfig holds the global configuration for the kerror package
+// GlobalConfig holds the global configuration for the kerror package.
 type GlobalConfig struct {
 	EnableStackTrace bool   // Capture stack traces for errors
 	EnableMetrics    bool   // Enable Prometheus metrics
