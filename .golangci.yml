@@ -27,6 +27,10 @@ linters:
     # Error handling - Ensures proper error handling patterns
     - wrapcheck # Ensures errors from external packages are wrapped
 
+    # Documentation - Ensures proper GoDoc comments
+    - godox # Detects TODO/BUG/FIXME comments
+    - gomodguard # Guards against specific module dependencies
+
   disable:
     - errcheck # Too noisy, covered by staticcheck
     - gosec # Security checks - enable when doing security audit

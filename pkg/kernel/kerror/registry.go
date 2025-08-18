@@ -4,95 +4,115 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/kitsunium/sdk/pkg/kernel/kcache"
 )
 
 // Global registry variables
 var (
-	// Optimized registries using sync.Map for better concurrent performance
-	registryByID      sync.Map // map[uint32]*KError
-	registryByPkgCode sync.Map // map[string]*sync.Map (package -> code -> *KError)
+	// Optimized registries using high-performance kcache
+	registryByID      kcache.Cache[uint32, *KError]
+	registryByPkgCode kcache.Cache[string, kcache.Cache[int, *KError]]
 
 	// Cache for caller package names
-	callerPackageCache sync.Map
+	callerPackageCache kcache.Cache[uintptr, string]
+	
+	// Initialize caches once
+	cacheInit sync.Once
 )
 
-// GetError retrieves a registered error by ID
-func GetError(id uint32) (*KError, bool) {
-	if val, ok := registryByID.Load(id); ok {
-		return val.(*KError), true
-	}
-	return nil, false
-}
-
-// GetErrorByPackageCode retrieves a registered error by package and code
-func GetErrorByPackageCode(pkg string, code int) (*KError, bool) {
-	if pkgMapInterface, ok := registryByPkgCode.Load(pkg); ok {
-		pkgMap := pkgMapInterface.(*sync.Map)
-		if val, ok := pkgMap.Load(code); ok {
-			return val.(*KError), true
-		}
-	}
-	return nil, false
-}
-
-// ListErrors returns all registered errors
-func ListErrors() []KError {
-	var errors []KError
-
-	registryByID.Range(func(key, value any) bool {
-		if err, ok := value.(*KError); ok {
-			errors = append(errors, *err)
-		}
-		return true
+// initCaches initializes all caches with optimal settings
+func initCaches() {
+	cacheInit.Do(func() {
+		// Use AtomicCache for read-heavy workloads
+		registryByID = kcache.NewAtomicCache[uint32, *KError](10000)
+		registryByPkgCode = kcache.NewShardedLRU[string, kcache.Cache[int, *KError]](1000, 64)
+		callerPackageCache = kcache.NewAtomicCache[uintptr, string](1000)
 	})
+}
 
+// GetError retrieves a registered error by ID.
+func GetError(id uint32) (*KError, bool) {
+	initCaches()
+	return registryByID.Get(id)
+}
+
+// GetErrorByPackageCode retrieves a registered error by package and code.
+func GetErrorByPackageCode(pkg string, code int) (*KError, bool) {
+	initCaches()
+	if pkgCache, ok := registryByPkgCode.Get(pkg); ok {
+		return pkgCache.Get(code)
+	}
+	return nil, false
+}
+
+// ListErrors returns all registered errors.
+func ListErrors() []KError {
+	initCaches()
+	var errors []KError
+	
+	if atomicCache, ok := registryByID.(*kcache.AtomicCache[uint32, *KError]); ok {
+		atomicCache.Range(func(id uint32, err *KError) bool {
+			if err != nil {
+				errors = append(errors, *err)
+			}
+			return true
+		})
+	}
+	
 	return errors
 }
 
-// ListPackageCodes returns all error codes defined for a specific package
+// ListPackageCodes returns all error codes defined for a specific package.
 func ListPackageCodes(pkg string) []int {
-	if pkgMapInterface, ok := registryByPkgCode.Load(pkg); ok {
-		pkgMap := pkgMapInterface.(*sync.Map)
-		var codes []int
-		pkgMap.Range(func(key, value any) bool {
-			codes = append(codes, key.(int))
-			return true
-		})
-		return codes
+	initCaches()
+	var codes []int
+	
+	if pkgCache, ok := registryByPkgCode.Get(pkg); ok {
+		if atomicCache, ok := pkgCache.(*kcache.AtomicCache[int, *KError]); ok {
+			atomicCache.Range(func(code int, err *KError) bool {
+				codes = append(codes, code)
+				return true
+			})
+		}
 	}
-	return nil
+	
+	return codes
 }
 
-// ListPackages returns all packages that have defined errors
+// ListPackages returns all packages that have defined errors.
 func ListPackages() []string {
+	initCaches()
 	var packages []string
-
-	registryByPkgCode.Range(func(key, value any) bool {
-		packages = append(packages, key.(string))
-		return true
-	})
-
+	
+	if shardedCache, ok := registryByPkgCode.(*kcache.ShardedLRU[string, kcache.Cache[int, *KError]]); ok {
+		shardedCache.Range(func(pkg string, _ kcache.Cache[int, *KError]) bool {
+			packages = append(packages, pkg)
+			return true
+		})
+	}
+	
 	return packages
 }
 
-// ValidatePackageCode checks if a code is already used in a package
+// ValidatePackageCode checks if a code is already used in a package.
 func ValidatePackageCode(pkg string, code int) error {
-	if pkgMapInterface, ok := registryByPkgCode.Load(pkg); ok {
-		pkgMap := pkgMapInterface.(*sync.Map)
-		if val, ok := pkgMap.Load(code); ok {
-			existing := val.(*KError)
+	initCaches()
+	if pkgCache, ok := registryByPkgCode.Get(pkg); ok {
+		if existing, ok := pkgCache.Get(code); ok {
 			return fmt.Errorf("code %d already used in package %s (ID: %d)", code, pkg, existing.id)
 		}
 	}
 	return nil
 }
 
-// ClearRegistry clears the error registry (useful for testing)
+// ClearRegistry clears the error registry (useful for testing).
 func ClearRegistry() {
+	initCaches()
 	// Clear registries
-	registryByID = sync.Map{}
-	registryByPkgCode = sync.Map{}
-	callerPackageCache = sync.Map{}
+	registryByID.Clear()
+	registryByPkgCode.Clear()
+	callerPackageCache.Clear()
 
 	atomic.StoreUint32(&errorCounter, 0)
 }

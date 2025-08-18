@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
+
+	"github.com/kitsunium/sdk/pkg/kernel/kcache"
 )
 
 // KConfig represents configuration for defining a KError
@@ -27,8 +28,9 @@ type KError struct {
 // Global variables are defined in registry.go to avoid duplication
 var errorCounter uint32
 
-// getCallerPackage returns the package name of the caller with caching
+// getCallerPackage returns the package name of the caller with caching.
 func getCallerPackage() string {
+	initCaches()
 	// Skip 2 frames: getCallerPackage and Define
 	pc, _, _, ok := runtime.Caller(2)
 	if !ok {
@@ -36,8 +38,8 @@ func getCallerPackage() string {
 	}
 
 	// Check cache first
-	if cached, found := callerPackageCache.Load(pc); found {
-		return cached.(string)
+	if cached, found := callerPackageCache.Get(pc); found {
+		return cached
 	}
 
 	fn := runtime.FuncForPC(pc)
@@ -66,7 +68,7 @@ func getCallerPackage() string {
 	}
 
 	// Store in cache
-	callerPackageCache.Store(pc, pkg)
+	callerPackageCache.Set(pc, pkg)
 	return pkg
 }
 
@@ -78,9 +80,15 @@ func Define(config KConfig) KError {
 		pkg = getCallerPackage()
 	}
 
-	// Get or create package map using sync.Map for better concurrency
-	pkgMapInterface, _ := registryByPkgCode.LoadOrStore(pkg, &sync.Map{})
-	pkgMap := pkgMapInterface.(*sync.Map)
+	initCaches()
+	// Get or create package cache
+	var pkgCache kcache.Cache[int, *KError]
+	if existing, ok := registryByPkgCode.Get(pkg); ok {
+		pkgCache = existing
+	} else {
+		pkgCache = kcache.NewAtomicCache[int, *KError](100)
+		registryByPkgCode.Set(pkg, pkgCache)
+	}
 
 	// Generate ID first
 	id := atomic.AddUint32(&errorCounter, 1)
@@ -99,14 +107,14 @@ func Define(config KConfig) KError {
 	}
 
 	// Check for duplicates and store atomically
-	if actual, loaded := pkgMap.LoadOrStore(config.Code, err); loaded {
-		existing := actual.(*KError)
+	if existing, ok := pkgCache.Get(config.Code); ok {
 		panic(fmt.Sprintf("kerror: duplicate error code %d in package %s (already defined with ID %d)",
 			config.Code, pkg, existing.id))
 	}
+	pkgCache.Set(config.Code, err)
 
 	// Store in optimized registry
-	registryByID.Store(id, err)
+	registryByID.Set(id, err)
 
 	// Record metrics if enabled
 	if GetConfig().EnableMetrics {

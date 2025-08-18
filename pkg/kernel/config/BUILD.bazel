@@ -5,6 +5,9 @@ go_library(
     srcs = ["config.go"],
     importpath = "github.com/kitsunium/sdk/pkg/kernel/config",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kernel/kcache",
+    ],
 )
 
 go_test(

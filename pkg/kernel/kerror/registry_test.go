@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/kitsunium/sdk/pkg/kernel/kcache"
 )
 
 func TestGetError(t *testing.T) {
@@ -414,16 +416,14 @@ func TestRegistrySyncMapOperations(t *testing.T) {
 	err1 := Define(KConfig{Package: "test", Code: 100})
 	
 	// Try to get the same package map
-	if pkgMapInterface, ok := registryByPkgCode.Load("test"); !ok {
-		t.Error("Package map should exist")
+	if pkgCache, ok := registryByPkgCode.Get("test"); !ok {
+		t.Error("Package cache should exist") 
 	} else {
-		pkgMap := pkgMapInterface.(*sync.Map)
-		if val, ok := pkgMap.Load(100); !ok {
-			t.Error("Error should exist in package map")
+		if val, ok := pkgCache.Get(100); !ok {
+			t.Error("Error should exist in package cache")
 		} else {
-			stored := val.(*KError)
-			if stored.ID() != err1.ID() {
-				t.Error("Wrong error in package map")
+			if val.ID() != err1.ID() {
+				t.Error("Wrong error in package cache")
 			}
 		}
 	}
@@ -433,17 +433,20 @@ func TestCacheOperations(t *testing.T) {
 	ClearRegistry()
 	
 	// Clear caches
-	callerPackageCache = sync.Map{}
+	initCaches()
+	callerPackageCache.Clear()
 	
 	// Define error to populate caches
 	_ = Define(KConfig{Code: 200})
 	
 	// Check caller package cache
 	cached := false
-	callerPackageCache.Range(func(key, value interface{}) bool {
-		cached = true
-		return false
-	})
+	if atomicCache, ok := callerPackageCache.(*kcache.AtomicCache[uintptr, string]); ok {
+		atomicCache.Range(func(key uintptr, value string) bool {
+			cached = true
+			return false
+		})
+	}
 	if !cached {
 		t.Error("Caller package should be cached")
 	}
@@ -451,13 +454,9 @@ func TestCacheOperations(t *testing.T) {
 	// Verify caches are cleared
 	ClearRegistry()
 	
-	count := 0
-	callerPackageCache.Range(func(key, value interface{}) bool {
-		count++
-		return true
-	})
-	if count != 0 {
-		t.Error("Caller package cache not cleared")
+	// Check that cache is cleared
+	if callerPackageCache.Size() != 0 {
+		t.Error("Caller package cache should be cleared")
 	}
 }
 
@@ -537,9 +536,10 @@ func TestRegistryStressTest(t *testing.T) {
 func TestEmptyPackageHandling(t *testing.T) {
 	ClearRegistry()
 	
-	// Store in a map with empty key
-	pkgMapInterface, _ := registryByPkgCode.LoadOrStore("", &sync.Map{})
-	pkgMap := pkgMapInterface.(*sync.Map)
+	// Store in a cache with empty key
+	initCaches()
+	pkgCache := kcache.NewAtomicCache[int, *KError](100)
+	registryByPkgCode.Set("", pkgCache)
 	
 	testErr := &KError{
 		id:      999,
@@ -548,8 +548,8 @@ func TestEmptyPackageHandling(t *testing.T) {
 		message: "test",
 	}
 	
-	pkgMap.Store(404, testErr)
-	registryByID.Store(uint32(999), testErr)
+	pkgCache.Set(404, testErr)
+	registryByID.Set(uint32(999), testErr)
 	
 	// Should be able to retrieve
 	retrieved, ok := GetErrorByPackageCode("", 404)

@@ -13,6 +13,9 @@ go_library(
     ],
     importpath = "github.com/kitsunium/sdk/pkg/kernel/kerror",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kernel/kcache",
+    ],
 )
 
 go_test(

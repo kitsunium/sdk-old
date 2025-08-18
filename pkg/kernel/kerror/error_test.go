@@ -460,7 +460,7 @@ func TestDefineConcurrency(t *testing.T) {
 
 func TestCallerPackageCaching(t *testing.T) {
 	// Clear cache
-	callerPackageCache = sync.Map{}
+	initCaches(); callerPackageCache.Clear()
 	
 	// First call
 	pkg1 := getCallerPackage()
@@ -474,9 +474,9 @@ func TestCallerPackageCaching(t *testing.T) {
 	
 	// Verify cache has entry
 	pc, _, _, _ := runtime.Caller(1)
-	if cached, ok := callerPackageCache.Load(pc); !ok {
+	if cached, ok := callerPackageCache.Get(pc); !ok {
 		t.Error("Cache should contain entry")
-	} else if cached.(string) == "" {
+	} else if cached == "" {
 		t.Error("Cached value should not be empty")
 	}
 }
@@ -554,7 +554,7 @@ func TestDefineWithEmptyMessage(t *testing.T) {
 
 func TestGetCallerPackageFullCoverage(t *testing.T) {
 	ClearRegistry()
-	callerPackageCache = sync.Map{}
+	initCaches(); callerPackageCache.Clear()
 	
 	// Test 1: Normal case with package path
 	pkg1 := getCallerPackage()
@@ -570,7 +570,7 @@ func TestGetCallerPackageFullCoverage(t *testing.T) {
 	
 	// Test 3: Function with no slash in name
 	testNoSlash := func() string {
-		callerPackageCache = sync.Map{}
+		initCaches(); callerPackageCache.Clear()
 		return getCallerPackage()
 	}
 	pkgNoSlash := testNoSlash()
@@ -579,7 +579,7 @@ func TestGetCallerPackageFullCoverage(t *testing.T) {
 	}
 	
 	// Test 4: Clear cache and test different patterns
-	callerPackageCache = sync.Map{}
+	initCaches(); callerPackageCache.Clear()
 	
 	// Test through a goroutine
 	done := make(chan string)
@@ -607,7 +607,7 @@ func TestGetCallerPackageFullCoverage(t *testing.T) {
 	}
 	
 	for i, fn := range patterns {
-		callerPackageCache = sync.Map{}
+		initCaches(); callerPackageCache.Clear()
 		pkg := fn()
 		if pkg == "" {
 			t.Errorf("Pattern %d: package should not be empty", i)
@@ -617,13 +617,13 @@ func TestGetCallerPackageFullCoverage(t *testing.T) {
 
 func TestGetCallerPackageEdgeCasesComplete(t *testing.T) {
 	ClearRegistry()
-	callerPackageCache = sync.Map{}
+	initCaches(); callerPackageCache.Clear()
 	Configure(GlobalConfig{DefaultPackage: "fallback"})
 	
 	// Test case where function name has no dot after slash
 	mockFuncName := func() string {
 		// This tests the branch where there's a slash but no dot after
-		callerPackageCache = sync.Map{}
+		initCaches(); callerPackageCache.Clear()
 		// We can't directly control runtime.FuncForPC output,
 		// but we can test the function works correctly
 		return getCallerPackage()
@@ -635,7 +635,7 @@ func TestGetCallerPackageEdgeCasesComplete(t *testing.T) {
 	}
 	
 	// Test with empty cache then fill it
-	callerPackageCache = sync.Map{}
+	initCaches(); callerPackageCache.Clear()
 	
 	// First call - cache miss
 	pkg1 := getCallerPackage()
@@ -649,7 +649,7 @@ func TestGetCallerPackageEdgeCasesComplete(t *testing.T) {
 	
 	// Test function with only package name, no path
 	simpleFunc := func() string {
-		callerPackageCache = sync.Map{}
+		initCaches(); callerPackageCache.Clear()
 		return getCallerPackage()
 	}
 	
