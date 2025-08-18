@@ -49,7 +49,7 @@ func initGlobalPool() *BufferPool {
 func NewBufferPool() *BufferPool {
 	p := &BufferPool{
 		maxSize:    1 << MaxBitSize, // Max 1MB by default
-		clearOnPut: false,            // Disabled by default for performance
+		clearOnPut: false,           // Disabled by default for performance
 	}
 	// Pre-allocate pools for common sizes
 	p.initializePools()
