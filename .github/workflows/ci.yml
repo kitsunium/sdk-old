@@ -36,6 +36,11 @@ jobs:
           disk-cache: ${{ github.workflow }}
           repository-cache: true
 
+      - name: Install golangci-lint
+        run: |
+          # Install from source to use current Go version
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
       - name: Validate
         run: |
           go mod verify
@@ -44,8 +49,7 @@ jobs:
 
       - name: Lint
         run: |
-          go vet ./...
-          # golangci-lint will be re-enabled when it supports Go 1.24
+          $(go env GOPATH)/bin/golangci-lint run ./... --timeout 5m
 
       - name: Test
         run: bazel test //pkg/... --test_output=errors
