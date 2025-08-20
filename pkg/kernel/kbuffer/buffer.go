@@ -182,9 +182,7 @@ func (b *Buffer) AppendBytes(data ...byte) error {
 	if b.pos+dataLen > b.c {
 		return ErrBufferOverflow
 	}
-	for i := range dataLen {
-		b.b[b.pos+i] = data[i]
-	}
+	copy(b.b[b.pos:b.pos+dataLen], data)
 	b.pos += dataLen
 	return nil
 }

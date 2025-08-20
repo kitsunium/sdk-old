@@ -100,7 +100,7 @@ func (e *ENV) LoadFiltered(filter func(string) bool) (map[string]string, error) 
 		}
 
 		key := env[:idx]
-		if !filter(key) {
+		if !filter(env) {
 			continue
 		}
 

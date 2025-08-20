@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -191,8 +192,9 @@ func TestENV_LoadFiltered(t *testing.T) {
 	}
 	
 	env := NewENV("")
-	filter := func(key string) bool {
-		return key == "INCLUDE_THIS" || key == "INCLUDE_ALSO"
+	filter := func(envLine string) bool {
+		// Now filter receives full "KEY=VALUE" line
+		return strings.HasPrefix(envLine, "INCLUDE_THIS=") || strings.HasPrefix(envLine, "INCLUDE_ALSO=")
 	}
 	
 	result, err := env.LoadFiltered(filter)

@@ -280,6 +280,15 @@ func (s *stats) Refresh() error {
 			return fmt.Errorf("failed to resolve symlink %s: %w", s.path, err)
 		}
 		s.path = resolvedPath
+		// Re-stat the resolved target
+		targetInfo, err := os.Stat(resolvedPath)
+		if err != nil {
+			return err
+		}
+		s.mode = uint32(targetInfo.Mode())
+		if stat, ok := targetInfo.Sys().(*unix.Stat_t); ok {
+			s.meta = stat
+		}
 	}
 
 	// Mark the file as existing.

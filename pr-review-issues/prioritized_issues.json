@@ -1,0 +1,518 @@
+{
+  "errors": [
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Couverture Sonar cass\u00e9e: mauvais chemin et mauvais format**\n\n- Chemin: l\u2019artifact t\u00e9l\u00e9charg\u00e9 garde sa structure; le fichier est sous `bazel-out/_coverage/_coverage_report.dat`, pas \u00e0 la racine.\n- Format: Sonar pour Go attend un profil \u201cgo tool cover\u201d (`coverage.out` avec \u201cmode: \u2026\u201d), pas LCOV. Copier le LCOV en `coverage.out` ne fonctionnera pas.\n\nDeux approches:\n\nA) Correction rapide (utiliser la bonne source et produire un fallback vide si absent). Cela r\u00e9pare le chemin "
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 0,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Permissions manquantes pour uploader les r\u00e9sultats SARIF**\n\n`upload-sarif@v3` n\u00e9cessite `security-events: write`. Sans cette permission, l\u2019upload \u00e9chouera (m\u00eame si `continue-on-error: true` masque l\u2019\u00e9chec).\n\nAjoutez des permissions au niveau du job:\n\n```diff\n   security-scan:\n     name: Security Scan\n     runs-on: ubuntu-24.04\n+    permissions:\n+      security-events: write\n+      contents: read\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggesti"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 0,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**\u00c9pinglage de versions des actions et politique d\u2019\u00e9chec gosec**\n\n- `securego/gosec@master` n\u2019est pas \u00e9pingl\u00e9 \u21d2 risque supply-chain et non-reproductibilit\u00e9. Pr\u00e9f\u00e9rez un tag versionn\u00e9 (ou mieux, un commit SHA) stable.\n- `-no-fail` rend le scan non-bloquant. Si c\u2019est volontaire pour une phase d\u2019adoption, OK; sinon, imposez un seuil (ex: \u00e9chouer sur HIGH/CRITICAL) pour \u00e9viter un faux sentiment de s\u00e9curit\u00e9.\n\n\n\nPropositions:\n- \u00c9pi"
+    },
+    {
+      "file": "MODULE.bazel",
+      "line": 0,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**V\u00e9rifier la compatibilit\u00e9 versions: rules_go 0.53.0, gazelle 0.41.0, Go 1.24.x**\n\nLe trio versions (rules_go, gazelle, Go) est sensible. Assurez-vous que rules_go 0.53.0 supporte bien Go 1.24.0 et que gazelle 0.41.0 est compatible avec rules_go 0.53.x.\n\n---\n\n\ud83c\udf10 Web query:\n\n```web\nrules_go 0.53.0 supported Go versions; does it support Go 1.24?\n```\n\n\ud83d\udca1 Result:\n\nrules_go version **0.53.0 supports official releases of the Go SDK*"
+    },
+    {
+      "file": "pkg/core/config/parser/env.go",
+      "line": 92,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Incoh\u00e9rence doc/impl de LoadFiltered (cl\u00e9 vs \u201cKEY=VALUE\u201d)**\n\nLe commentaire indique que le filtre re\u00e7oit la cha\u00eene compl\u00e8te \u201cKEY=VALUE\u201d, mais l\u2019impl passe uniquement la cl\u00e9. Corriger soit la doc, soit le code. Pr\u00e9f\u00e9rence: aligner l\u2019impl\u00e9mentation sur la doc pour permettre un filtrage selon la valeur.\n\n\nProposition de correctif minimal (sans changer la signature)\u00a0:\n\n```diff\n-\t\tkey := env[:idx]\n-\t\tif !filter(key) {\n+\t\tkey := env[:idx]\n+\t\tif !filter(env) {\n \t\t\tcontinue\n \t\t}\n"
+    },
+    {
+      "file": "pkg/core/config/parser/ini_test.go",
+      "line": 548,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Couverture solide de LoadBytes, mais test d\u2019aliasing manquant**\n\nAjoutez un test qui v\u00e9rifie que modifier le buffer source apr\u00e8s l\u2019analyse ne change pas le r\u00e9sultat. Ceci aidera \u00e0 verrouiller le comportement (copie vs zero-copy). Apr\u00e8s le correctif propos\u00e9 dans `LoadBytes`, ce test doit passer.\n\nProposition de test additionnel (\u00e0 ajouter en fin de fichier):\n\n```go\nfunc TestINI_LoadBytes_NoAliasing(t *testing.T) {\n\tdata := []byte(\"[s]\\nkey=value\\n\")\n\tini := NewINI(\"\")\n"
+    },
+    {
+      "file": "pkg/kernel/errors/BUILD.bazel",
+      "line": 0,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**importpath incorrect (typo dans l\u2019organisation GitHub).**\n\nL\u2019importpath (ligne 6) pointe vers `github.com/kistunium/...` au lieu de `github.com/kitsunium/...`. Cela cassera les imports Go et la r\u00e9solution Bazel (go_library doit refl\u00e9ter le module r\u00e9el).\n\nProposition de correctif:\n\n```diff\n-    importpath = \"github.com/kistunium/sdk/pkg/kernel/errors\",\n+    importpath = \"github.com/kitsunium/sdk/pkg/kernel/errors\",\n```\n\n\nPou"
+    },
+    {
+      "file": "pkg/kernel/fs/stats.go",
+      "line": 293,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Liaisons symboliques: m\u00e9tadonn\u00e9es non r\u00e9\u00e9valu\u00e9es apr\u00e8s r\u00e9solution \u2014 IsFile() renverra faux**\n\nApr\u00e8s avoir r\u00e9solu un lien symbolique via `filepath.EvalSymlinks`, vous ne r\u00e9ex\u00e9cutez pas de `stat` sur la cible. `s.mode` et `s.meta` restent ceux du symlink, donc `IsFile()` et `IsDirectory()` peuvent retourner des valeurs erron\u00e9es. Cela casse notamment `NewFile(...)` qui rejette un symlink pointant vers un fichier r\u00e9gulier.\n\nCorrigez en r\u00e9-statant la cible r\u00e9solue:\n\n\nApply thi"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/buffer.go",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Extend accepte des valeurs n\u00e9gatives et peut rendre b.pos n\u00e9gatif \u21d2 panics ult\u00e9rieurs.**\n\nAvec `n < 0`, `newPos` peut devenir n\u00e9gatif, puis des \u00e9critures/slices indexeront avec un index < 0 (panic \u201cindex out of range\u201d). Rejetez les valeurs n\u00e9gatives (ou g\u00e9rez\u2011les explicitement).\n\n\nCorrectif minimal\u00a0:\n\n```diff\n func (b *Buffer) Extend(n int) error {\n-\tnewPos := b.pos + n\n+\tif n < 0 {\n+\t\treturn ErrBufferOverflow // ou introduire ErrInvalidArgument\n+\t}\n+\tnewPos := b.pos + n\n"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/buffer.go",
+      "line": 189,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Bug de compilation: `range` sur un `int` dans `AppendBytes`.**\n\n`for i := range dataLen` est invalide en Go (on ne peut pas it\u00e9rer sur un `int`). Utilisez `copy` (plus simple et rapide) ou une boucle index\u00e9e.\n\n\n\nCorrectif recommand\u00e9:\n\n```diff\n func (b *Buffer) AppendBytes(data ...byte) error {\n   dataLen := len(data)\n   if b.pos+dataLen > b.c {\n     return ErrBufferOverflow\n   }\n-  for i := range dataLen {\n-    b.b[b.pos+i] = data[i]\n-  }\n+  copy(b.b[b.pos:b.pos+dataLen],"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/kbuffer_test.go",
+      "line": 47,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**NotEqual peut paniquer avec des types non comparables (ex: slices, maps)**\n\n`expected == actual` l\u00e8ve une panique \u00e0 l\u2019ex\u00e9cution si les valeurs dynamiques ne sont pas comparables. Utilisez `bytes.Equal` pour `[]byte` puis `reflect.DeepEqual` pour le reste.\n\n\nProposition de diff:\n\n```diff\n func NotEqual(t *testing.T, expected, actual interface{}, msgAndArgs ...interface{}) {\n     t.Helper()\n-    if expected == actual {\n+    // Handle []byte explicitly\n+    if eb, ok1 :="
+    },
+    {
+      "file": "pkg/kernel/kcache/cache.go",
+      "line": 8,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**CI rouge: go fmt requis**\n\nLa CI a \u00e9chou\u00e9 sur le formatage. Ex\u00e9cutez go fmt (ou la t\u00e2che Task correspondante) et poussez le correctif.\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nset -euo pipefail\ngo fmt ./...\n# Optionnel: v\u00e9rifier qu'aucun fichier Go ne reste non format\u00e9\ngit diff --name-only --exit-code || { echo \"Des fichiers ont \u00e9t\u00e9 reformatt\u00e9s.\"; exit 1; }\n```\n\nLength of output: 2720\n\n---\n\n\n\n</details>\n\n**Action requ"
+    },
+    {
+      "file": "pkg/kernel/kerror/README.md",
+      "line": 18,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**Corriger la table des mati\u00e8res (ancre(s) invalide(s) signal\u00e9e(s) par markdownlint MD051).**\n\nUn contr\u00f4le automatique a relev\u00e9 au moins une ancre invalide dans la table des mati\u00e8res. V\u00e9rifions que chaque fragment `#...` correspond bien \u00e0 un titre existant. Je propose d\u2019automatiser la v\u00e9rification des fragments d\u2019URL vs. les titres g\u00e9n\u00e9rant des ancres GitHub.\n\n\nEx\u00e9cutez ce script pour d\u00e9tecter les fragments non r\u00e9solus dans c"
+    },
+    {
+      "file": "pkg/kernel/kerror/README.md",
+      "line": 33,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**\u00c9viter une promesse trop forte sur la \u201cthread-safety\u201d.**\n\nLa section \u201cFeatures\u201d mentionne \u201cThread-safe operations\u201d. Or, au moment pr\u00e9sent, la fonction `Define` n\u2019est pas atomique (cf. commentaire dans `error.go`) et peut souffrir de races sur la d\u00e9tection de doublons. Soit corriger le code (pr\u00e9f\u00e9rable), soit nuancer la formulation ici et dans la section \u201cThread Safety\u201d.\n\n<details>\n<summary>\ud83e\uddf0 Tools</summary>\n\n<details>\n<summary>\ud83e\ude9b LanguageTool</summary>\n\n[grammar] ~24-~"
+    },
+    {
+      "file": "pkg/kernel/kerror/error.go",
+      "line": 0,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Ajouter `sync` pour s\u00e9curiser la d\u00e9tection de doublons en concurrence.**\n\n`Define` effectue un `Get` puis `Set` dans un cache atomique, mais sans op\u00e9ration atomique \u201cset-if-absent\u201d. Deux goroutines peuvent passer le `Get` et effectuer deux `Set`, contournant le panic attendu. Un verrou grossier autour de la section critique suffit (co\u00fbt n\u00e9gligeable, `Define` est rarement appel\u00e9 au runtime).\n\n\n```diff\n import (\n \t\"encoding/json\"\n \t\"fmt\"\n \t\"runtime\"\n \t\"strings\"\n+\t\"sync\""
+    },
+    {
+      "file": "pkg/kernel/kerror/error.go",
+      "line": 0,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Verrou global pour s\u00e9rialiser la section critique.**\n\n\n```diff\n var errorCounter uint32\n+var defineMu sync.Mutex\n```\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<details>\n<summary>\ud83e\udd16 Prompt for AI Agents</summary>\n\n```\nIn pkg/kernel/kerror/error.go around lines 35-36, the package-level uint32\nerrorCounter is currently unprotected; add a global lock to serialize access by\ndeclaring a package-level sync.Mutex (e.g., errorCounterMu) and wrap eve"
+    },
+    {
+      "file": "pkg/kernel/kerror/error.go",
+      "line": 0,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Rendre `Define` atomique: race sur cr\u00e9ation du cache, d\u00e9tection de doublons et insertion.**\n\nProbl\u00e8mes:\n- Deux goroutines peuvent toutes deux ne pas trouver `pkgCache`, en cr\u00e9er un chacune, et \u00e9craser la r\u00e9f\u00e9rence dans `registryByPkgCode` \u2192 perte d\u2019erreurs ins\u00e9r\u00e9es dans le cache \u201cperdu\u201d.\n- La d\u00e9tection de doublons (`Get` puis `panic`) n\u2019est pas atomique \u2192 duplication silencieuse possible; la derni\u00e8re \u00e9criture gagne.\n- L\u2019ID est g\u00e9n\u00e9r\u00e9 avant le check, cr\u00e9ant des \u201ctrous\u201d"
+    },
+    {
+      "file": "pkg/kernel/kerror/instance.go",
+      "line": 50,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**R\u00e9initialisation incorrecte du slice stack**\n\nLa r\u00e9initialisation avec `i.stack[:0]` conserve la capacit\u00e9 mais peut exposer d'anciennes donn\u00e9es de stack si le slice est \u00e9tendu plus tard.\n\n\n\nR\u00e9initialisez compl\u00e8tement le slice pour \u00e9viter les fuites de donn\u00e9es:\n\n```diff\n-\tinst.stack = inst.stack[:0] // Reset slice but keep capacity\n+\t// Clear the stack completely to avoid data leaks\n+\tfor i := range inst.stack {\n+\t\tinst.stack[i] = 0\n+\t}\n+\tinst.stack = inst.stack[:0]\n``"
+    },
+    {
+      "file": "pkg/kernel/kerror/instance.go",
+      "line": 88,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Incoh\u00e9rence dans la gestion des erreurs nil**\n\nLes m\u00e9thodes `Wrap` et `Wrapf` retournent `nil` si `cause` est `nil`, mais ce comportement n'est pas document\u00e9 et peut surprendre les utilisateurs.\n\n\n\nDocumentez ce comportement ou retournez une instance vide:\n\n```diff\n // Wrap wraps an existing error\n+// Returns nil if the cause error is nil\n func (e KError) Wrap(cause error) *Instance {\n \tif cause == nil {\n-\t\treturn nil\n+\t\t// Option 1: Return empty instance\n+\t\t// return"
+    },
+    {
+      "file": "pkg/kernel/kerror/instance_test.go",
+      "line": 414,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Fuite d\u2019instance non lib\u00e9r\u00e9e dans TestInstanceIs**\n\nLe cas \"different instance same error\" cr\u00e9e une instance (err1.New()) qui n\u2019est jamais Release()\u2019d, ce qui pollue le pool et peut flouter d\u2019autres tests.\n\n\nAppliquez une lib\u00e9ration conditionnelle dans le corps de chaque sous\u2011test:\n\n```diff\n for _, tt := range tests {\n   t.Run(tt.name, func(t *testing.T) {\n+    // Lib\u00e8re uniquement les instances \u00e9ph\u00e9m\u00e8res cr\u00e9\u00e9es dans la table\n+    defer func() {\n+      if tt.inst != nil &"
+    },
+    {
+      "file": "pkg/kernel/kerror/metrics.go",
+      "line": 27,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**SetMetricsCollector non thread-safe; utilisez atomic.Value pour \u00e9viter les races**\n\n`metricsCollector` est une variable globale lue/\u00e9crite sans synchronisation; si l\u2019appli la modifie \u00e0 chaud alors que des enregistrements se produisent, cela peut introduire une data race. Remplacez par atomic.Value (ou un RWMutex) pour des lectures lock\u2011free et des \u00e9critures s\u00fbres.\n\n\n```diff\n var (\n-  metricsCollector MetricsCollector = NewSimpleMetrics()\n-  metricsEnabled   atomic.Boo"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 8,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**\u00c9viter l\u2019\u00e9limination de code (DCE) dans les benchmarks**\n\nPlusieurs benchmarks ignorent les valeurs de retour, ce qui peut permettre au compilateur d\u2019\u00e9liminer tout ou partie du travail. Introduisez un \u201csink\u201d global et affectez-lui les r\u00e9sultats pour fiabiliser les mesures.\n\n\nAppliquez ce diff pr\u00e8s du haut du fichier (apr\u00e8s les imports)\u00a0:\n\n```diff\n@@\n import (\n \t\"fmt\"\n \t\"testing\"\n )\n \n+// benchSink emp\u00eache l'\u00e9limination des appels dans les benchmarks.\n+var benchSink an"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 32,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Affecter le r\u00e9sultat pour bloquer DCE**\n\nCapturez la valeur de retour de `GetError` dans `benchSink`.\n\n\n```diff\n-\tb.RunParallel(func(pb *testing.PB) {\n-\t\ti := 0\n-\t\tfor pb.Next() {\n-\t\t\tGetError(uint32((i % 1000) + 1))\n-\t\t\ti++\n-\t\t}\n-\t})\n+\tb.RunParallel(func(pb *testing.PB) {\n+\t\ti := 0\n+\t\tfor pb.Next() {\n+\t\t\tif err, ok := GetError(uint32((i % 1000) + 1)); ok {\n+\t\t\t\tbenchSink = err\n+\t\t\t}\n+\t\t\ti++\n+\t\t}\n+\t})\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable su"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 58,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Bloquer DCE aussi pour GetErrorByPackageCode**\n\n\n```diff\n-\tb.RunParallel(func(pb *testing.PB) {\n-\t\ti := 0\n-\t\tfor pb.Next() {\n-\t\t\tGetErrorByPackageCode(fmt.Sprintf(\"pkg%d\", i%100), i%10)\n-\t\t\ti++\n-\t\t}\n-\t})\n+\tb.RunParallel(func(pb *testing.PB) {\n+\t\ti := 0\n+\t\tfor pb.Next() {\n+\t\t\tke, _ := GetErrorByPackageCode(fmt.Sprintf(\"pkg%d\", i%100), i%10)\n+\t\t\tbenchSink = ke\n+\t\t\ti++\n+\t\t}\n+\t})\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f *"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 70,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Mesurer r\u00e9ellement Define() (\u00e9viter de mesurer ClearRegistry \u00e0 chaque it\u00e9ration)**\n\n`ClearRegistry()` \u00e0 l\u2019int\u00e9rieur de la boucle fausse le r\u00e9sultat. Videz une fois avant le minuteur, puis ne faites que `Define`.\n\n\n```diff\n-func BenchmarkDefineError(b *testing.B) {\n-\tfor i := 0; i < b.N; i++ {\n-\t\t// Clear and redefine to avoid duplicates\n-\t\tClearRegistry()\n-\t\tDefine(KConfig{\n-\t\t\tCode:    i,\n-\t\t\tMessage: fmt.Sprintf(\"Error %d\", i),\n-\t\t\tPackage: fmt.Sprintf(\"pkg%d\", i),\n"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 97,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Bloquer DCE pour ValidatePackageCode**\n\n\n```diff\n-\t\t\tif i%2 == 0 {\n-\t\t\t\tValidatePackageCode(\"benchmark\", i%100)\n-\t\t\t} else {\n-\t\t\t\tValidatePackageCode(\"benchmark\", 1000+i)\n-\t\t\t}\n+\t\t\tif i%2 == 0 {\n+\t\t\t\tbenchSink = ValidatePackageCode(\"benchmark\", i%100)\n+\t\t\t} else {\n+\t\t\t\tbenchSink = ValidatePackageCode(\"benchmark\", 1000+i)\n+\t\t\t}\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before co"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 109,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Bloquer DCE pour getCallerPackage**\n\n\n```diff\n-\tb.RunParallel(func(pb *testing.PB) {\n-\t\tfor pb.Next() {\n-\t\t\tgetCallerPackage()\n-\t\t}\n-\t})\n+\tb.RunParallel(func(pb *testing.PB) {\n+\t\tfor pb.Next() {\n+\t\t\tbenchSink = getCallerPackage()\n+\t\t}\n+\t})\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing li"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 128,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Bloquer DCE pour ListErrors**\n\n\n```diff\n-\tfor i := 0; i < b.N; i++ {\n-\t\tListErrors()\n-\t}\n+\tfor i := 0; i < b.N; i++ {\n+\t\tbenchSink = ListErrors()\n+\t}\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 147,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Bloquer DCE pour ListPackages**\n\n\n```diff\n-\tfor i := 0; i < b.N; i++ {\n-\t\tListPackages()\n-\t}\n+\tfor i := 0; i < b.N; i++ {\n+\t\tbenchSink = ListPackages()\n+\t}\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ens"
+    },
+    {
+      "file": "pkg/kernel/kerror/performance_test.go",
+      "line": 180,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Bloquer DCE dans le benchmark concurrent (toutes branches)**\n\n\n```diff\n-\t\t\tswitch i % 4 {\n+\t\t\tswitch i % 4 {\n \t\t\tcase 0:\n-\t\t\t\tGetError(uint32((i % 100) + 1))\n+\t\t\t\tif e, ok := GetError(uint32((i % 100) + 1)); ok {\n+\t\t\t\t\tbenchSink = e\n+\t\t\t\t}\n \t\t\tcase 1:\n-\t\t\t\tGetErrorByPackageCode(\"concurrent\", i%100)\n+\t\t\t\te, _ := GetErrorByPackageCode(\"concurrent\", i%100)\n+\t\t\t\tbenchSink = e\n \t\t\tcase 2:\n-\t\t\t\tValidatePackageCode(\"concurrent\", 1000+i)\n+\t\t\t\tbenchSink = ValidatePackageCode(\""
+    }
+  ],
+  "warnings": [
+    {
+      "file": ".gitignore",
+      "line": 11,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Ne pas ignorer MODULE.bazel.lock \u2014 n\u00e9cessaire pour des builds reproductibles avec bzlmod**\n\nLe lockfile bzlmod doit \u00eatre versionn\u00e9. L\u2019ignorer d\u00e9grade la reproductibilit\u00e9 (r\u00e9solution des deps non fig\u00e9e), peut invalider le cache CI et produire des \u00e9carts locaux/CI. Conservez-le dans le repo et, si besoin, ignorez une \u00e9ventuelle variante \u201cuser\u201d.\n\n\n\n\nProposition de correctif:\n\n```diff\n # Bazel\n bazel-*\n .bazelrc.user\n .bazelversion.user\n-MODULE.bazel.lock\n+## IMPORTANT: conse"
+    },
+    {
+      "file": "BUILD.bazel",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Pr\u00e9fixe Gazelle probable typo: \"kistunium\" vs \"kitsunium\"**\n\nLe repo PR pointe vers github.com/kitsunium/sdk, mais le pr\u00e9fixe est \"github.com/kistunium/sdk\". Cette divergence cassera les importpaths g\u00e9n\u00e9r\u00e9s par Gazelle.\n\nProposition de correction:\n\n```diff\n-# gazelle:prefix github.com/kistunium/sdk\n+# gazelle:prefix github.com/kitsunium/sdk\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code"
+    },
+    {
+      "file": "BUILD.bazel",
+      "line": 0,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n_\u26a0\ufe0f Potential issue_\n\n**Les r\u00e8gles alias vers un pattern //pkg/... ne sont pas valides**\n\nLa r\u00e8gle native alias attend un label unique, pas un pattern. `actual = \"//pkg/...\"` fera \u00e9chouer la charge du graph Bazel.\n\n\nRecommandations:\n- Supprimer ces alias et utiliser directement les patterns dans les commandes (ex.: `bazel build //pkg/...`, `bazel test //pkg/...`) via votre Taskfile.\n- Optionnel: si vous souhaitez un agr\u00e9gateur de tests, cr\u00e9ez un test_suite listant expli"
+    },
+    {
+      "file": "MODULE.bazel",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Toolchain Go non enregistr\u00e9 sous bzlmod \u2014 builds Go risquent d\u2019\u00e9chouer**\n\nVous d\u00e9finissez go_sdk.download(), mais vous n\u2019exposez pas le repo ni n\u2019enregistrez les toolchains. Avec bzlmod, il faut g\u00e9n\u00e9ralement:\n- use_repo(go_sdk, \"go_sdk\")\n- register_toolchains(\"@go_sdk//:all\")\n\nSans cela, Bazel peut ne pas trouver de toolchain Go.\n\n\n\nProposition de correctif:\n\n```diff\n go_sdk = use_extension(\"@rules_go//go:extensions.bzl\", \"go_sdk\")\n go_sdk.download(version = \"1.24.0\")\n \n+"
+    },
+    {
+      "file": "pkg/core/config/parser/args.go",
+      "line": 117,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Gestion incorrecte du s\u00e9parateur `--` et des cl\u00e9s vides (peut produire une cl\u00e9 \"\").**\n\nUn argument exactement \u00e9gal \u00e0 `--` est le s\u00e9parateur standard fin-des-options. Ici, il devient une cl\u00e9 vide potentielle (ou consomme l\u2019argument suivant comme valeur de la cl\u00e9 vide). M\u00eame probl\u00e8me avec un seul `-`.\n\n\nProposition de correctif robuste:\n\n```diff\n \tfor i := 0; i < len(args); i++ {\n \t\targ := args[i]\n \t\t\n \t\tif len(arg) == 0 {\n \t\t\tcontinue\n \t\t}\n+\n+\t\t// Fin des options: stoppe l"
+    },
+    {
+      "file": "pkg/core/config/parser/ini.go",
+      "line": 103,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Conversion unsafe []byte \u2192 string fragile et non recommand\u00e9e**\n\n`*(*string)(unsafe.Pointer(&b))` repose sur la mise en page interne des en-t\u00eates slice/string. Go fournit `unsafe.String(unsafe.SliceData(b), len(b))` depuis 1.20 pour une conversion non allouante plus s\u00fbre. Au minimum, remplacez l\u2019impl\u00e9mentation par cette API. Mieux: \u00e9vitez l\u2019aliasing c\u00f4t\u00e9 appelant (voir commentaire suivant).\n\nProposition:\n\n```diff\n-func iniBytesToString(b []byte) string {\n-\treturn *(*string"
+    },
+    {
+      "file": "pkg/core/config/parser/interface.go",
+      "line": 46,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Valeur par d\u00e9faut non appliqu\u00e9e et absence de validation dans WithBufferSize**\n\nLa doc promet un d\u00e9faut \u00e0 8192, mais aucun chemin de code ne l\u2019applique si l\u2019option n\u2019est pas fournie ou si une valeur non positive est pass\u00e9e. R\u00e9sultat: bufferSize peut rester \u00e0 0, ce qui contredit la doc et peut d\u00e9grader les perfs IO.\n\nProposition \u2014 valider la saisie et pr\u00e9server la valeur existante (initialis\u00e9e au d\u00e9faut) si size <= 0:\n\n```diff\n-func WithBufferSize(size int) ParserOption {\n"
+    },
+    {
+      "file": "pkg/core/config/parser/toml.go",
+      "line": 11,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Utiliser filepath.Ext pour g\u00e9rer correctement les s\u00e9parateurs de chemin**\n\n`path.Ext` traite des chemins \u201cURL-like\u201d (slash), pas des chemins OS. Pour les chemins syst\u00e8me portables (Windows inclus), utilisez `path/filepath.Ext`.\n\n\n```diff\n@@\n-\t\"path\"\n+\t\"path/filepath\"\n@@\n-\tif ext := path.Ext(t.Path); ext != \".toml\" {\n+\tif ext := filepath.Ext(t.Path); ext != \".toml\" {\n \t\treturn nil, ErrInvalidExtension.Newf(\"expected .toml, got %s\", ext)\n \t}\n```\n\n\nAlso applies to: 73-76\n\n<d"
+    },
+    {
+      "file": "pkg/core/config/parser/toml_test.go",
+      "line": 287,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Cl\u00e9 attendue incorrecte: conserver l\u2019underscore dans temp_targets**\n\nLa normalisation des cl\u00e9s du parseur/flatten ne remplace pas les underscores par des points pour TOML (contrairement au loader ENV). Les attentes \"database.temp.targets.*\" ne correspondent pas \u00e0 la cl\u00e9 TOML temp_targets. Corrigez les cl\u00e9s attendues et clarifiez le commentaire.\n\n\nAppliquez ce diff:\n\n```diff\n-\t\t// Arrays of arrays become nested structure\n-\t\t\"database.temp.targets.cpu\": \"79.5\",\n-\t\t\"database"
+    },
+    {
+      "file": "pkg/core/storage/BUILD.bazel",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**importpath mal orthographi\u00e9 (kitsunium vs kistunium) \u2014 casse les imports Go**\n\nLa valeur d'importpath ne correspond pas tr\u00e8s probablement au module Go du repo (PR: github.com/kitsunium/sdk). Cette faute casse la r\u00e9solution des imports et peut faire \u00e9chouer la compilation Bazel/Go.\n\n\n\nAppliquez ce correctif:\n\n```diff\n-    importpath = \"github.com/kistunium/sdk/pkg/core/storage\",\n+    importpath = \"github.com/kitsunium/sdk/pkg/core/storage\",\n```\n\n<!-- suggestion_start -->\n\n"
+    },
+    {
+      "file": "pkg/kernel/buffer/BUILD.bazel",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**importpath mal orthographi\u00e9 (kitsunium vs kistunium) \u2014 casse les imports Go**\n\n\u00c0 corriger pour rester align\u00e9 avec le module path.\n\n\n\nCorrectif:\n\n```diff\n-    importpath = \"github.com/kistunium/sdk/pkg/kernel/buffer\",\n+    importpath = \"github.com/kitsunium/sdk/pkg/kernel/buffer\",\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the hig"
+    },
+    {
+      "file": "pkg/kernel/config/BUILD.bazel",
+      "line": 20,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Label Bazel incomplet pour testify (risque d\u2019\u00e9chec de build)**\n\nLa d\u00e9pendance vers testify omet la cible. La plupart des d\u00e9p\u00f4ts externes g\u00e9n\u00e9r\u00e9s par Gazelle nomment la r\u00e8gle \"go_default_library\". Sans la partie apr\u00e8s le \u201c:\u201d, Bazel cherchera un target nomm\u00e9 \"assert\" qui n\u2019existe g\u00e9n\u00e9ralement pas.\n\nProposition de correctif:\n\n```diff\n-        \"@com_github_stretchr_testify//assert\",\n+        \"@com_github_stretchr_testify//assert:go_default_library\",\n```\n\n<!-- suggestion_start"
+    },
+    {
+      "file": "pkg/kernel/config/normalize/BUILD.bazel",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**importpath incorrect (coh\u00e9rence module/chemin).**\n\nM\u00eame souci que dans d\u2019autres BUILD: `kistunium` au lieu de `kitsunium`. \u00c0 corriger pour \u00e9viter les incoh\u00e9rences d\u2019import.\n\nCorrectif propos\u00e9:\n\n```diff\n-    importpath = \"github.com/kistunium/sdk/pkg/kernel/config/normalize\",\n+    importpath = \"github.com/kitsunium/sdk/pkg/kernel/config/normalize\",\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review t"
+    },
+    {
+      "file": "pkg/kernel/config/parser/BUILD.bazel",
+      "line": 33,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Label Bazel incomplet pour testify (risque d\u2019\u00e9chec de build)**\n\nAjoutez la cible explicite pour \u00e9viter la r\u00e9solution d\u2019un target inexistant.\n\n```diff\n-        \"@com_github_stretchr_testify//assert\",\n+        \"@com_github_stretchr_testify//assert:go_default_library\",\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code,"
+    },
+    {
+      "file": "pkg/kernel/fs/BUILD.bazel",
+      "line": 34,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Label Bazel incomplet pour testify (risque d\u2019\u00e9chec de build)**\n\nM\u00eame probl\u00e8me que dans config_test: il manque la cible explicite pour testify.\n\nProposition de correctif:\n\n```diff\n-        \"@com_github_stretchr_testify//assert\",\n+        \"@com_github_stretchr_testify//assert:go_default_library\",\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately r"
+    },
+    {
+      "file": "pkg/kernel/fs/file.go",
+      "line": 183,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Taille de buffer potentiellement non initialis\u00e9e.**\n\nLa m\u00e9thode `Copy()` utilise `*f.buffersize` sans v\u00e9rifier si le pointeur est nil. Cela pourrait causer un panic si `BufferSize` n'est pas d\u00e9fini dans les options.\n\n\n\nAjoutez une v\u00e9rification ou utilisez une valeur par d\u00e9faut :\n\n```diff\n-\tbuffer := make([]byte, *f.buffersize)\n+\tbufSize := 4096 // Default buffer size\n+\tif f.buffersize != nil {\n+\t\tbufSize = *f.buffersize\n+\t}\n+\tbuffer := make([]byte, bufSize)\n```\n\n<!-- sugg"
+    },
+    {
+      "file": "pkg/kernel/fs/file.go",
+      "line": 267,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**M\u00eame probl\u00e8me de buffer potentiellement non initialis\u00e9.**\n\nLa m\u00e9thode `Read()` a le m\u00eame probl\u00e8me potentiel avec `*f.buffersize`.\n\n\n\nAppliquez la m\u00eame correction :\n\n```diff\n-\tbuffer := make([]byte, *f.buffersize)\n+\tbufSize := 4096 // Default buffer size\n+\tif f.buffersize != nil {\n+\t\tbufSize = *f.buffersize\n+\t}\n+\tbuffer := make([]byte, bufSize)\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the c"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/buffer.go",
+      "line": 37,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Supprimer les directives inconnues `//go:inline`.**\n\nLe compilateur Go ne supporte pas `//go:inline`. Les directives inconnues peuvent \u00eatre signal\u00e9es par les outils d\u2019analyse/compilation. Supprimez-les.\n\nAppliquez ce diff minimal (extrait, \u00e0 r\u00e9p\u00e9ter sur chaque occurrence):\n\n```diff\n-//go:inline\n func (b *Buffer) Len() int {\n```\n\n\nAlso applies to: 47-49, 122-124, 151-152, 156-158, 183-184, 198-199, 211-213, 217-219, 228-229, 234-236\n\n<details>\n<summary>\ud83e\udd16 Prompt for AI Agen"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/buffer.go",
+      "line": 132,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**`String()` retourne un alias non-copi\u00e9 (unsafe) vers le backing slice \u2014 risque de corruption/s\u00e9curit\u00e9.**\n\n`unsafe.String(unsafe.SliceData(b.b[:b.pos]), b.pos)` rend la \u201cstring\u201d alias\u00e9e au buffer. Toute modification/clear/repool ult\u00e9rieur du buffer pourra muter la string \u201cimmutable\u201d, avec risques d\u2019exfiltration et de corruptions subtiles. Par d\u00e9faut, `String()` devrait copier. Exposez une variante `UnsafeString()` document\u00e9e pour les hot-paths.\n\nProposition:\n\n```diff\n func"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/buffer.go",
+      "line": 229,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Truncate(n) accepte n < 0 et peut rendre b.pos n\u00e9gatif.**\n\nAvec `b.pos = min(n, b.pos)`, un `n` n\u00e9gatif force `b.pos` < 0, ce qui provoquera des panics (\u201cindex out of range\u201d) lors de futurs acc\u00e8s. Alignez-vous sur `bytes.Buffer.Truncate` (clamp/erreur) ou, plus simple ici, \u201cclamp to [0..pos]\u201d.\n\n\n\nCorrectif minimal et s\u00fbr:\n\n```diff\n func (b *Buffer) Truncate(n int) {\n-  b.pos = min(n, b.pos)\n+  if n <= 0 {\n+    b.pos = 0\n+    return\n+  }\n+  if n < b.pos {\n+    b.pos = n\n+ "
+    },
+    {
+      "file": "pkg/kernel/kbuffer/pool.go",
+      "line": 25,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Bogue critique: m\u00e9lange de types h\u00e9t\u00e9rog\u00e8nes dans un m\u00eame `sync.Pool` (risque de panic).**\n\n`p.pools` est partag\u00e9 pour des `[]byte` (Get/Put) ET des `*Buffer` (GetBuffer/PutBuffer). Une fois qu\u2019un pool de taille N contient des `[]byte`, `GetBuffer` peut r\u00e9cup\u00e9rer un `[]byte` et tenter un cast `.(*Buffer)` \u21d2 panic. S\u00e9parez les pools par type (deux `sync.Map`) ou utilisez des cl\u00e9s typ\u00e9es distinctes.\n\nProposition (s\u00e9paration en deux maps):\n\n```diff\n type BufferPool struct {\n"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/pool.go",
+      "line": 229,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Acc\u00e8s atomique \u00e0 `maxSize` incorrect et non-portable; utiliser `atomic.Int64`.**\n\nCastez un `int` vers `*int64` via `unsafe` pour `atomic.StoreInt64` est ind\u00e9fini sur plateformes 32-bit et potentiellement mal align\u00e9. Modifiez le type et utilisez l\u2019API typ\u00e9e.\n\nPatch sugg\u00e9r\u00e9:\n\n```diff\n type BufferPool struct {\n-    maxSize    int\n+    maxSize    int64\n }\n\n func NewBufferPool() *BufferPool {\n     p := &BufferPool{\n-        maxSize:    1 << MaxBitSize, // Max 1MB by default\n+"
+    },
+    {
+      "file": "pkg/kernel/kcache/README.md",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Chemin d\u2019import incorrect**\n\nLe dossier est `pkg/kernel/kcache`, mais l\u2019import montre `.../cache`. Corrigez l\u2019import et, id\u00e9alement, aliassez-le pour \u00e9viter l\u2019ombre avec une variable nomm\u00e9e `cache`.\n\n```diff\n- import \"github.com/kitsunium/sdk/pkg/kernel/cache\"\n+ import kcache \"github.com/kitsunium/sdk/pkg/kernel/kcache\"\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. E"
+    },
+    {
+      "file": "pkg/kernel/kcache/README.md",
+      "line": 43,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Collision nom de package/variable dans les exemples**\n\nLes exemples utilisent `cache := ...` et `package cache` (via l\u2019import), ce qui pr\u00eate \u00e0 confusion. Renommez la variable en `c` et r\u00e9f\u00e9rencez le package alias\u00e9 `kcache`.\n\n```diff\n-// Create an LRU cache with capacity of 1000\n-cache := cache.NewLRU[string, any](1000)\n+// Create an LRU cache with capacity of 1000\n+c := kcache.NewLRU[string, any](1000)\n \n-// Basic operations\n-cache.Set(\"key\", \"value\")\n-value, ok := cache."
+    },
+    {
+      "file": "pkg/kernel/kcache/README.md",
+      "line": 166,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Section \u201cStatistics\u201d: variable non d\u00e9finie et incoh\u00e9rence d\u2019interface**\n\nLe snippet utilise `cache.Stats()` qui n\u2019existe pas et la variable n\u2019est pas d\u00e9finie. Proposez une variable `c` et appelez `c.Stats()`. Si vous d\u00e9cidez de garder `Stats()` hors de l\u2019interface, pr\u00e9cisez le type concret. \n\n```diff\n ```go\n type Stats struct {\n@@\n }\n \n-stats := cache.Stats()\n+// c est une instance qui impl\u00e9mente l'interface kcache.Cache\n+var c kcache.Cache[string, any]\n+stats := c.Stats("
+    },
+    {
+      "file": "pkg/kernel/kcache/README.md",
+      "line": 219,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Chemin de test Bazel/Go incorrect**\n\nLes chemins utilisent `pkg/kernel/cache/...` au lieu de `pkg/kernel/kcache/...`.\n\n```diff\n-go test -race ./pkg/kernel/cache/...\n+go test -race ./pkg/kernel/kcache/...\n```\nIdem pour la section Benchmarks.\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, an"
+    },
+    {
+      "file": "pkg/kernel/kcache/atomic.go",
+      "line": 301,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**M\u00e9thode FastGet expose un pointeur mutable**\n\nLa m\u00e9thode `FastGet` retourne un pointeur vers la valeur interne qui pourrait \u00eatre modifi\u00e9e par l'appelant, violant l'immutabilit\u00e9 attendue du cache.\n\n\n\nDocumentez clairement le danger ou retournez une copie pour les types mutables:\n\n```diff\n // FastGet is an optimized version that returns a pointer to avoid copying large values.\n // WARNING: The returned pointer should not be modified as it's shared across goroutines.\n+// CRI"
+    },
+    {
+      "file": "pkg/kernel/kcache/cache.go",
+      "line": 334,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Data race potentielle sur Stats()**\n\n`Stats()` lit la struct sans verrou alors que les champs sont modifi\u00e9s sous verrou dans Set/Get. Ajoutez un RLock pour un snapshot coh\u00e9rent.\n\n\n```diff\n func (c *LRU[K, V]) Stats() Stats {\n-  return c.stats\n+  c.mu.RLock()\n+  defer c.mu.RUnlock()\n+  return c.stats\n }\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accu"
+    },
+    {
+      "file": "pkg/kernel/kcache/sharded.go",
+      "line": 126,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Race condition lors de la v\u00e9rification d'expiration**\n\nEntre le RUnlock (ligne 117) et le Lock (ligne 119), une autre goroutine pourrait supprimer l'entr\u00e9e, causant une double suppression.\n\n\n\nAppliquez ce correctif pour v\u00e9rifier \u00e0 nouveau l'existence apr\u00e8s l'acquisition du lock:\n\n```diff\n // Check expiration without upgrading lock\n if entry.expiration > 0 && time.Now().UnixNano() > entry.expiration {\n \tshard.mu.RUnlock()\n \t// Need write lock to remove expired entry\n \tshar"
+    },
+    {
+      "file": "pkg/kernel/kcache/sharded.go",
+      "line": 171,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Fuite de m\u00e9moire potentielle avec l'unsafe.Pointer**\n\nLa ligne 170 stocke l'adresse de la variable locale `key` qui peut \u00eatre r\u00e9allou\u00e9e ou garbage collect\u00e9e apr\u00e8s le retour de la fonction. Cela peut causer des comportements ind\u00e9finis lors de la reconstruction de la cl\u00e9 \u00e0 la ligne 183.\n\n\n\nAppliquez ce correctif pour stocker une copie de la cl\u00e9 au lieu d'un pointeur:\n\n```diff\n-\tkeyPtr := unsafe.Pointer(&key)\n-\tentry.key = keyPtr\n+\t// Store a copy of the key to avoid danglin"
+    },
+    {
+      "file": "pkg/lib/pointer/BUILD.bazel",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**importpath incorrect (orthographe de l\u2019org).**\n\nLe chemin d\u2019import doit utiliser `kitsunium`.\n\nCorrectif:\n\n```diff\n-    importpath = \"github.com/kistunium/sdk/pkg/lib/pointer\",\n+    importpath = \"github.com/kitsunium/sdk/pkg/lib/pointer\",\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, "
+    },
+    {
+      "file": "pkg/lib/pointer/pointer.go",
+      "line": 15,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Supprimer `//go:inline` sur String**\n\nM\u00eame probl\u00e8me de directive invalide/mal plac\u00e9e. Garder l\u2019annotation de d\u00e9pr\u00e9ciation, retirer la directive.\n\n\nAppliquez ce diff:\n\n```diff\n // String returns a pointer to the given string value.\n // Deprecated: Use Convert[string](v) instead.\n-//\n-//go:inline\n+//\n func String(v string) *string {\n   return &v\n }\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review th"
+    },
+    {
+      "file": "pkg/lib/value/BUILD.bazel",
+      "line": 0,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**importpath mal orthographi\u00e9 (kitsunium vs kistunium) \u2014 casse les imports Go**\n\nM\u00eame probl\u00e8me que dans d\u2019autres BUILD: la racine du module semble \u00eatre github.com/kitsunium/sdk.\n\n\n\nCorrectif:\n\n```diff\n-    importpath = \"github.com/kistunium/sdk/pkg/lib/value\",\n+    importpath = \"github.com/kitsunium/sdk/pkg/lib/value\",\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd Committable suggestion</summary>\n\n> \u203c\ufe0f **IMPORTANT**\n> Carefully review the code before committing. Ensu"
+    },
+    {
+      "file": "pkg/lib/value/value.go",
+      "line": 14,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Retirer `//go:inline` et nuancer le commentaire de perf**\n\nM\u00eame remarque: `//go:inline` n\u2019est pas support\u00e9e et provoque une erreur; il y a de plus une ligne vide entre directive et fonction. C\u00f4t\u00e9 doc, \u201cbetter performance\u201d est discutable; le b\u00e9n\u00e9fice principal est la simplicit\u00e9 et la r\u00e9duction de l\u2019API.\n\n\n\nAppliquez ce diff:\n\n```diff\n-// Convert returns the value of a pointer or the zero value if nil.\n-// This generic function replaces all type-specific functions for bette"
+    },
+    {
+      "file": "pkg/lib/value/value.go",
+      "line": 25,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Retirer `//go:inline` et proposer une variante \u201clazy default\u201d**\n\nSupprimer la directive invalide. En compl\u00e9ment optionnel, une variante \u201clazy\u201d \u00e9vite de construire un `defaultValue` co\u00fbteux quand `ptr` n\u2019est pas nil (utile si `defaultValue` implique allocation/calcul).\n\n\n\nAppliquez ce diff minimal pour enlever la directive:\n\n```diff\n-// ConvertOr returns the value of a pointer or a default value if nil.\n-// Useful when you need a specific default value instead of zero valu"
+    },
+    {
+      "file": "pkg/lib/value/value.go",
+      "line": 31,
+      "title": "_ Potential issue_",
+      "description": "_\u26a0\ufe0f Potential issue_\n\n**Retirer `//go:inline` sur String (directive invalide)**\n\nConservez l\u2019annotation de d\u00e9pr\u00e9ciation et supprimez la directive.\n\n\nAppliquez ce diff:\n\n```diff\n // String dereferences the given *string pointer.\n // If the pointer is nil, it returns an empty string.\n // Deprecated: Use Convert[string](ptr) instead.\n-//\n-//go:inline\n+//\n func String(ptr *string) string {\n   if ptr == nil {\n     return \"\"\n   }\n   return *ptr\n }\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>\ud83d\udcdd C"
+    }
+  ],
+  "suggestions": [
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 0,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Chemin d\u2019artifact de couverture \u00e0 harmoniser avec l\u2019\u00e9tape \u201cAnalyze\u201d**\n\nVous uploadez `bazel-out/_coverage/_coverage_report.dat`, mais l\u2019\u00e9tape d\u2019analyse recherche `_coverage_report.dat` \u00e0 la racine. Cette divergence casse la d\u00e9tection de la couverture plus loin.\n\nVoir la proposition de correctif dans l\u2019\u00e9tape \u201cConvert LCOV to Go coverage format\u201d (lignes 151-160) pour g\u00e9rer le chemin correct.\n\n<details>\n<summary>\ud83e\udd16 Prompt for AI Agents</summary>\n\n```\nIn .github/workflows/"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 41,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**curl | sh pour golangci-lint: risque supply-chain \u2014 utiliser l\u2019action officielle**\n\nInstaller via pipe sans v\u00e9rification de checksum est une surface d\u2019attaque \u00e9vitable. Remplacez par l\u2019action d\u00e9di\u00e9e, d\u00e9j\u00e0 pin-able et qui g\u00e8re le cache.  \n\n\n```diff\n-      - name: Install golangci-lint\n-        run: |\n-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.62.2\n```\n\nSnippet \u00e0 ins\u00e9rer (et \u00e0 ad"
+    },
+    {
+      "file": "BUILD.bazel",
+      "line": 0,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\u2753 Verification inconclusive</summary>\n\n**Gazelle update-repos: valider la coh\u00e9rence avec bzlmod**\n\nAvec bzlmod activ\u00e9, l\u2019usage d\u2019un macro deps.bzl%go_dependencies est parfois redondant si vous utilisez d\u00e9j\u00e0 l\u2019extension go_deps dans MODULE.bazel. Assurez-vous que ce macro est r\u00e9ellement consomm\u00e9 (load depuis deps.bzl) ou envisagez de cibler MODULE.bazel directement selon votre strat\u00e9gie.\n\n\nPour v\u00e9rifier si deps.bzl est pr\u00e9sent/charg\u00e9 quelque part :\n\n\n\nSi"
+    },
+    {
+      "file": "BUILD.bazel",
+      "line": 1,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**V\u00e9rifier la d\u00e9claration du repo externe @gazelle via MODULE.bazel**\n\nload(\"@gazelle//:def.bzl\", \"gazelle\") suppose que @gazelle est correctement produit par bzlmod (use_extension/use_repo depuis @bazel_gazelle). Merci de valider la pr\u00e9sence de ces d\u00e9clarations.\n\nEx\u00e9cutez:\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nset -euo pipefail\n\necho \"== Recherche de l\u2019extension bazel_gazelle ==\"\nrg -nP -C2 'use_extension\\(\"@bazel_g"
+    },
+    {
+      "file": "go.mod",
+      "line": 19,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**Upgrade `golang.org/x/sys` \u2192 v0.35.0: OK, mais valider l\u2019alignement avec Bazel/Gazelle et l\u2019absence d\u2019overrides.**\n\nLa r\u00e9solution des deps via l\u2019extension Gazelle (go_deps) devrait reprendre cette version depuis go.mod. V\u00e9rifiez qu\u2019aucun override/pin contradictoire n\u2019existe dans MODULE.bazel (ou macros associ\u00e9es) et que la CI/Bazel utilisent bien le m\u00eame toolchain Go.\n\n\nEx\u00e9cutez ce script pour contr\u00f4ler la coh\u00e9rence:\n\n\nAtte"
+    },
+    {
+      "file": "pkg/BUILD.bazel",
+      "line": 0,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**V\u00e9rifier l\u2019utilit\u00e9 de package_group(\"//pkg:subpackages\")**\n\nUn package_group est utile pour les r\u00e8gles de visibilit\u00e9. S\u2019il n\u2019est jamais r\u00e9f\u00e9renc\u00e9, on peut l\u2019omettre pour r\u00e9duire le bruit.\n\n\nPour v\u00e9rifier s\u2019il est utilis\u00e9 quelque part (p. ex. dans des attributs visibility/default_visibility), ex\u00e9cutez :\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\n# Recherche des r\u00e9f\u00e9rences \u00e0 //pkg:subpackages dans les BUILD\nfd -a 'BUILD.b"
+    },
+    {
+      "file": "pkg/core/BUILD.bazel",
+      "line": 0,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\u2753 Verification inconclusive</summary>\n\n**Confirmer l\u2019usage de package_group(\"//pkg/core:core\")**\n\nComme pour les autres groups, v\u00e9rifiez qu\u2019il est utilis\u00e9 en visibility. Sinon, supprimez-le pour all\u00e9ger la config.\n\n\nScript de v\u00e9rification :\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nfd -a 'BUILD.bazel' | xargs rg -n -C2 '//pkg/core:core'\n```\n\nLength of output: 53\n\n---\n\nJe vais rechercher dans l\u2019ensemble du d\u00e9p\u00f4t toute occurrence de l\u2019\u00e9tiquette `//pk"
+    },
+    {
+      "file": "pkg/core/config/parser/BUILD.bazel",
+      "line": 23,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**V\u00e9rifier que les labels externes TOML/YAML existent sous ces noms**\n\nSelon la configuration bzlmod, les noms des repositories peuvent diff\u00e9rer. Assurez-vous que ces labels r\u00e9solvent correctement.\n\n\n\n\n\nAlso applies to: 33-37\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nset -euo pipefail\n\n# Afficher le graphe des modules et valider la pr\u00e9sence des modules TOML/YAML\nbazel mod graph | rg -n 'github.com/pelletier/go-toml/v2|go"
+    },
+    {
+      "file": "pkg/kernel/BUILD.bazel",
+      "line": 0,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\u2753 Verification inconclusive</summary>\n\n**Confirmer l\u2019usage de package_group(\"//pkg/kernel:kernel\")**\n\nM\u00eame remarque que pour //pkg:subpackages : si le group n\u2019est pas r\u00e9f\u00e9renc\u00e9 par visibility, il peut \u00eatre supprim\u00e9.\n\n\nScript pour v\u00e9rifier les r\u00e9f\u00e9rences :\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\nfd -a 'BUILD.bazel' | xargs rg -n -C2 '//pkg/kernel:kernel'\n```\n\nLength of output: 57\n\n---\n\n\ud83c\udfc1 Script executed:\n\n```shell\n#!/bin/bash\n# Recherche de toute "
+    },
+    {
+      "file": "pkg/kernel/fs/BUILD.bazel",
+      "line": 0,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**D\u00e9pendance sur golang.org/x/sys/unix et portabilit\u00e9 OS**\n\nLa d\u00e9pendance vers @org_golang_x_sys//unix est sp\u00e9cifique aux plateformes type Unix. V\u00e9rifiez que:\n- les fichiers Go qui l\u2019utilisent portent des contraintes (go:build) ou suffixes (_unix/_linux/_darwin), ou\n- si Windows est support\u00e9, qu\u2019il existe des alternatives sp\u00e9cifiques.\n\n\nPour balayer rapidement les constraints/suffixes dans pkg/kernel/fs:\n\n---\n\n\ud83c\udfc1 Script execut"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/README.md",
+      "line": 0,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Corriger mentions techniques discutables: `//go:inline`, \u201clock\u2011free\u201d**\n\n- `//go:inline` n\u2019est pas une directive officielle document\u00e9e; \u00e0 la rigueur, on rencontre `//go:noinline`. \n- `sync.Map` n\u2019est pas \u201clock\u2011free\u201d; c\u2019est une structure optimis\u00e9e pour lectures concurrentes avec synchronisation interne.\n\n\n\nProposition de diff:\n\n```diff\n- - **`//go:inline`** directives on hot path methods\n- - **`clear()` builtin** for efficient slice zeroing\n- - **`min()` builtin** for c"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/README.md",
+      "line": 0,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Mettre en avant Bazel/Task (alignement avec le PR Bazel)**\n\nLa section \u201cTesting\u201d ne mentionne que `go test`, alors que ce PR introduit Bazel comme syst\u00e8me principal. Ajoutez les commandes Bazel/Task afin d\u2019\u00e9viter la confusion.\n\n\n\nProposition de diff:\n\n```diff\n ## Testing\n-\n-```bash\n-# Run tests\n-go test ./pkg/kernel/kbuffer/...\n-\n-# Check coverage (96.4%)\n-go test -cover ./pkg/kernel/kbuffer/...\n-\n-# Generate coverage report\n-go test -coverprofile=coverage.out ./pkg/k"
+    },
+    {
+      "file": "pkg/kernel/kbuffer/pool_test.go",
+      "line": 245,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Test \u201cSetClearOnPut\u201d passe m\u00eame si la fonctionnalit\u00e9 est cass\u00e9e**\n\nActuellement, le test n\u2019\u00e9choue jamais: si `buf2[0] != 0xFF`, aucune assertion n\u2019est ex\u00e9cut\u00e9e. Il faut rendre l\u2019assertion d\u00e9terministe (pr\u00e9\u2011warming + r\u00e9utilisation) ou supprimer ce test.\n\n\n\nProposition de diff plus robuste (pr\u00e9-chauffer, puis v\u00e9rifier la non\u2011remise \u00e0 z\u00e9ro):\n\n```diff\n t.Run(\"SetClearOnPut\", func(t *testing.T) {\n     pool := NewBufferPool()\n     pool.SetClearOnPut(false)\n-    \n-    // Get"
+    },
+    {
+      "file": "pkg/kernel/kcache/README.md",
+      "line": 133,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Incoh\u00e9rence interface/texte: `Stats()` manquant**\n\nPlus bas, les exemples appellent `Stats()`, mais l\u2019interface commune ne l\u2019expose pas. Ajoutez-le pour aligner docs et contrat.\n\n```diff\n type Cache[K comparable, V any] interface {\n     Get(key K) (V, bool)\n     Set(key K, value V)\n     SetWithTTL(key K, value V, ttl time.Duration)\n     Delete(key K)\n     Clear()\n     Size() int\n     Has(key K) bool\n+    Stats() Stats\n }\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summ"
+    },
+    {
+      "file": "pkg/kernel/kcache/atomic.go",
+      "line": 219,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**\u00c9viction LRU inefficace avec complexit\u00e9 O(n)**\n\nLa fonction `evictLRU` parcourt toutes les entr\u00e9es pour trouver la plus ancienne, ce qui est inefficace pour de grandes caches.\n\n\n\nPour une vraie \u00e9viction LRU efficace, maintenez une liste doublement cha\u00een\u00e9e ordonn\u00e9e par temps d'acc\u00e8s ou utilisez une structure de donn\u00e9es plus appropri\u00e9e:\n\n```diff\n+// Maintain a sorted list of entries by access time\n+type orderedEntry[K comparable, V any] struct {\n+\tkey        K\n+\taccessT"
+    },
+    {
+      "file": "pkg/kernel/kcache/cache.go",
+      "line": 159,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**Chemin d\u2019expiration: entr\u00e9e non recycl\u00e9e dans le pool**\n\nLorsqu\u2019une entr\u00e9e a expir\u00e9, vous la supprimez de la liste et de la map, mais vous ne la remettez pas dans le pool. Cela augmente les allocations et contredit l\u2019objectif de la pool.\n\n\n```diff\n if e.expiration > 0 && time.Now().UnixNano() > e.expiration {\n   c.removeEntry(e)\n   delete(c.items, key)\n   c.size--\n   c.stats.Misses++\n-  var zero V\n-  return zero, false\n+  // Nettoyage et recyclage de l\u2019entr\u00e9e expir\u00e9e\n"
+    },
+    {
+      "file": "pkg/kernel/kcache/cache_test.go",
+      "line": 143,
+      "title": "_\ud83d\udee0 Refactor suggestion_",
+      "description": "_\ud83d\udee0\ufe0f Refactor suggestion_\n\n**D\u00e9flakage du test TTL: remplacer les Sleep par Eventually**\n\nSleep rend le test sensible \u00e0 la charge machine. Utiliser require.Eventually stabilise les attentes d\u2019expiration.\n\n\n```diff\n func TestLRU_TTL(t *testing.T) {\n   c := kcache.NewLRU[string, int](3)\n \n   c.SetWithTTL(\"a\", 1, 50*time.Millisecond)\n   c.SetWithTTL(\"b\", 2, 200*time.Millisecond)\n   c.Set(\"c\", 3)\n \n   val, ok := c.Get(\"a\")\n   assert.True(t, ok)\n   assert.Equal(t, 1, val)\n \n-  time.Sleep(100 * time.Mi"
+    },
+    {
+      "file": "pkg/kernel/kcache/sharded.go",
+      "line": 339,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**Hash fallback non fiable pour les types comparables**\n\nL'utilisation de l'adresse m\u00e9moire comme hash pour les types inconnus (ligne 338) n'est pas fiable car deux valeurs \u00e9gales peuvent avoir des adresses diff\u00e9rentes, violant le contrat d'une fonction de hash.\n\n\n\nPour une impl\u00e9mentation correcte, utilisez une interface de hash ou g\u00e9n\u00e9rez une erreur pour les types non support\u00e9s:\n\n```diff\n default:\n-\t// Fallback: use Go's bui"
+    },
+    {
+      "file": "pkg/lib/pointer/pointer.go",
+      "line": 9,
+      "title": "_\ud83d\udca1 Verification agent_",
+      "description": "_\ud83d\udca1 Verification agent_\n\n<details>\n<summary>\ud83e\udde9 Analysis chain</summary>\n\n**Retirer `//go:inline` (directive invalide) et ajuster la doc**\n\n`//go:inline` n\u2019est pas une directive reconnue par le compilateur Go (il existe par exemple `//go:noinline`, `//go:noescape`, etc.). Tel quel, cela casse la compilation (\u201cunknown directive\u201d). De plus, une directive ne doit pas \u00eatre s\u00e9par\u00e9e de la d\u00e9claration par une ligne vide. Je recommande de supprimer la directive et de reformuler le commentaire (la perf n\u2019es"
+    }
+  ]
+}
