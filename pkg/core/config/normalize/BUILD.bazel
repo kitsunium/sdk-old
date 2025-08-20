@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "normalize",
+    srcs = ["normalize.go"],
+    importpath = "github.com/kitsunium/sdk/pkg/core/config/normalize",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "normalize_test",
+    srcs = [
+        "normalize_test.go",
+        "benchmark_comparison_test.go",
+    ],
+    embed = [":normalize"],
+    deps = ["//pkg/kernel/config/normalize"],
+)
