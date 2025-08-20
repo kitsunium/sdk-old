@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/kitsunium/sdk/pkg/kernel/kcache"
@@ -31,7 +32,10 @@ type KError struct {
 }
 
 // Global variables are defined in registry.go to avoid duplication
-var errorCounter uint32
+var (
+	errorCounter uint32
+	defineMu     sync.Mutex // Mutex for atomic Define operations
+)
 
 // getCallerPackage returns the package name of the caller with caching.
 func getCallerPackage() string {
@@ -85,6 +89,10 @@ func Define(config KConfig) KError {
 		pkg = getCallerPackage()
 	}
 
+	// Lock for atomic operations on registry
+	defineMu.Lock()
+	defer defineMu.Unlock()
+
 	initCaches()
 	// Get or create package cache
 	var pkgCache kcache.Cache[int, *KError]
@@ -95,14 +103,20 @@ func Define(config KConfig) KError {
 		registryByPkgCode.Set(pkg, pkgCache)
 	}
 
-	// Generate ID first
-	id := atomic.AddUint32(&errorCounter, 1)
-
 	// Get message or generate default
 	message := config.Message
 	if message == "" {
 		message = fmt.Sprintf("error %d", config.Code)
 	}
+
+	// Check for duplicates BEFORE allocating a new ID
+	if existing, ok := pkgCache.Get(config.Code); ok {
+		panic(fmt.Sprintf("kerror: duplicate error code %d in package %s (already defined with ID %d)",
+			config.Code, pkg, existing.id))
+	}
+
+	// Generate ID after duplicate check (avoids gaps)
+	id := atomic.AddUint32(&errorCounter, 1)
 
 	err := &KError{
 		id:      id,
@@ -111,11 +125,6 @@ func Define(config KConfig) KError {
 		message: message,
 	}
 
-	// Check for duplicates and store atomically
-	if existing, ok := pkgCache.Get(config.Code); ok {
-		panic(fmt.Sprintf("kerror: duplicate error code %d in package %s (already defined with ID %d)",
-			config.Code, pkg, existing.id))
-	}
 	pkgCache.Set(config.Code, err)
 
 	// Store in optimized registry

@@ -210,6 +210,10 @@ func (b *Buffer) RemainingSlice() []byte {
 // Extend extends the current position without writing.
 //go:inline
 func (b *Buffer) Extend(n int) error {
+	// Reject negative extensions to prevent underflow
+	if n < 0 {
+		return ErrBufferOverflow
+	}
 	newPos := b.pos + n
 	if newPos > b.c {
 		return ErrBufferOverflow
