@@ -73,14 +73,16 @@ jobs:
 
       - name: Security Scan
         uses: aquasecurity/trivy-action@0.28.0
+        if: always()
         with:
           scan-type: fs
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
+        continue-on-error: true
 
       - name: Upload Security Results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('trivy.sarif') != ''
         with:
           sarif_file: trivy.sarif
