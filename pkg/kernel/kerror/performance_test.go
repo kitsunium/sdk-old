@@ -11,7 +11,7 @@ func BenchmarkGetError(b *testing.B) {
 	// Setup: Register many errors
 	ClearRegistry()
 	defer ClearRegistry()
-	
+
 	var errors []KError
 	for i := 0; i < 1000; i++ {
 		err := Define(KConfig{
@@ -21,7 +21,7 @@ func BenchmarkGetError(b *testing.B) {
 		})
 		errors = append(errors, err)
 	}
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
@@ -36,7 +36,7 @@ func BenchmarkGetErrorByPackageCode(b *testing.B) {
 	// Setup: Register many errors
 	ClearRegistry()
 	defer ClearRegistry()
-	
+
 	for i := 0; i < 100; i++ {
 		for j := 0; j < 10; j++ {
 			Define(KConfig{
@@ -46,7 +46,7 @@ func BenchmarkGetErrorByPackageCode(b *testing.B) {
 			})
 		}
 	}
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
@@ -73,7 +73,7 @@ func BenchmarkValidatePackageCode(b *testing.B) {
 	// Setup: Register some errors
 	ClearRegistry()
 	defer ClearRegistry()
-	
+
 	for i := 0; i < 100; i++ {
 		Define(KConfig{
 			Code:    i,
@@ -81,7 +81,7 @@ func BenchmarkValidatePackageCode(b *testing.B) {
 			Package: "benchmark",
 		})
 	}
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
@@ -101,7 +101,7 @@ func BenchmarkGetCallerPackage(b *testing.B) {
 	// Clear cache to measure caching performance
 	ClearRegistry()
 	defer ClearRegistry()
-	
+
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			getCallerPackage()
@@ -113,7 +113,7 @@ func BenchmarkListErrors(b *testing.B) {
 	// Setup: Register many errors
 	ClearRegistry()
 	defer ClearRegistry()
-	
+
 	for i := 0; i < 1000; i++ {
 		Define(KConfig{
 			Code:    i,
@@ -121,7 +121,7 @@ func BenchmarkListErrors(b *testing.B) {
 			Package: fmt.Sprintf("pkg%d", i%10),
 		})
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ListErrors()
@@ -132,7 +132,7 @@ func BenchmarkListPackages(b *testing.B) {
 	// Setup: Register errors in many packages
 	ClearRegistry()
 	defer ClearRegistry()
-	
+
 	for i := 0; i < 100; i++ {
 		Define(KConfig{
 			Code:    1,
@@ -140,7 +140,7 @@ func BenchmarkListPackages(b *testing.B) {
 			Package: fmt.Sprintf("pkg%d", i),
 		})
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ListPackages()
@@ -151,7 +151,7 @@ func BenchmarkConcurrentRegistry(b *testing.B) {
 	// Benchmark concurrent access to registry
 	ClearRegistry()
 	defer ClearRegistry()
-	
+
 	// Pre-populate
 	for i := 0; i < 100; i++ {
 		Define(KConfig{
@@ -160,7 +160,7 @@ func BenchmarkConcurrentRegistry(b *testing.B) {
 			Package: "concurrent",
 		})
 	}
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0

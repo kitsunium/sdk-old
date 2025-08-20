@@ -13,7 +13,10 @@ go_library(
 go_test(
     name = "config_test",
     size = "small",
-    srcs = ["config_test.go"],
+    srcs = [
+        "config_cache_test.go",
+        "config_test.go",
+    ],
     deps = [
         ":config",
         "//pkg/kernel/config/parser",

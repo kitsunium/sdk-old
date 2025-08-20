@@ -56,27 +56,27 @@ func NewShardedLRU[K comparable, V any](capacity int, numShards int) *ShardedLRU
 	if numShards > MaxShards {
 		numShards = MaxShards
 	}
-	
+
 	// Round up to power of 2 for fast modulo
 	numShards = nextPowerOf2(numShards)
-	
+
 	perShardCapacity := capacity / numShards
 	if perShardCapacity < 1 {
 		perShardCapacity = 1
 	}
-	
+
 	c := &ShardedLRU[K, V]{
 		shards:    make([]*shard[K, V], numShards),
 		shardMask: uint32(numShards - 1),
 		hashFn:    hashKey[K],
 	}
-	
+
 	for i := 0; i < numShards; i++ {
 		c.shards[i] = &shard[K, V]{
 			cache: newFastLRU[K, V](perShardCapacity),
 		}
 	}
-	
+
 	return c
 }
 
@@ -85,23 +85,23 @@ func newFastLRU[K comparable, V any](capacity int) *FastLRU[K, V] {
 		capacity: capacity,
 		items:    make(map[K]*fastEntry[V], capacity),
 	}
-	
+
 	// Initialize sentinel nodes
 	lru.head = &fastEntry[V]{}
 	lru.tail = &fastEntry[V]{}
 	lru.head.next = lru.tail
 	lru.tail.prev = lru.head
-	
+
 	stats := &Stats{}
 	lru.stats.Store(stats)
-	
+
 	return lru
 }
 
 // Get retrieves a value from the sharded cache.
 func (c *ShardedLRU[K, V]) Get(key K) (V, bool) {
 	shard := c.getShard(key)
-	
+
 	// Try read lock first for better performance
 	shard.mu.RLock()
 	entry, exists := shard.cache.items[key]
@@ -111,7 +111,7 @@ func (c *ShardedLRU[K, V]) Get(key K) (V, bool) {
 		var zero V
 		return zero, false
 	}
-	
+
 	// Check expiration without upgrading lock
 	if entry.expiration > 0 && time.Now().UnixNano() > entry.expiration {
 		shard.mu.RUnlock()
@@ -124,15 +124,15 @@ func (c *ShardedLRU[K, V]) Get(key K) (V, bool) {
 		var zero V
 		return zero, false
 	}
-	
+
 	value := entry.value
 	shard.mu.RUnlock()
-	
+
 	// Move to front with write lock
 	shard.mu.Lock()
 	shard.cache.moveToFront(entry)
 	shard.mu.Unlock()
-	
+
 	c.incrementHits(shard)
 	return value, true
 }
@@ -147,37 +147,37 @@ func (c *ShardedLRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 	shard := c.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	
+
 	c.incrementSets(shard)
-	
+
 	var expiration int64
 	if ttl > 0 {
 		expiration = time.Now().Add(ttl).UnixNano()
 	}
-	
+
 	if entry, exists := shard.cache.items[key]; exists {
 		entry.value = value
 		entry.expiration = expiration
 		shard.cache.moveToFront(entry)
 		return
 	}
-	
+
 	entry := &fastEntry[V]{
 		value:      value,
 		expiration: expiration,
 	}
-	
+
 	keyPtr := unsafe.Pointer(&key)
 	entry.key = keyPtr
-	
+
 	shard.cache.items[key] = entry
 	shard.cache.addToFront(entry)
-	
+
 	if len(shard.cache.items) > shard.cache.capacity {
 		oldest := shard.cache.tail.prev
 		if oldest != nil && oldest != shard.cache.head {
 			shard.cache.removeEntry(oldest)
-			
+
 			// Reconstruct key from unsafe pointer
 			if oldest.key != nil {
 				oldKey := *(*K)(oldest.key)
@@ -193,7 +193,7 @@ func (c *ShardedLRU[K, V]) Delete(key K) {
 	shard := c.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	
+
 	if entry, exists := shard.cache.items[key]; exists {
 		shard.cache.removeEntry(entry)
 		delete(shard.cache.items, key)
@@ -227,16 +227,16 @@ func (c *ShardedLRU[K, V]) Has(key K) bool {
 	shard := c.getShard(key)
 	shard.mu.RLock()
 	defer shard.mu.RUnlock()
-	
+
 	entry, exists := shard.cache.items[key]
 	if !exists {
 		return false
 	}
-	
+
 	if entry.expiration > 0 && time.Now().UnixNano() > entry.expiration {
 		return false
 	}
-	
+
 	return true
 }
 

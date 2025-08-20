@@ -9,10 +9,6 @@ go_library(
 
 go_test(
     name = "normalize_test",
-    srcs = [
-        "normalize_test.go",
-        "benchmark_comparison_test.go",
-    ],
+    srcs = ["normalize_test.go"],
     embed = [":normalize"],
-    deps = ["//pkg/kernel/config/normalize"],
 )

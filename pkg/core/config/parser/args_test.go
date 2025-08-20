@@ -17,15 +17,15 @@ func TestARGS_Load_SkipFirst(t *testing.T) {
 	// Save and restore os.Args
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
-	
+
 	os.Args = []string{"program", "--key=value", "--flag"}
-	
+
 	args := NewARGS(true)
 	result, err := args.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	
+
 	// Should skip "program" and parse the rest
 	if result["key"] != "value" {
 		t.Errorf("key = %q, want %q", result["key"], "value")
@@ -39,15 +39,15 @@ func TestARGS_Load_NoSkip(t *testing.T) {
 	// Save and restore os.Args
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
-	
+
 	os.Args = []string{"--first=value", "--second", "value2"}
-	
+
 	args := NewARGS(false)
 	result, err := args.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	
+
 	if result["first"] != "value" {
 		t.Errorf("first = %q, want %q", result["first"], "value")
 	}
@@ -60,20 +60,20 @@ func TestARGS_Load_EmptyArgs(t *testing.T) {
 	// Save and restore os.Args
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
-	
+
 	// Test with program name only
 	os.Args = []string{"program"}
-	
+
 	args := NewARGS(true)
 	result, err := args.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	
+
 	if len(result) != 0 {
 		t.Errorf("Expected empty result, got %d items", len(result))
 	}
-	
+
 	// Test with empty Args
 	os.Args = []string{}
 	args2 := NewARGS(false)
@@ -81,7 +81,7 @@ func TestARGS_Load_EmptyArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	
+
 	if len(result2) != 0 {
 		t.Errorf("Expected empty result, got %d items", len(result2))
 	}
@@ -138,7 +138,7 @@ func TestARGS_ParseArgs_Basic(t *testing.T) {
 			},
 		},
 	}
-	
+
 	parser := NewARGS(false)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -146,11 +146,11 @@ func TestARGS_ParseArgs_Basic(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseArgs() error = %v", err)
 			}
-			
+
 			if len(result) != len(tc.expected) {
 				t.Errorf("Result has %d items, want %d", len(result), len(tc.expected))
 			}
-			
+
 			for key, expectedValue := range tc.expected {
 				if value, ok := result[key]; !ok || value != expectedValue {
 					t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -168,13 +168,13 @@ func TestARGS_ParseArgs_Normalization(t *testing.T) {
 		"--Mixed_Case", "  trimmed  ",
 		"--quoted=\"quoted value\"",
 	}
-	
+
 	parser := NewARGS(false)
 	result, err := parser.ParseArgs(args)
 	if err != nil {
 		t.Fatalf("ParseArgs() error = %v", err)
 	}
-	
+
 	// Check key normalization
 	if result["database.url"] != "postgres://localhost" {
 		t.Errorf("database.url = %q, want %q", result["database.url"], "postgres://localhost")
@@ -185,7 +185,7 @@ func TestARGS_ParseArgs_Normalization(t *testing.T) {
 	if result["upper.case.key"] != "value" {
 		t.Errorf("upper.case.key = %q, want %q", result["upper.case.key"], "value")
 	}
-	
+
 	// Check value normalization
 	if result["mixed.case"] != "trimmed" {
 		t.Errorf("mixed.case = %q, want %q", result["mixed.case"], "trimmed")
@@ -197,7 +197,7 @@ func TestARGS_ParseArgs_Normalization(t *testing.T) {
 
 func TestARGS_ParseArgs_EdgeCases(t *testing.T) {
 	parser := NewARGS(false)
-	
+
 	// Empty args
 	result, err := parser.ParseArgs([]string{})
 	if err != nil {
@@ -206,7 +206,7 @@ func TestARGS_ParseArgs_EdgeCases(t *testing.T) {
 	if len(result) != 0 {
 		t.Errorf("Expected empty result for empty args")
 	}
-	
+
 	// Args with empty strings
 	result, err = parser.ParseArgs([]string{"", "--key=value", ""})
 	if err != nil {
@@ -215,7 +215,7 @@ func TestARGS_ParseArgs_EdgeCases(t *testing.T) {
 	if result["key"] != "value" {
 		t.Errorf("key = %q, want %q", result["key"], "value")
 	}
-	
+
 	// Non-flag args (should be skipped)
 	result, err = parser.ParseArgs([]string{"not-a-flag", "another", "--real-flag=yes"})
 	if err != nil {
@@ -224,7 +224,7 @@ func TestARGS_ParseArgs_EdgeCases(t *testing.T) {
 	if len(result) != 1 || result["real-flag"] != "yes" {
 		t.Errorf("Should only parse real flags")
 	}
-	
+
 	// Empty flag (just dashes)
 	result, err = parser.ParseArgs([]string{"--", "---", "--real=value"})
 	if err != nil {
@@ -233,7 +233,7 @@ func TestARGS_ParseArgs_EdgeCases(t *testing.T) {
 	if result["real"] != "value" {
 		t.Errorf("real = %q, want %q", result["real"], "value")
 	}
-	
+
 	// Flag with empty value
 	result, err = parser.ParseArgs([]string{"--key=", "--another="})
 	if err != nil {
@@ -249,7 +249,7 @@ func TestARGS_ParseArgs_EdgeCases(t *testing.T) {
 
 func TestARGS_ParseArgs_ComplexScenarios(t *testing.T) {
 	parser := NewARGS(false)
-	
+
 	// Complex real-world scenario
 	args := []string{
 		"--config-file=/etc/app/config.yaml",
@@ -262,12 +262,12 @@ func TestARGS_ParseArgs_ComplexScenarios(t *testing.T) {
 		"--ssl", "non-flag-value", // This will be taken as value for --ssl
 		"--database-url=postgres://user:pass@localhost:5432/db?sslmode=disable",
 	}
-	
+
 	result, err := parser.ParseArgs(args)
 	if err != nil {
 		t.Fatalf("ParseArgs() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
 		"config-file":       "/etc/app/config.yaml",
 		"log-level":         "debug",
@@ -279,7 +279,7 @@ func TestARGS_ParseArgs_ComplexScenarios(t *testing.T) {
 		"ssl":               "non-flag-value",
 		"database-url":      "postgres://user:pass@localhost:5432/db?sslmode=disable",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -289,14 +289,14 @@ func TestARGS_ParseArgs_ComplexScenarios(t *testing.T) {
 
 func TestARGS_ParseArgsStrict(t *testing.T) {
 	parser := NewARGS(false)
-	
+
 	// Valid strict args
 	validArgs := []string{"--key=value", "-f", "file.txt", "--verbose"}
 	result, err := parser.ParseArgsStrict(validArgs)
 	if err != nil {
 		t.Fatalf("ParseArgsStrict() with valid args error = %v", err)
 	}
-	
+
 	if result["key"] != "value" {
 		t.Errorf("key = %q, want %q", result["key"], "value")
 	}
@@ -306,7 +306,7 @@ func TestARGS_ParseArgsStrict(t *testing.T) {
 	if result["verbose"] != "true" {
 		t.Errorf("verbose = %q, want %q", result["verbose"], "true")
 	}
-	
+
 	// Invalid strict args (non-flag argument)
 	invalidArgs := []string{"not-a-flag", "--valid-flag"}
 	_, err = parser.ParseArgsStrict(invalidArgs)
@@ -320,7 +320,7 @@ func TestARGS_ParseArgsStrict(t *testing.T) {
 
 func TestARGS_ParseArgsStrict_EdgeCases(t *testing.T) {
 	parser := NewARGS(false)
-	
+
 	// Empty args
 	result, err := parser.ParseArgsStrict([]string{})
 	if err != nil {
@@ -329,7 +329,7 @@ func TestARGS_ParseArgsStrict_EdgeCases(t *testing.T) {
 	if len(result) != 0 {
 		t.Errorf("Expected empty result for empty args")
 	}
-	
+
 	// Args with empty strings (should be skipped)
 	result, err = parser.ParseArgsStrict([]string{"", "--key=value", ""})
 	if err != nil {
@@ -338,7 +338,7 @@ func TestARGS_ParseArgsStrict_EdgeCases(t *testing.T) {
 	if result["key"] != "value" {
 		t.Errorf("key = %q, want %q", result["key"], "value")
 	}
-	
+
 	// Just dashes (should handle gracefully)
 	result, err = parser.ParseArgsStrict([]string{"--", "--key=value"})
 	if err != nil {
@@ -347,7 +347,7 @@ func TestARGS_ParseArgsStrict_EdgeCases(t *testing.T) {
 	if result["key"] != "value" {
 		t.Errorf("key = %q, want %q", result["key"], "value")
 	}
-	
+
 	// Flag at end without value
 	result, err = parser.ParseArgsStrict([]string{"--flag1", "--flag2"})
 	if err != nil {
@@ -372,11 +372,11 @@ func BenchmarkARGS_ParseArgs(b *testing.B) {
 		"-v",
 		"--enable-feature",
 	}
-	
+
 	parser := NewARGS(false)
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = parser.ParseArgs(args)
 	}
@@ -393,11 +393,11 @@ func BenchmarkARGS_ParseArgsStrict(b *testing.B) {
 		"-v",
 		"--enable-feature",
 	}
-	
+
 	parser := NewARGS(false)
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = parser.ParseArgsStrict(args)
 	}

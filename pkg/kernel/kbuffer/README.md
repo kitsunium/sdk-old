@@ -84,7 +84,8 @@ buf.Reset(newSlice)
 
 ## BufferPool
 
-A pool that manages buffers of various sizes, automatically rounding to powers of 2 for pooling.
+A pool that manages buffers of various sizes, automatically rounding to powers
+of 2 for pooling.
 
 ### Basic Usage
 
@@ -166,12 +167,12 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
     // Get buffer from pool
     buf := kbuffer.Get(4096)
     defer kbuffer.Put(buf)
-    
+
     // Build response in buffer
     n := copy(buf, []byte("HTTP/1.1 200 OK\r\n"))
     n += copy(buf[n:], []byte("Content-Type: text/plain\r\n\r\n"))
     n += copy(buf[n:], []byte("Hello, World!"))
-    
+
     // Write response
     w.Write(buf[:n])
 }
@@ -184,7 +185,7 @@ func processData(input []byte) ([]byte, error) {
     // Get buffer sized for input
     buf := kbuffer.GetBuffer(len(input) * 2)
     defer kbuffer.PutBuffer(buf)
-    
+
     // Process data
     for i, b := range input {
         if err := buf.WriteByte(b ^ 0xFF); err != nil {
@@ -194,7 +195,7 @@ func processData(input []byte) ([]byte, error) {
             buf.WriteByte(',')
         }
     }
-    
+
     // Return copy of processed data
     result := make([]byte, buf.Len())
     copy(result, buf.Bytes())
@@ -205,7 +206,8 @@ func processData(input []byte) ([]byte, error) {
 ## Thread Safety
 
 - **BufferPool**: All operations are thread-safe
-- **Buffer**: Individual Buffer instances are NOT thread-safe. Use one Buffer per goroutine or synchronize access
+- **Buffer**: Individual Buffer instances are NOT thread-safe. Use one Buffer
+  per goroutine or synchronize access
 
 ## Best Practices
 

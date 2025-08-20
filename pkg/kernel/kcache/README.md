@@ -1,6 +1,7 @@
 # KCache Package
 
-Thread-safe caching library for Go with multiple implementations for different use cases.
+Thread-safe caching library for Go with multiple implementations for different
+use cases.
 
 ## Installation
 
@@ -38,11 +39,12 @@ cache.SetWithTTL("session", userData, 30*time.Minute)
 
 // Check statistics
 stats := cache.Stats()
-fmt.Printf("Hit rate: %.2f%%\n", 
+fmt.Printf("Hit rate: %.2f%%\n",
     float64(stats.Hits) / float64(stats.Hits + stats.Misses) * 100)
 ```
 
 **Best for:**
+
 - General-purpose caching
 - Single-threaded or low-concurrency scenarios
 - When memory efficiency is critical
@@ -50,7 +52,8 @@ fmt.Printf("Hit rate: %.2f%%\n",
 
 ### 2. Sharded LRU Cache
 
-Cache that reduces lock contention by dividing the cache into independent shards.
+Cache that reduces lock contention by dividing the cache into independent
+shards.
 
 ```go
 // Create a sharded cache with 10000 capacity and 256 shards
@@ -67,12 +70,14 @@ for i := 0; i < 1000; i++ {
 ```
 
 **Best for:**
+
 - High-concurrency applications
 - Multi-core systems
 - Balanced read/write workloads
 - When you need predictable performance under load
 
 **Characteristics:**
+
 - Reduced lock contention compared to standard LRU
 - Scalability with multiple CPU cores
 - Distributed key storage across shards
@@ -106,12 +111,14 @@ results := cache.BatchGet([]string{"key1", "key2", "key3"})
 ```
 
 **Best for:**
+
 - Read-heavy workloads (90%+ reads)
 - Small to medium cache sizes
 - When you need low read latency
 - Scenarios where writes are infrequent
 
 **Features:**
+
 - Lock-free reads
 - Batch operations
 - FastGet for pointer access
@@ -168,6 +175,7 @@ stats := cache.Stats()
 ## Configuration Examples
 
 ### Web Session Cache
+
 ```go
 // High concurrency, medium size, with TTL
 sessionCache := cache.NewShardedLRU[string, *Session](10000, 256)
@@ -175,6 +183,7 @@ sessionCache.SetWithTTL(sessionID, session, 20*time.Minute)
 ```
 
 ### Database Query Cache
+
 ```go
 // Read-heavy, frequently accessed queries
 queryCache := cache.NewAtomicCache[string, *QueryResult](1000)
@@ -182,6 +191,7 @@ queryCache.BatchSet(preloadedQueries)
 ```
 
 ### Application Config Cache
+
 ```go
 // Small, general purpose
 configCache := cache.NewLRU[string, any](100)
@@ -192,13 +202,13 @@ configCache.Set("database.host", "localhost")
 
 ### Choosing the Right Implementation
 
-| Scenario | Recommended | Capacity | Shards |
-|----------|-------------|----------|--------|
-| Single-threaded | LRU | As needed | N/A |
-| Web server (balanced) | ShardedLRU | 10K-100K | 256 |
-| Read-heavy API | AtomicCache | 1K-10K | N/A |
-| Microservice cache | ShardedLRU | 1K-10K | 64-128 |
-| In-memory DB index | AtomicCache | 100K+ | N/A |
+| Scenario              | Recommended | Capacity  | Shards |
+| --------------------- | ----------- | --------- | ------ |
+| Single-threaded       | LRU         | As needed | N/A    |
+| Web server (balanced) | ShardedLRU  | 10K-100K  | 256    |
+| Read-heavy API        | AtomicCache | 1K-10K    | N/A    |
+| Microservice cache    | ShardedLRU  | 1K-10K    | 64-128 |
+| In-memory DB index    | AtomicCache | 100K+     | N/A    |
 
 ### Shard Count Guidelines (ShardedLRU)
 

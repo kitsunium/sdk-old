@@ -2,8 +2,6 @@ package kbuffer
 
 import (
 	"testing"
-
-	
 )
 
 func TestBuffer(t *testing.T) {
@@ -73,22 +71,22 @@ func TestBuffer(t *testing.T) {
 	t.Run("Available", func(t *testing.T) {
 		bb := NewBuffer(128)
 		Equal(t, 128, bb.Available(), "expected full capacity available")
-		
+
 		_, _ = bb.WriteString("Hello")
 		Equal(t, 123, bb.Available(), "expected 123 bytes available")
-		
+
 		bb.Free()
 		Equal(t, 128, bb.Available(), "expected full capacity after Free")
 	})
 
 	t.Run("WriteByte", func(t *testing.T) {
 		bb := NewBuffer(128)
-		
+
 		err := bb.WriteByte('A')
 		NoError(t, err)
 		Equal(t, 1, bb.Len())
 		Equal(t, "A", bb.String())
-		
+
 		err = bb.WriteByte('B')
 		NoError(t, err)
 		Equal(t, 2, bb.Len())
@@ -97,10 +95,10 @@ func TestBuffer(t *testing.T) {
 
 	t.Run("WriteAt", func(t *testing.T) {
 		bb := NewBuffer(128)
-		
+
 		// Write initial data
 		_, _ = bb.WriteString("Hello     World")
-		
+
 		// Write at specific offset
 		n, err := bb.WriteAt([]byte("Go"), 6)
 		NoError(t, err)
@@ -110,14 +108,14 @@ func TestBuffer(t *testing.T) {
 
 	t.Run("Grow", func(t *testing.T) {
 		bb := NewBuffer(128)
-		
+
 		err := bb.Grow(128)
 		NoError(t, err)
-		
+
 		_, _ = bb.WriteString("Some data")
 		err = bb.Grow(100)
 		NoError(t, err)
-		
+
 		err = bb.Grow(200)
 		Error(t, err)
 		Equal(t, ErrBufferOverflow, err)
@@ -126,10 +124,10 @@ func TestBuffer(t *testing.T) {
 	t.Run("Reset", func(t *testing.T) {
 		bb := NewBuffer(128)
 		_, _ = bb.WriteString("Initial")
-		
+
 		newSlice := make([]byte, 256)
 		bb.Reset(newSlice)
-		
+
 		Equal(t, 0, bb.Len())
 		Equal(t, 256, bb.Cap())
 		Equal(t, 256, bb.Available())
@@ -160,7 +158,7 @@ func TestBuffer(t *testing.T) {
 		ok := bb.TryWrite([]byte("Hello"))
 		True(t, ok)
 		Equal(t, "Hello", bb.String())
-		
+
 		ok = bb.TryWrite([]byte("World!"))
 		False(t, ok)
 		Equal(t, "Hello", bb.String())
@@ -178,7 +176,7 @@ func TestBuffer(t *testing.T) {
 		err := bb.Extend(10)
 		NoError(t, err)
 		Equal(t, 10, bb.Len())
-		
+
 		err = bb.Extend(200)
 		Error(t, err)
 	})
@@ -189,7 +187,7 @@ func TestBuffer(t *testing.T) {
 		bb.Truncate(5)
 		Equal(t, 5, bb.Len())
 		Equal(t, "Hello", bb.String())
-		
+
 		bb.Truncate(100)
 		Equal(t, 5, bb.Len())
 	})

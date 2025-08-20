@@ -26,13 +26,13 @@ go_library(
 go_test(
     name = "parser_test",
     srcs = [
-        "benchmark_test.go",
-        "parser_test.go",
+        "args_test.go",
+        "env_test.go",
+        "ini_test.go",
+        "json_test.go",
+        "toml_test.go",
+        "xml_test.go",
+        "yaml_test.go",
     ],
     embed = [":parser"],
-    deps = [
-        "//pkg/core/config/normalize",
-        "@com_github_pelletier_go_toml_v2//:go-toml",
-        "@in_gopkg_yaml_v3//:yaml_v3",
-    ],
 )

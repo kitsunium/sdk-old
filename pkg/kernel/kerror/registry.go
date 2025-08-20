@@ -16,7 +16,7 @@ var (
 
 	// Cache for caller package names
 	callerPackageCache kcache.Cache[uintptr, string]
-	
+
 	// Initialize caches once
 	cacheInit sync.Once
 )
@@ -50,7 +50,7 @@ func GetErrorByPackageCode(pkg string, code int) (*KError, bool) {
 func ListErrors() []KError {
 	initCaches()
 	var errors []KError
-	
+
 	if atomicCache, ok := registryByID.(*kcache.AtomicCache[uint32, *KError]); ok {
 		atomicCache.Range(func(id uint32, err *KError) bool {
 			if err != nil {
@@ -59,7 +59,7 @@ func ListErrors() []KError {
 			return true
 		})
 	}
-	
+
 	return errors
 }
 
@@ -67,7 +67,7 @@ func ListErrors() []KError {
 func ListPackageCodes(pkg string) []int {
 	initCaches()
 	var codes []int
-	
+
 	if pkgCache, ok := registryByPkgCode.Get(pkg); ok {
 		if atomicCache, ok := pkgCache.(*kcache.AtomicCache[int, *KError]); ok {
 			atomicCache.Range(func(code int, err *KError) bool {
@@ -76,7 +76,7 @@ func ListPackageCodes(pkg string) []int {
 			})
 		}
 	}
-	
+
 	return codes
 }
 
@@ -84,14 +84,14 @@ func ListPackageCodes(pkg string) []int {
 func ListPackages() []string {
 	initCaches()
 	var packages []string
-	
+
 	if shardedCache, ok := registryByPkgCode.(*kcache.ShardedLRU[string, kcache.Cache[int, *KError]]); ok {
 		shardedCache.Range(func(pkg string, _ kcache.Cache[int, *KError]) bool {
 			packages = append(packages, pkg)
 			return true
 		})
 	}
-	
+
 	return packages
 }
 

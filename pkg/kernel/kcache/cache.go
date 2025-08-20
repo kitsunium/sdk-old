@@ -18,23 +18,23 @@ type Cache[K comparable, V any] interface {
 	// Get retrieves a value from the cache by its key.
 	// Returns the value and true if found, or zero value and false if not found or expired.
 	Get(key K) (V, bool)
-	
+
 	// Set stores a key-value pair in the cache without expiration.
 	Set(key K, value V)
-	
+
 	// SetWithTTL stores a key-value pair in the cache with a TTL (Time To Live).
 	// The entry will be automatically removed after the specified duration.
 	SetWithTTL(key K, value V, ttl time.Duration)
-	
+
 	// Delete removes a key-value pair from the cache.
 	Delete(key K)
-	
+
 	// Clear removes all entries from the cache.
 	Clear()
-	
+
 	// Size returns the current number of entries in the cache.
 	Size() int
-	
+
 	// Has checks if a key exists in the cache without retrieving its value.
 	// Returns false if the key doesn't exist or if the entry has expired.
 	Has(key K) bool
@@ -43,11 +43,11 @@ type Cache[K comparable, V any] interface {
 // Stats holds cache statistics for monitoring.
 type Stats struct {
 	// Hits is the number of successful cache retrievals.
-	Hits   uint64
+	Hits uint64
 	// Misses is the number of failed cache retrievals.
 	Misses uint64
 	// Sets is the number of cache insertions.
-	Sets   uint64
+	Sets uint64
 	// Evictions is the number of entries removed due to capacity limits.
 	Evictions uint64
 }
@@ -220,7 +220,7 @@ func (c *LRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 		delete(c.items, oldest.key.(K))
 		c.size--
 		c.stats.Evictions++
-		
+
 		oldest.value = *new(V)
 		oldest.expiration = 0
 		oldest.key = nil
@@ -245,7 +245,7 @@ func (c *LRU[K, V]) Delete(key K) {
 		c.removeEntry(e)
 		delete(c.items, key)
 		c.size--
-		
+
 		e.value = *new(V)
 		e.expiration = 0
 		e.key = nil
@@ -305,16 +305,16 @@ func (c *LRU[K, V]) Size() int {
 func (c *LRU[K, V]) Has(key K) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	e, exists := c.items[key]
 	if !exists {
 		return false
 	}
-	
+
 	if e.expiration > 0 && time.Now().UnixNano() > e.expiration {
 		return false
 	}
-	
+
 	return true
 }
 

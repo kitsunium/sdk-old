@@ -192,7 +192,7 @@ func TestShardedLRU_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
-				key := (id * numOperations + j) % 2000
+				key := (id*numOperations + j) % 2000
 				c.Set(key, key*2)
 				val, ok := c.Get(key)
 				if ok {

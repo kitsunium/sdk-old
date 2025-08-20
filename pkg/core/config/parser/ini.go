@@ -105,21 +105,21 @@ func iniBytesToString(b []byte) string {
 // Implements a single-pass parser with direct byte manipulation.
 func (i *INI) LoadBytes(data []byte) (map[string]string, error) {
 	config := make(map[string]string, 128)
-	
+
 	var currentSection string
 	lineStart := 0
-	
+
 	for i := 0; i < len(data); i++ {
 		if data[i] == '\n' || i == len(data)-1 {
 			lineEnd := i
 			if i == len(data)-1 && data[i] != '\n' {
 				lineEnd = i + 1
 			}
-			
+
 			// Process line
 			if lineEnd > lineStart {
 				line := data[lineStart:lineEnd]
-				
+
 				// Trim line
 				for len(line) > 0 && (line[0] == ' ' || line[0] == '\t' || line[0] == '\r') {
 					line = line[1:]
@@ -127,7 +127,7 @@ func (i *INI) LoadBytes(data []byte) (map[string]string, error) {
 				for len(line) > 0 && (line[len(line)-1] == ' ' || line[len(line)-1] == '\t' || line[len(line)-1] == '\r') {
 					line = line[:len(line)-1]
 				}
-				
+
 				if len(line) > 0 && line[0] != '#' && line[0] != ';' {
 					if line[0] == '[' && line[len(line)-1] == ']' {
 						// Section
@@ -141,16 +141,16 @@ func (i *INI) LoadBytes(data []byte) (map[string]string, error) {
 								break
 							}
 						}
-						
+
 						if sepIdx != -1 {
 							key := line[:sepIdx]
 							value := line[sepIdx+1:]
-							
+
 							// Trim key
 							for len(key) > 0 && (key[len(key)-1] == ' ' || key[len(key)-1] == '\t') {
 								key = key[:len(key)-1]
 							}
-							
+
 							// Trim value
 							for len(value) > 0 && (value[0] == ' ' || value[0] == '\t') {
 								value = value[1:]
@@ -158,7 +158,7 @@ func (i *INI) LoadBytes(data []byte) (map[string]string, error) {
 							for len(value) > 0 && (value[len(value)-1] == ' ' || value[len(value)-1] == '\t') {
 								value = value[:len(value)-1]
 							}
-							
+
 							// Handle quotes
 							if len(value) >= 2 {
 								first, last := value[0], value[len(value)-1]
@@ -166,21 +166,21 @@ func (i *INI) LoadBytes(data []byte) (map[string]string, error) {
 									value = value[1 : len(value)-1]
 								}
 							}
-							
+
 							keyStr := iniBytesToString(key)
 							if currentSection != "" {
 								keyStr = currentSection + "." + keyStr
 							}
-							
+
 							config[normalize.Key(keyStr)] = normalize.Value(iniBytesToString(value))
 						}
 					}
 				}
 			}
-			
+
 			lineStart = i + 1
 		}
 	}
-	
+
 	return config, nil
 }

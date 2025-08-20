@@ -53,7 +53,7 @@ var (
         Code:    404,
         Message: "Resource not found",
     })
-    
+
     ErrInternal = kerror.Define(kerror.KConfig{
         Code:    500,
         Message: "Internal server error",
@@ -64,11 +64,11 @@ func main() {
     // Create error instance
     err := ErrNotFound.New()
     defer err.Release() // Return to pool
-    
+
     // Add contextual information
     err.WithTag("resource", "user")
        .WithDetail("user_id", 12345)
-    
+
     // Handle error
     fmt.Println(err.Error())
 }
@@ -422,7 +422,9 @@ The package uses several techniques for efficiency:
 
 ## Best Practices
 
-1. **Define errors at package level**: Define errors as package variables for reuse
+1. **Define errors at package level**: Define errors as package variables for
+   reuse
+
    ```go
    var (
        ErrNotFound = kerror.Define(kerror.KConfig{Code: 404})
@@ -430,28 +432,36 @@ The package uses several techniques for efficiency:
    )
    ```
 
-2. **Always release instances**: Use `defer inst.Release()` after creating instances
+2. **Always release instances**: Use `defer inst.Release()` after creating
+   instances
+
    ```go
    inst := err.New()
    defer inst.Release()
    ```
 
-3. **Use meaningful error codes**: Choose codes that make sense for your application
+3. **Use meaningful error codes**: Choose codes that make sense for your
+   application
 
-4. **Add contextual information**: Use tags for indexable data, details for complex data
+4. **Add contextual information**: Use tags for indexable data, details for
+   complex data
+
    ```go
    inst.WithTag("user_id", userID)     // Simple string value
        .WithDetail("request", request)  // Complex object
    ```
 
 5. **Enable metrics in production**: Monitor error rates and patterns
+
    ```go
    kerror.Configure(kerror.GlobalConfig{
        EnableMetrics: true,
    })
    ```
 
-6. **Use Result type for fallible operations**: Better than returning `(value, error)`
+6. **Use Result type for fallible operations**: Better than returning
+   `(value, error)`
+
    ```go
    func getUser(id int) kerror.Result[User] {
        // Implementation

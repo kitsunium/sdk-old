@@ -22,7 +22,7 @@ func TestINI_Load_ValidFile(t *testing.T) {
 	// Create a temporary INI file
 	tmpDir := t.TempDir()
 	iniPath := filepath.Join(tmpDir, "test.ini")
-	
+
 	content := `
 # This is a comment
 [database]
@@ -39,17 +39,17 @@ debug = true
 data = /var/data
 logs = /var/logs
 `
-	
+
 	if err := os.WriteFile(iniPath, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	
+
 	ini := NewINI(iniPath)
 	result, err := ini.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
 		"database.host": "localhost",
 		"database.port": "5432",
@@ -60,7 +60,7 @@ logs = /var/logs
 		"paths.data":    "/var/data",
 		"paths.logs":    "/var/logs",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -94,21 +94,21 @@ func TestINI_Load_NonExistentFile(t *testing.T) {
 func TestINI_Load_ValidExtensions(t *testing.T) {
 	tmpDir := t.TempDir()
 	extensions := []string{".ini", ".cfg", ".conf"}
-	
+
 	for _, ext := range extensions {
 		path := filepath.Join(tmpDir, "test"+ext)
 		content := "[section]\nkey=value"
-		
+
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
-		
+
 		ini := NewINI(path)
 		result, err := ini.Load()
 		if err != nil {
 			t.Errorf("Load() error for %s = %v", ext, err)
 		}
-		
+
 		if result["section.key"] != "value" {
 			t.Errorf("section.key for %s = %q, want %q", ext, result["section.key"], "value")
 		}
@@ -256,7 +256,7 @@ key3 = " preserved spaces "
 			expected: map[string]string{
 				"section.key1": "value1",
 				"section.key2": "value2",
-				"section.key3": "preserved spaces",  // Quotes are stripped by the parser
+				"section.key3": "preserved spaces", // Quotes are stripped by the parser
 			},
 		},
 		{
@@ -270,13 +270,13 @@ normal = regular value
 `,
 			expected: map[string]string{
 				"section.trailing.space": "value",
-				"section.trailing.tab": "value",
-				"section.mixed": "value",
-				"section.normal": "regular value",
+				"section.trailing.tab":   "value",
+				"section.mixed":          "value",
+				"section.normal":         "regular value",
 			},
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ini := NewINI("")
@@ -285,11 +285,11 @@ normal = regular value
 			if err != nil {
 				t.Fatalf("LoadReader() error = %v", err)
 			}
-			
+
 			if len(result) != len(tc.expected) {
 				t.Errorf("Result has %d items, want %d", len(result), len(tc.expected))
 			}
-			
+
 			for key, expectedValue := range tc.expected {
 				if value, ok := result[key]; !ok || value != expectedValue {
 					t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -352,9 +352,9 @@ port=8080
 value=test
 `,
 			expected: map[string]string{
-				"database.config.host":      "localhost",
-				"server.settings.port":      "8080",
-				"mixed.case.section.value":  "test",
+				"database.config.host":     "localhost",
+				"server.settings.port":     "8080",
+				"mixed.case.section.value": "test",
 			},
 		},
 		{
@@ -383,10 +383,10 @@ single='single quoted'
 backtick=` + "`backtick value`" + `
 `,
 			expected: map[string]string{
-				"section.trimmed":   "value with spaces",
-				"section.quoted":    "quoted value",
-				"section.single":    "single quoted",
-				"section.backtick":  "`backtick value`",
+				"section.trimmed":  "value with spaces",
+				"section.quoted":   "quoted value",
+				"section.single":   "single quoted",
+				"section.backtick": "`backtick value`",
 			},
 		},
 		{
@@ -479,15 +479,15 @@ key4=value4
 key5=value5
 `,
 			expected: map[string]string{
-				"valid.key1":   "value1",
-				"valid.key2":   "value2",
-				"valid.key3":   "value3",
-				"key4":         "value4",
-				"spaces.key5":  "value5",
+				"valid.key1":  "value1",
+				"valid.key2":  "value2",
+				"valid.key3":  "value3",
+				"key4":        "value4",
+				"spaces.key5": "value5",
 			},
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ini := NewINI("")
@@ -496,7 +496,7 @@ key5=value5
 			if err != nil {
 				t.Fatalf("LoadReader() error = %v", err)
 			}
-			
+
 			if len(result) != len(tc.expected) {
 				t.Errorf("Result has %d items, want %d", len(result), len(tc.expected))
 				for k, v := range result {
@@ -506,7 +506,7 @@ key5=value5
 					t.Logf("Want: %q = %q", k, v)
 				}
 			}
-			
+
 			for key, expectedValue := range tc.expected {
 				if value, ok := result[key]; !ok || value != expectedValue {
 					t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -526,20 +526,20 @@ port=5432
 host=0.0.0.0
 port=8080
 `)
-	
+
 	ini := NewINI("")
 	result, err := ini.LoadBytes(content)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
 		"database.host": "localhost",
 		"database.port": "5432",
 		"server.host":   "0.0.0.0",
 		"server.port":   "8080",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -553,7 +553,7 @@ func TestINI_LoadBytes_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	if len(result) != 0 {
 		t.Errorf("Expected empty result for empty bytes, got %d items", len(result))
 	}
@@ -568,19 +568,19 @@ func TestINI_LoadBytes_LargeContent(t *testing.T) {
 			fmt.Fprintf(&buf, "key%d=value%d_%d\n", j, i, j)
 		}
 	}
-	
+
 	ini := NewINI("")
 	result, err := ini.LoadBytes(buf.Bytes())
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	// Check we have all expected entries
 	expectedCount := 100 * 10 // 100 sections, 10 keys each
 	if len(result) != expectedCount {
 		t.Errorf("Expected %d entries, got %d", expectedCount, len(result))
 	}
-	
+
 	// Spot check a few values
 	if result["section0.key0"] != "value0_0" {
 		t.Errorf("section0.key0 = %q, want %q", result["section0.key0"], "value0_0")
@@ -599,35 +599,35 @@ func TestINI_ParserOptions(t *testing.T) {
 key1=value1
 key2=value2
 `
-	
+
 	// Test with custom buffer size
 	ini := NewINI("", WithBufferSize(1024))
 	if ini.options.bufferSize != 1024 {
 		t.Errorf("bufferSize = %d, want %d", ini.options.bufferSize, 1024)
 	}
-	
+
 	reader := strings.NewReader(content)
 	result, err := ini.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	if result["section.key1"] != "value1" {
 		t.Errorf("section.key1 = %q, want %q", result["section.key1"], "value1")
 	}
-	
+
 	// Test with pool disabled
 	ini2 := NewINI("", WithPool(false))
 	if ini2.options.usePool {
 		t.Error("usePool should be false")
 	}
-	
+
 	reader2 := strings.NewReader(content)
 	result2, err := ini2.LoadReader(reader2)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	if result2["section.key2"] != "value2" {
 		t.Errorf("section.key2 = %q, want %q", result2["section.key2"], "value2")
 	}
@@ -636,7 +636,7 @@ key2=value2
 func TestINI_LoadReader_ReaderError(t *testing.T) {
 	// Create a reader that returns an error
 	reader := &errorReader{err: io.ErrUnexpectedEOF}
-	
+
 	ini := NewINI("")
 	_, err := ini.LoadReader(reader)
 	if err == nil {
@@ -706,28 +706,28 @@ session_timeout = 3600
 csrf_enabled = true
 cors_origins = https://example.com,https://app.example.com
 `
-	
+
 	ini := NewINI("")
 	reader := strings.NewReader(content)
 	result, err := ini.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	// Check a selection of important values
 	checks := map[string]string{
-		"database.host":         "localhost",
-		"database.password":     "secret123",
-		"redis.password":        "",
-		"redis.cluster.enabled": "false",
-		"logging.level":         "info",
-		"logging.max.size":      "100",
-		"features.new.ui":       "true",
+		"database.host":           "localhost",
+		"database.password":       "secret123",
+		"redis.password":          "",
+		"redis.cluster.enabled":   "false",
+		"logging.level":           "info",
+		"logging.max.size":        "100",
+		"features.new.ui":         "true",
 		"server.max.header.bytes": "1048576",
-		"security.jwt.secret":   "super-secret-key-do-not-share",
-		"security.cors.origins": "https://example.com,https://app.example.com",
+		"security.jwt.secret":     "super-secret-key-do-not-share",
+		"security.cors.origins":   "https://example.com,https://app.example.com",
 	}
-	
+
 	for key, expectedValue := range checks {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -745,11 +745,11 @@ key2=value2
 key3=value3
 key4=value4
 `
-	
+
 	ini := NewINI("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		reader := strings.NewReader(content)
 		_, _ = ini.LoadReader(reader)
@@ -765,11 +765,11 @@ func BenchmarkINI_LoadReader_Medium(b *testing.B) {
 		}
 	}
 	content := buf.String()
-	
+
 	ini := NewINI("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		reader := strings.NewReader(content)
 		_, _ = ini.LoadReader(reader)
@@ -785,11 +785,11 @@ func BenchmarkINI_LoadReader_Large(b *testing.B) {
 		}
 	}
 	content := buf.String()
-	
+
 	ini := NewINI("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		reader := strings.NewReader(content)
 		_, _ = ini.LoadReader(reader)
@@ -809,11 +809,11 @@ host=0.0.0.0
 port=8080
 workers=4
 `)
-	
+
 	ini := NewINI("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = ini.LoadBytes(content)
 	}

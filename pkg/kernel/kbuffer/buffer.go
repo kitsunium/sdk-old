@@ -29,28 +29,30 @@ func NewBuffer(size int) *Buffer {
 	}
 }
 
-// Len returns the current length of the 
+// Len returns the current length of the
 //
 // Returns:
-// - int: The current length of the 
+// - int: The current length of the
+//
 //go:inline
 func (b *Buffer) Len() int {
 	return b.pos
 }
 
-// Cap returns the fixed capacity of the 
+// Cap returns the fixed capacity of the
 //
 // Returns:
-// - int: The fixed capacity of the 
+// - int: The fixed capacity of the
+//
 //go:inline
 func (b *Buffer) Cap() int {
 	return b.c
 }
 
-// Write writes bytes to the 
+// Write writes bytes to the
 //
 // Parameters:
-// - p: []byte - The bytes to write to the 
+// - p: []byte - The bytes to write to the
 //
 // Returns:
 // - int: The number of bytes written.
@@ -66,10 +68,10 @@ func (b *Buffer) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// WriteString writes a string to the 
+// WriteString writes a string to the
 //
 // Parameters:
-// - s: string - The string to write to the 
+// - s: string - The string to write to the
 //
 // Returns:
 // - int: The number of bytes written.
@@ -88,7 +90,7 @@ func (b *Buffer) WriteString(s string) (int, error) {
 // ReWrite clears the buffer and writes new data to it.
 //
 // Parameters:
-// - p: []byte - The bytes to write to the 
+// - p: []byte - The bytes to write to the
 //
 // Returns:
 // - int: The number of bytes written.
@@ -101,7 +103,7 @@ func (b *Buffer) ReWrite(p []byte) (int, error) {
 // ReWriteString clears the buffer and writes a new string to it.
 //
 // Parameters:
-// - s: string - The string to write to the 
+// - s: string - The string to write to the
 //
 // Returns:
 // - int: The number of bytes written.
@@ -114,7 +116,8 @@ func (b *Buffer) ReWriteString(s string) (int, error) {
 // Bytes returns the current contents of the buffer up to the write position.
 //
 // Returns:
-// - []byte: The current contents of the 
+// - []byte: The current contents of the
+//
 //go:inline
 func (b *Buffer) Bytes() []byte {
 	return b.b[:b.pos]
@@ -143,12 +146,14 @@ func (b *Buffer) Clear() {
 }
 
 // Available returns the number of bytes available for writing.
+//
 //go:inline
 func (b *Buffer) Available() int {
 	return b.c - b.pos
 }
 
-// WriteByte writes a single byte to the 
+// WriteByte writes a single byte to the
+//
 //go:inline
 func (b *Buffer) WriteByte(c byte) error {
 	if b.pos >= b.c {
@@ -176,6 +181,7 @@ func (b *Buffer) Reset(buf []byte) {
 }
 
 // AppendBytes appends bytes to the buffer.
+//
 //go:inline
 func (b *Buffer) AppendBytes(data ...byte) error {
 	dataLen := len(data)
@@ -188,6 +194,7 @@ func (b *Buffer) AppendBytes(data ...byte) error {
 }
 
 // TryWrite attempts to write without error return for hot paths.
+//
 //go:inline
 func (b *Buffer) TryWrite(p []byte) bool {
 	pLen := len(p)
@@ -199,13 +206,15 @@ func (b *Buffer) TryWrite(p []byte) bool {
 	return true
 }
 
-// RemainingSlice returns the unused portion of the 
+// RemainingSlice returns the unused portion of the
+//
 //go:inline
 func (b *Buffer) RemainingSlice() []byte {
 	return b.b[b.pos:b.c]
 }
 
 // Extend extends the current position without writing.
+//
 //go:inline
 func (b *Buffer) Extend(n int) error {
 	// Reject negative extensions to prevent underflow
@@ -221,12 +230,14 @@ func (b *Buffer) Extend(n int) error {
 }
 
 // Truncate reduces the buffer to n bytes.
+//
 //go:inline
 func (b *Buffer) Truncate(n int) {
 	b.pos = min(n, b.pos)
 }
 
 // Grow ensures the buffer has at least n bytes available.
+//
 //go:inline
 func (b *Buffer) Grow(n int) error {
 	if b.c-b.pos < n {

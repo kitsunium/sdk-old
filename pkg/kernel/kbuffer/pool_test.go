@@ -5,8 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	
 )
 
 // TestBufferPool tests the buffer pool functionality.
@@ -210,12 +208,12 @@ func TestBufferPool(t *testing.T) {
 	t.Run("SetMaxSize", func(t *testing.T) {
 		pool := NewBufferPool()
 		pool.SetMaxSize(512)
-		
+
 		// Buffer larger than max size should not be pooled
 		buf := pool.Get(1024)
 		NotNil(t, buf)
 		pool.Put(buf)
-		
+
 		// Get again - should allocate new since it wasn't pooled
 		pool.ResetStats()
 		buf2 := pool.Get(1024)
@@ -227,14 +225,14 @@ func TestBufferPool(t *testing.T) {
 	t.Run("SetClearOnPut", func(t *testing.T) {
 		pool := NewBufferPool()
 		pool.SetClearOnPut(false)
-		
+
 		// Get buffer, write data, return it
 		buf1 := pool.Get(1024)
 		for i := range buf1 {
 			buf1[i] = 0xFF
 		}
 		pool.Put(buf1)
-		
+
 		// Get another buffer - should not be cleared
 		buf2 := pool.Get(1024)
 		// Check first byte only (since clearing is disabled)
@@ -247,10 +245,10 @@ func TestBufferPool(t *testing.T) {
 	t.Run("Prewarm", func(t *testing.T) {
 		pool := NewBufferPool()
 		pool.ResetStats()
-		
+
 		// Prewarm with specific sizes
 		pool.Prewarm([]int{512, 1024}, 5)
-		
+
 		stats := pool.GetStats()
 		Equal(t, int64(10), stats.Allocs) // 2 sizes * 5 count
 	})
@@ -276,7 +274,7 @@ func TestBufferPool(t *testing.T) {
 	t.Run("Put_NonPowerOf2", func(t *testing.T) {
 		pool := NewBufferPool()
 		buf := make([]byte, 100) // Not a power of 2
-		pool.Put(buf) // Should not pool it
+		pool.Put(buf)            // Should not pool it
 	})
 
 	t.Run("GetBuffer_ZeroSize", func(t *testing.T) {
@@ -295,10 +293,9 @@ func TestBufferPool(t *testing.T) {
 	t.Run("PutBuffer_InvalidCapacity", func(t *testing.T) {
 		pool := NewBufferPool()
 		buf := NewBuffer(100) // Not a power of 2
-		pool.PutBuffer(buf) // Should not pool it
+		pool.PutBuffer(buf)   // Should not pool it
 	})
 }
-
 
 // TestMemoryLeak verifies no memory leaks.
 func TestMemoryLeak(t *testing.T) {

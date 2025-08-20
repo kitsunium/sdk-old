@@ -15,96 +15,96 @@ func TestConfigure(t *testing.T) {
 		{
 			name: "valid configuration",
 			input: GlobalConfig{
-				EnableStackTrace:  true,
-				EnableMetrics:     true,
-				MaxInstancePool:   2000,
-				DefaultPackage:    "custom",
-				MaxTags:           100,
-				MaxDetails:        200,
-				MaxTagKeyLen:      200,
-				MaxTagValueLen:    2000,
-				StackTraceDepth:   64,
-				EnableValidation:  false,
+				EnableStackTrace: true,
+				EnableMetrics:    true,
+				MaxInstancePool:  2000,
+				DefaultPackage:   "custom",
+				MaxTags:          100,
+				MaxDetails:       200,
+				MaxTagKeyLen:     200,
+				MaxTagValueLen:   2000,
+				StackTraceDepth:  64,
+				EnableValidation: false,
 			},
 			expected: GlobalConfig{
-				EnableStackTrace:  true,
-				EnableMetrics:     true,
-				MaxInstancePool:   2000,
-				DefaultPackage:    "custom",
-				MaxTags:           100,
-				MaxDetails:        200,
-				MaxTagKeyLen:      200,
-				MaxTagValueLen:    2000,
-				StackTraceDepth:   64,
-				EnableValidation:  false,
+				EnableStackTrace: true,
+				EnableMetrics:    true,
+				MaxInstancePool:  2000,
+				DefaultPackage:   "custom",
+				MaxTags:          100,
+				MaxDetails:       200,
+				MaxTagKeyLen:     200,
+				MaxTagValueLen:   2000,
+				StackTraceDepth:  64,
+				EnableValidation: false,
 			},
 		},
 		{
 			name: "zero values replaced with defaults",
 			input: GlobalConfig{
-				MaxInstancePool:   0,
-				DefaultPackage:    "",
-				MaxTags:           0,
-				MaxDetails:        0,
-				MaxTagKeyLen:      0,
-				MaxTagValueLen:    0,
-				StackTraceDepth:   0,
+				MaxInstancePool: 0,
+				DefaultPackage:  "",
+				MaxTags:         0,
+				MaxDetails:      0,
+				MaxTagKeyLen:    0,
+				MaxTagValueLen:  0,
+				StackTraceDepth: 0,
 			},
 			expected: GlobalConfig{
-				EnableStackTrace:  false,
-				EnableMetrics:     false,
-				MaxInstancePool:   defaultConfig.MaxInstancePool,
-				DefaultPackage:    defaultConfig.DefaultPackage,
-				MaxTags:           defaultConfig.MaxTags,
-				MaxDetails:        defaultConfig.MaxDetails,
-				MaxTagKeyLen:      defaultConfig.MaxTagKeyLen,
-				MaxTagValueLen:    defaultConfig.MaxTagValueLen,
-				StackTraceDepth:   defaultConfig.StackTraceDepth,
-				EnableValidation:  false,
+				EnableStackTrace: false,
+				EnableMetrics:    false,
+				MaxInstancePool:  defaultConfig.MaxInstancePool,
+				DefaultPackage:   defaultConfig.DefaultPackage,
+				MaxTags:          defaultConfig.MaxTags,
+				MaxDetails:       defaultConfig.MaxDetails,
+				MaxTagKeyLen:     defaultConfig.MaxTagKeyLen,
+				MaxTagValueLen:   defaultConfig.MaxTagValueLen,
+				StackTraceDepth:  defaultConfig.StackTraceDepth,
+				EnableValidation: false,
 			},
 		},
 		{
 			name: "negative values replaced with defaults",
 			input: GlobalConfig{
-				MaxInstancePool:   -1,
-				MaxTags:           -10,
-				MaxDetails:        -20,
-				MaxTagKeyLen:      -5,
-				MaxTagValueLen:    -100,
-				StackTraceDepth:   -1,
-				DefaultPackage:    "test",
+				MaxInstancePool: -1,
+				MaxTags:         -10,
+				MaxDetails:      -20,
+				MaxTagKeyLen:    -5,
+				MaxTagValueLen:  -100,
+				StackTraceDepth: -1,
+				DefaultPackage:  "test",
 			},
 			expected: GlobalConfig{
-				EnableStackTrace:  false,
-				EnableMetrics:     false,
-				MaxInstancePool:   defaultConfig.MaxInstancePool,
-				DefaultPackage:    "test",
-				MaxTags:           defaultConfig.MaxTags,
-				MaxDetails:        defaultConfig.MaxDetails,
-				MaxTagKeyLen:      defaultConfig.MaxTagKeyLen,
-				MaxTagValueLen:    defaultConfig.MaxTagValueLen,
-				StackTraceDepth:   defaultConfig.StackTraceDepth,
-				EnableValidation:  false,
+				EnableStackTrace: false,
+				EnableMetrics:    false,
+				MaxInstancePool:  defaultConfig.MaxInstancePool,
+				DefaultPackage:   "test",
+				MaxTags:          defaultConfig.MaxTags,
+				MaxDetails:       defaultConfig.MaxDetails,
+				MaxTagKeyLen:     defaultConfig.MaxTagKeyLen,
+				MaxTagValueLen:   defaultConfig.MaxTagValueLen,
+				StackTraceDepth:  defaultConfig.StackTraceDepth,
+				EnableValidation: false,
 			},
 		},
 		{
 			name: "partial configuration",
 			input: GlobalConfig{
-				EnableStackTrace:  true,
-				MaxInstancePool:   500,
-				DefaultPackage:    "partial",
+				EnableStackTrace: true,
+				MaxInstancePool:  500,
+				DefaultPackage:   "partial",
 			},
 			expected: GlobalConfig{
-				EnableStackTrace:  true,
-				EnableMetrics:     false,
-				MaxInstancePool:   500,
-				DefaultPackage:    "partial",
-				MaxTags:           defaultConfig.MaxTags,
-				MaxDetails:        defaultConfig.MaxDetails,
-				MaxTagKeyLen:      defaultConfig.MaxTagKeyLen,
-				MaxTagValueLen:    defaultConfig.MaxTagValueLen,
-				StackTraceDepth:   defaultConfig.StackTraceDepth,
-				EnableValidation:  false,
+				EnableStackTrace: true,
+				EnableMetrics:    false,
+				MaxInstancePool:  500,
+				DefaultPackage:   "partial",
+				MaxTags:          defaultConfig.MaxTags,
+				MaxDetails:       defaultConfig.MaxDetails,
+				MaxTagKeyLen:     defaultConfig.MaxTagKeyLen,
+				MaxTagValueLen:   defaultConfig.MaxTagValueLen,
+				StackTraceDepth:  defaultConfig.StackTraceDepth,
+				EnableValidation: false,
 			},
 		},
 	}
@@ -130,18 +130,18 @@ func TestGetConfig(t *testing.T) {
 
 	// Test custom configuration
 	customConfig := GlobalConfig{
-		EnableStackTrace:  true,
-		EnableMetrics:     true,
-		MaxInstancePool:   5000,
-		DefaultPackage:    "test",
-		MaxTags:           200,
-		MaxDetails:        300,
-		MaxTagKeyLen:      500,
-		MaxTagValueLen:    5000,
-		StackTraceDepth:   100,
-		EnableValidation:  false,
+		EnableStackTrace: true,
+		EnableMetrics:    true,
+		MaxInstancePool:  5000,
+		DefaultPackage:   "test",
+		MaxTags:          200,
+		MaxDetails:       300,
+		MaxTagKeyLen:     500,
+		MaxTagValueLen:   5000,
+		StackTraceDepth:  100,
+		EnableValidation: false,
 	}
-	
+
 	Configure(customConfig)
 	got = GetConfig()
 	if !reflect.DeepEqual(got, customConfig) {
@@ -197,7 +197,7 @@ func TestInitializePools(t *testing.T) {
 		MaxInstancePool: 100,
 		DefaultPackage:  "pools",
 	})
-	
+
 	cfg := GetConfig()
 	if cfg.MaxInstancePool != 100 {
 		t.Error("MaxInstancePool should be 100")
@@ -210,19 +210,19 @@ func TestInitializePools(t *testing.T) {
 func TestConfigureOnce(t *testing.T) {
 	// Reset configOnce for testing
 	configOnce = sync.Once{}
-	
+
 	// First call should execute
 	Configure(GlobalConfig{
 		MaxInstancePool: 1000,
 		DefaultPackage:  "once1",
 	})
-	
+
 	// Subsequent calls should still update config
 	Configure(GlobalConfig{
 		MaxInstancePool: 2000,
 		DefaultPackage:  "once2",
 	})
-	
+
 	got := GetConfig()
 	if got.DefaultPackage != "once2" {
 		t.Errorf("Configure should update config, got package = %s, want once2", got.DefaultPackage)
@@ -275,21 +275,21 @@ func TestInit(t *testing.T) {
 func TestConfigureAllFields(t *testing.T) {
 	// Test setting all fields explicitly
 	cfg := GlobalConfig{
-		EnableStackTrace:  true,
-		EnableMetrics:     true,
-		MaxInstancePool:   999,
-		DefaultPackage:    "allfields",
-		MaxTags:           99,
-		MaxDetails:        199,
-		MaxTagKeyLen:      299,
-		MaxTagValueLen:    2999,
-		StackTraceDepth:   99,
-		EnableValidation:  false,
+		EnableStackTrace: true,
+		EnableMetrics:    true,
+		MaxInstancePool:  999,
+		DefaultPackage:   "allfields",
+		MaxTags:          99,
+		MaxDetails:       199,
+		MaxTagKeyLen:     299,
+		MaxTagValueLen:   2999,
+		StackTraceDepth:  99,
+		EnableValidation: false,
 	}
-	
+
 	Configure(cfg)
 	got := GetConfig()
-	
+
 	if got.EnableStackTrace != cfg.EnableStackTrace {
 		t.Errorf("EnableStackTrace = %v, want %v", got.EnableStackTrace, cfg.EnableStackTrace)
 	}

@@ -1,8 +1,8 @@
 package parser
 
 import (
-	"errors"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -30,7 +30,7 @@ func TestTOML_NewTOML(t *testing.T) {
 	if t1.options.usePool != false {
 		t.Errorf("usePool = %v, want %v", t1.options.usePool, false)
 	}
-	
+
 	// Test with options
 	t2 := NewTOML("test.toml", WithBufferSize(8192), WithPool(false))
 	if t2.options.bufferSize != 8192 {
@@ -44,7 +44,7 @@ func TestTOML_NewTOML(t *testing.T) {
 func TestTOML_Load_ValidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	tomlPath := filepath.Join(tmpDir, "test.toml")
-	
+
 	content := `
 # This is a comment
 title = "TOML Example"
@@ -64,30 +64,30 @@ timeout = 30.5
 data = "/var/data"
 logs = "/var/logs"
 `
-	
+
 	if err := os.WriteFile(tomlPath, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	
+
 	toml := NewTOML(tomlPath)
 	result, err := toml.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
-		"title":           "TOML Example",
-		"database.host":   "localhost",
-		"database.port":   "5432",
-		"database.name":   "testdb",
+		"title":            "TOML Example",
+		"database.host":    "localhost",
+		"database.port":    "5432",
+		"database.name":    "testdb",
 		"database.enabled": "true",
-		"server.host":     "0.0.0.0",
-		"server.port":     "8080",
-		"server.timeout":  "30.5",
-		"paths.data":      "/var/data",
-		"paths.logs":      "/var/logs",
+		"server.host":      "0.0.0.0",
+		"server.port":      "8080",
+		"server.timeout":   "30.5",
+		"paths.data":       "/var/data",
+		"paths.logs":       "/var/logs",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -128,24 +128,24 @@ key3 = true
 nested = { inner = "value" }
 array = ["item1", "item2", "item3"]
 `
-	
+
 	toml := NewTOML("", WithPool(true))
 	reader := strings.NewReader(content)
 	result, err := toml.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
-		"section1.key1":        "value1",
-		"section1.key2":        "42",
-		"section1.key3":        "true",
+		"section1.key1":         "value1",
+		"section1.key2":         "42",
+		"section1.key3":         "true",
 		"section2.nested.inner": "value",
-		"section2.array.0":     "item1",
-		"section2.array.1":     "item2",
-		"section2.array.2":     "item3",
+		"section2.array.0":      "item1",
+		"section2.array.1":      "item2",
+		"section2.array.2":      "item3",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -159,19 +159,19 @@ func TestTOML_LoadReader_WithoutPool(t *testing.T) {
 key = "value"
 number = 123
 `
-	
+
 	toml := NewTOML("", WithPool(false))
 	reader := strings.NewReader(content)
 	result, err := toml.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
 		"section.key":    "value",
 		"section.number": "123",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -182,7 +182,7 @@ number = 123
 func TestTOML_LoadReader_ErrorWithPool(t *testing.T) {
 	toml := NewTOML("", WithPool(true))
 	reader := &tomlErrorReader{err: io.ErrUnexpectedEOF}
-	
+
 	_, err := toml.LoadReader(reader)
 	if err == nil {
 		t.Error("LoadReader() should return error from reader")
@@ -195,7 +195,7 @@ func TestTOML_LoadReader_ErrorWithPool(t *testing.T) {
 func TestTOML_LoadReader_ErrorWithoutPool(t *testing.T) {
 	toml := NewTOML("", WithPool(false))
 	reader := &tomlErrorReader{err: io.ErrUnexpectedEOF}
-	
+
 	_, err := toml.LoadReader(reader)
 	if err == nil {
 		t.Error("LoadReader() should return error from reader")
@@ -216,12 +216,12 @@ func TestTOML_LoadReader_InvalidTOML(t *testing.T) {
 		{"invalid value with pool", "[section]\nkey = ", true},
 		{"invalid value without pool", "[section]\nkey = ", false},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			toml := NewTOML("", WithPool(tc.pool))
 			reader := strings.NewReader(tc.content)
-			
+
 			_, err := toml.LoadReader(reader)
 			if err == nil {
 				t.Error("LoadReader() should error on invalid TOML")
@@ -267,35 +267,35 @@ name = "Nail"
 sku = 284758393
 color = "gray"
 `)
-	
+
 	toml := NewTOML("")
 	result, err := toml.LoadBytes(content)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	// Check some key values
 	expected := map[string]string{
-		"title":                    "Test",
-		"owner.name":              "Tom Preston-Werner",
-		"database.enabled":        "true",
-		"database.ports.0":        "8000",
-		"database.ports.1":        "8001",
-		"database.ports.2":        "8002",
+		"title":            "Test",
+		"owner.name":       "Tom Preston-Werner",
+		"database.enabled": "true",
+		"database.ports.0": "8000",
+		"database.ports.1": "8001",
+		"database.ports.2": "8002",
 		// Arrays of arrays become nested structure
-		"database.temp.targets.cpu": "79.5",
+		"database.temp.targets.cpu":  "79.5",
 		"database.temp.targets.case": "72",
-		"servers.alpha.ip":        "10.0.0.1",
-		"servers.alpha.role":      "frontend",
-		"servers.beta.ip":         "10.0.0.2", 
-		"servers.beta.role":       "backend",
-		"products.0.name":         "Hammer",
-		"products.0.sku":          "738594937",
-		"products.1.name":         "Nail",
-		"products.1.sku":          "284758393",
-		"products.1.color":        "gray",
+		"servers.alpha.ip":           "10.0.0.1",
+		"servers.alpha.role":         "frontend",
+		"servers.beta.ip":            "10.0.0.2",
+		"servers.beta.role":          "backend",
+		"products.0.name":            "Hammer",
+		"products.0.sku":             "738594937",
+		"products.1.name":            "Nail",
+		"products.1.sku":             "284758393",
+		"products.1.color":           "gray",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -312,7 +312,7 @@ func TestTOML_LoadBytes_InvalidTOML(t *testing.T) {
 		{"invalid value", []byte("[section]\nkey = ")},
 		{"invalid type", []byte("key = 2020-13-01")}, // Invalid date
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			toml := NewTOML("")
@@ -404,40 +404,40 @@ deep = "value"
     [x.y.z]
       w = "deep nesting"
 `)
-	
+
 	toml := NewTOML("")
 	result, err := toml.LoadBytes(content)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	// Verify various types
 	checks := map[string]string{
-		"str1": "I'm a string.",
-		"str2": "You can \"quote\" me.",
-		"int1": "99",
-		"int2": "42",
-		"int3": "0",
-		"int4": "-17",
-		"hex":  "3735928559", // 0xDEADBEEF in decimal
-		"oct":  "493",         // 0o755 in decimal
-		"bin":  "214",         // 0b11010110 in decimal
-		"flt1": "1",
-		"flt2": "3.1415",
-		"flt3": "-0.01",
-		"bool1": "true",
-		"bool2": "false",
+		"str1":       "I'm a string.",
+		"str2":       "You can \"quote\" me.",
+		"int1":       "99",
+		"int2":       "42",
+		"int3":       "0",
+		"int4":       "-17",
+		"hex":        "3735928559", // 0xDEADBEEF in decimal
+		"oct":        "493",        // 0o755 in decimal
+		"bin":        "214",        // 0b11010110 in decimal
+		"flt1":       "1",
+		"flt2":       "3.1415",
+		"flt3":       "-0.01",
+		"bool1":      "true",
+		"bool2":      "false",
 		"integers.0": "1",
-		"colors.1": "yellow",
+		"colors.1":   "yellow",
 		// Check first nested array element properly
-		"table.key": "value",
+		"table.key":          "value",
 		"table.inline.first": "Tom",
-		"fruits.0.name": "apple",
-		"fruits.1.color": "yellow",
-		"a.b.c.deep": "value",
-		"x.y.z.w": "deep nesting",
+		"fruits.0.name":      "apple",
+		"fruits.1.color":     "yellow",
+		"a.b.c.deep":         "value",
+		"x.y.z.w":            "deep nesting",
 	}
-	
+
 	for key, expectedValue := range checks {
 		if value, ok := result[key]; !ok {
 			t.Errorf("Key %q not found in result", key)
@@ -463,11 +463,11 @@ key1 = "value1"
 key2 = 42
 key3 = true
 `)
-	
+
 	toml := NewTOML("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = toml.LoadBytes(content)
 	}
@@ -482,11 +482,11 @@ func BenchmarkTOML_LoadBytes_Large(b *testing.B) {
 		}
 	}
 	content := buf.Bytes()
-	
+
 	toml := NewTOML("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = toml.LoadBytes(content)
 	}
@@ -501,11 +501,11 @@ port = 5432
 host = "0.0.0.0"
 port = 8080
 `
-	
+
 	toml := NewTOML("", WithPool(true))
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		reader := strings.NewReader(content)
 		_, _ = toml.LoadReader(reader)
@@ -521,11 +521,11 @@ port = 5432
 host = "0.0.0.0"
 port = 8080
 `
-	
+
 	toml := NewTOML("", WithPool(false))
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		reader := strings.NewReader(content)
 		_, _ = toml.LoadReader(reader)

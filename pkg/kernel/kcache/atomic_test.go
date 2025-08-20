@@ -291,7 +291,7 @@ func TestAtomicCache_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
-				key := (id * numOperations + j) % 2000
+				key := (id*numOperations + j) % 2000
 				c.Set(key, key*2)
 				val, ok := c.Get(key)
 				if ok {
@@ -363,10 +363,10 @@ func TestAtomicCache_Interface(t *testing.T) {
 
 func TestAtomicCache_StatsWithNilPointer(t *testing.T) {
 	c := kcache.NewAtomicCache[string, int](100)
-	
+
 	// Clear stats pointer to test nil handling
 	c.Stats() // Should not panic
-	
+
 	// Operations should still work
 	c.Set("key", 100)
 	val, ok := c.Get("key")
@@ -382,18 +382,18 @@ func TestAtomicCache_EvictionWithExpired(t *testing.T) {
 	c.Set("perm1", 10)
 	c.Set("perm2", 20)
 	c.Set("perm3", 30)
-	
+
 	// Sleep to ensure different access times
 	time.Sleep(10 * time.Millisecond)
-	
+
 	// Access some items to update their access time
 	c.Get("perm2")
 	c.Get("perm3")
-	
+
 	// Add more items to trigger eviction
 	c.Set("new1", 40)
 	c.Set("new2", 50)
-	
+
 	// Should have evicted LRU items
 	assert.LessOrEqual(t, c.Size(), 5)
 }

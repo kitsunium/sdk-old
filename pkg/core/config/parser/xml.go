@@ -72,12 +72,14 @@ func (x *XML) Type() string {
 //   - Repeated elements are indexed
 //
 // Example XML:
-//   <config>
-//     <database host="localhost" port="5432"/>
-//   </config>
+//
+//	<config>
+//	  <database host="localhost" port="5432"/>
+//	</config>
 //
 // Becomes:
-//   {"config.database.host": "localhost", "config.database.port": "5432"}
+//
+//	{"config.database.host": "localhost", "config.database.port": "5432"}
 //
 // Returns an error if:
 //   - The file extension is not .xml
@@ -117,7 +119,7 @@ func (x *XML) LoadBytes(data []byte) (map[string]string, error) {
 	// Pre-size based on typical XML structure
 	estimatedSize := max(len(data)/50, 32)
 	config := make(map[string]string, estimatedSize)
-	
+
 	// Use bytes.Reader to avoid string conversion
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 

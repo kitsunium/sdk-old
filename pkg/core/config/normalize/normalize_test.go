@@ -17,7 +17,7 @@ func TestKey(t *testing.T) {
 		{"", ""},
 		{"a_b_c_d", "a.b.c.d"},
 	}
-	
+
 	for _, tt := range tests {
 		result := Key(tt.input)
 		if result != tt.expected {
@@ -39,13 +39,13 @@ func TestValue(t *testing.T) {
 		{"\n\ttabbed\n\t", "tabbed"},
 		{"", ""},
 		{"\"", "\""},
-		{"   ", ""}, // All whitespace
+		{"   ", ""},                        // All whitespace
 		{"\r\n  Windows  \r\n", "Windows"}, // Windows line endings
-		{`''`, ""}, // Empty quotes
-		{`""`, ""}, // Empty double quotes
+		{`''`, ""},                         // Empty quotes
+		{`""`, ""},                         // Empty double quotes
 		{"'mismatched\"", "'mismatched\""}, // Mismatched quotes
 	}
-	
+
 	for _, tt := range tests {
 		result := Value(tt.input)
 		if result != tt.expected {
@@ -67,8 +67,8 @@ func TestMap(t *testing.T) {
 			nil,
 			123,
 		},
-		"enabled": true,
-		"empty":   nil,
+		"enabled":      true,
+		"empty":        nil,
 		"string_value": "  needs trimming  ",
 		"nested_array": []any{
 			map[string]any{
@@ -78,45 +78,45 @@ func TestMap(t *testing.T) {
 			},
 		},
 	}
-	
+
 	result := Map(input)
-	
+
 	expectedKeys := map[string]bool{
-		"database.host":  true,
-		"database.port":  true,
-		"servers.0.name": true,
-		"servers.1.name": true,
-		"servers.2":      true,
-		"servers.3":      true,
-		"servers.4":      true,
-		"enabled":        true,
-		"empty":          true,
-		"string.value":   true,
+		"database.host":             true,
+		"database.port":             true,
+		"servers.0.name":            true,
+		"servers.1.name":            true,
+		"servers.2":                 true,
+		"servers.3":                 true,
+		"servers.4":                 true,
+		"enabled":                   true,
+		"empty":                     true,
+		"string.value":              true,
 		"nested.array.0.deep.value": true,
 	}
-	
+
 	for key := range expectedKeys {
 		if _, exists := result[key]; !exists {
 			t.Errorf("Expected key %q not found in result", key)
 		}
 	}
-	
+
 	if result["database.host"] != "localhost" {
 		t.Errorf("database.host = %q, want %q", result["database.host"], "localhost")
 	}
-	
+
 	if result["database.port"] != "5432" {
 		t.Errorf("database.port = %q, want %q", result["database.port"], "5432")
 	}
-	
+
 	if result["servers.2"] != "plain_string" {
 		t.Errorf("servers.2 = %q, want %q", result["servers.2"], "plain_string")
 	}
-	
+
 	if result["servers.3"] != "" {
 		t.Errorf("servers.3 = %q, want empty string", result["servers.3"])
 	}
-	
+
 	if result["string.value"] != "needs trimming" {
 		t.Errorf("string.value = %q, want %q", result["string.value"], "needs trimming")
 	}
@@ -125,11 +125,11 @@ func TestMap(t *testing.T) {
 func TestStringToBytes(t *testing.T) {
 	str := "test string"
 	bytes := StringToBytes(str)
-	
+
 	if len(bytes) != len(str) {
 		t.Errorf("StringToBytes length = %d, want %d", len(bytes), len(str))
 	}
-	
+
 	for i := 0; i < len(str); i++ {
 		if bytes[i] != str[i] {
 			t.Errorf("StringToBytes[%d] = %v, want %v", i, bytes[i], str[i])
@@ -140,7 +140,7 @@ func TestStringToBytes(t *testing.T) {
 func TestBytesToString(t *testing.T) {
 	bytes := []byte("test bytes")
 	str := BytesToString(bytes)
-	
+
 	if str != "test bytes" {
 		t.Errorf("BytesToString = %q, want %q", str, "test bytes")
 	}
@@ -158,9 +158,9 @@ func TestProcessSliceWithPrefix(t *testing.T) {
 			},
 		},
 	}
-	
+
 	result := Map(input)
-	
+
 	// Check that the array items have properly concatenated prefixes
 	if result["level1.level2.items.0"] != "value1" {
 		t.Errorf("level1.level2.items.0 = %q, want %q", result["level1.level2.items.0"], "value1")
@@ -177,7 +177,7 @@ func BenchmarkKey(b *testing.B) {
 		"Mixed_Case_Key",
 		"very_long_key_with_many_underscores_and_words",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, key := range keys {
@@ -194,7 +194,7 @@ func BenchmarkValue(b *testing.B) {
 		`'single quoted'`,
 		"  \"quoted with spaces\"  ",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, val := range values {
@@ -214,7 +214,7 @@ func BenchmarkMap(b *testing.B) {
 		},
 		"array": []any{1, 2, 3, 4, 5},
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = Map(input)

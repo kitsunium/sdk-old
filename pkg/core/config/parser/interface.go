@@ -10,7 +10,7 @@ import (
 type Parser interface {
 	// Type returns a unique identifier for the parser type (e.g., "json", "yaml").
 	Type() string
-	
+
 	// Load parses configuration and returns a flattened key-value map.
 	// Keys are normalized to lowercase with dots as separators.
 	Load() (map[string]string, error)
@@ -20,7 +20,7 @@ type Parser interface {
 // This interface is implemented by file-based parsers (JSON, YAML, TOML, XML, INI).
 type FileParser interface {
 	Parser
-	
+
 	// LoadReader parses configuration from an io.Reader source.
 	LoadReader(r io.Reader) (map[string]string, error)
 }

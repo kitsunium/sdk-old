@@ -20,16 +20,18 @@ go_library(
 
 go_test(
     name = "kerror_test",
+    size = "small",
+    timeout = "short",
     srcs = [
         "config_test.go",
         "context_test.go",
         "error_test.go",
         "instance_test.go",
         "metrics_test.go",
+        "performance_test.go",
         "registry_test.go",
         "result_test.go",
     ],
     embed = [":kerror"],
-    size = "small",
-    timeout = "short",
+    deps = ["//pkg/kernel/kcache"],
 )

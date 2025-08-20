@@ -286,17 +286,17 @@ func isPowerOf2(n int) bool {
 
 // Convenience functions for common buffer sizes
 
-// Get64K gets a 64KB 
+// Get64K gets a 64KB
 func (p *BufferPool) Get64K() []byte {
 	return p.Get(64 * 1024)
 }
 
-// Get4K gets a 4KB 
+// Get4K gets a 4KB
 func (p *BufferPool) Get4K() []byte {
 	return p.Get(4 * 1024)
 }
 
-// Get1K gets a 1KB 
+// Get1K gets a 1KB
 func (p *BufferPool) Get1K() []byte {
 	return p.Get(1024)
 }

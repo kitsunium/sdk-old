@@ -4,7 +4,7 @@ package parser
 import (
 	"os"
 	"strings"
-	
+
 	"github.com/kitsunium/sdk/pkg/core/config/normalize"
 )
 
@@ -54,15 +54,15 @@ func (a *ARGS) Type() string {
 func (a *ARGS) Load() (map[string]string, error) {
 	args := os.Args
 	start := 0
-	
+
 	if a.SkipFirst && len(args) > 0 {
 		start = 1
 	}
-	
+
 	if start >= len(args) {
 		return make(map[string]string), nil
 	}
-	
+
 	return a.ParseArgs(args[start:])
 }
 
@@ -82,17 +82,17 @@ func (a *ARGS) ParseArgs(args []string) (map[string]string, error) {
 			flagCount++
 		}
 	}
-	
+
 	// Allocate map with exact size to prevent rehashing
 	config := make(map[string]string, flagCount)
-	
+
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		
+
 		if len(arg) == 0 {
 			continue
 		}
-		
+
 		if arg[0] == '-' {
 			if len(arg) > 1 && arg[1] == '-' {
 				arg = arg[2:]
@@ -102,7 +102,7 @@ func (a *ARGS) ParseArgs(args []string) (map[string]string, error) {
 		} else {
 			continue // Skip non-flag arguments
 		}
-		
+
 		eqIdx := strings.IndexByte(arg, '=')
 		if eqIdx != -1 {
 			key := arg[:eqIdx]
@@ -115,7 +115,7 @@ func (a *ARGS) ParseArgs(args []string) (map[string]string, error) {
 			config[normalize.Key(arg)] = "true"
 		}
 	}
-	
+
 	return config, nil
 }
 
@@ -126,18 +126,18 @@ func (a *ARGS) ParseArgs(args []string) (map[string]string, error) {
 // This is useful for CLI tools that require all arguments to be flags.
 func (a *ARGS) ParseArgsStrict(args []string) (map[string]string, error) {
 	config := make(map[string]string, len(args))
-	
+
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		
+
 		if len(arg) == 0 {
 			continue
 		}
-		
+
 		if !strings.HasPrefix(arg, "-") {
 			return nil, ErrARGSInvalid.Newf("expected flag starting with -, got: %s", arg)
 		}
-		
+
 		if arg[0] == '-' {
 			if len(arg) > 1 && arg[1] == '-' {
 				arg = arg[2:]
@@ -145,7 +145,7 @@ func (a *ARGS) ParseArgsStrict(args []string) (map[string]string, error) {
 				arg = arg[1:]
 			}
 		}
-		
+
 		eqIdx := strings.IndexByte(arg, '=')
 		if eqIdx != -1 {
 			key := arg[:eqIdx]
@@ -162,6 +162,6 @@ func (a *ARGS) ParseArgsStrict(args []string) (map[string]string, error) {
 			config[normalize.Key(arg)] = "true"
 		}
 	}
-	
+
 	return config, nil
 }

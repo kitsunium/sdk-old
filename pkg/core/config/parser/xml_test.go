@@ -1,8 +1,8 @@
 package parser
 
 import (
-	"errors"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -30,7 +30,7 @@ func TestXML_NewXML(t *testing.T) {
 	if x1.options.usePool != false {
 		t.Errorf("usePool = %v, want %v", x1.options.usePool, false)
 	}
-	
+
 	// Test with options
 	x2 := NewXML("test.xml", WithBufferSize(4096), WithPool(false))
 	if x2.options.bufferSize != 4096 {
@@ -44,7 +44,7 @@ func TestXML_NewXML(t *testing.T) {
 func TestXML_Load_ValidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	xmlPath := filepath.Join(tmpDir, "test.xml")
-	
+
 	content := `<?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 	<database>
@@ -63,29 +63,29 @@ func TestXML_Load_ValidFile(t *testing.T) {
 		<logs>/var/logs</logs>
 	</paths>
 </configuration>`
-	
+
 	if err := os.WriteFile(xmlPath, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	
+
 	xml := NewXML(xmlPath)
 	result, err := xml.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
-		"configuration.database.host":   "localhost",
-		"configuration.database.port":   "5432",
-		"configuration.database.name":   "testdb",
+		"configuration.database.host":    "localhost",
+		"configuration.database.port":    "5432",
+		"configuration.database.name":    "testdb",
 		"configuration.database.enabled": "true",
-		"configuration.server.host":     "0.0.0.0",
-		"configuration.server.port":     "8080",
-		"configuration.server.timeout":  "30.5",
-		"configuration.paths.data":      "/var/data",
-		"configuration.paths.logs":      "/var/logs",
+		"configuration.server.host":      "0.0.0.0",
+		"configuration.server.port":      "8080",
+		"configuration.server.timeout":   "30.5",
+		"configuration.paths.data":       "/var/data",
+		"configuration.paths.logs":       "/var/logs",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -134,24 +134,24 @@ func TestXML_LoadReader(t *testing.T) {
 		</array>
 	</section2>
 </root>`
-	
+
 	xml := NewXML("")
 	reader := strings.NewReader(content)
 	result, err := xml.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
-		"root.section1.key1":        "value1",
-		"root.section1.key2":        "42",
-		"root.section1.key3":        "true",
+		"root.section1.key1":         "value1",
+		"root.section1.key2":         "42",
+		"root.section1.key3":         "true",
 		"root.section2.nested.inner": "value",
 		"root.section2.array.item.0": "item1",
 		"root.section2.array.item.1": "item2",
 		"root.section2.array.item.2": "item3",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -168,12 +168,12 @@ func TestXML_LoadReader_InvalidXML(t *testing.T) {
 		{"invalid syntax", "<root><>value</root>"},
 		{"invalid characters", "<root><<value>></root>"},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			xml := NewXML("")
 			reader := strings.NewReader(tc.content)
-			
+
 			_, err := xml.LoadReader(reader)
 			if err == nil {
 				t.Error("LoadReader() should error on invalid XML")
@@ -216,34 +216,34 @@ func TestXML_LoadReader_ComplexStructure(t *testing.T) {
 		<item>4</item>
 	</repeated>
 </root>`
-	
+
 	xml := NewXML("")
 	reader := strings.NewReader(content)
 	result, err := xml.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	// Check various elements
 	expected := map[string]string{
-		"root.element":       "text content",
-		"root.element.attr1": "value1",
-		"root.element.attr2": "value2",
-		"root.parent.child.0": "first",
-		"root.parent.child.0.index": "0",
-		"root.parent.child.1": "second",
-		"root.parent.child.2": "third",
-		"root.whitespace":    "trimmed",
-		"root.cdata":         "Some <special> content & symbols",
-		"root.unicode":       "Hello 世界 🌍",
+		"root.element":                          "text content",
+		"root.element.attr1":                    "value1",
+		"root.element.attr2":                    "value2",
+		"root.parent.child.0":                   "first",
+		"root.parent.child.0.index":             "0",
+		"root.parent.child.1":                   "second",
+		"root.parent.child.2":                   "third",
+		"root.whitespace":                       "trimmed",
+		"root.cdata":                            "Some <special> content & symbols",
+		"root.unicode":                          "Hello 世界 🌍",
 		"root.nested.level1.level2.level3.deep": "value",
-		"root.repeated.item.0": "1",
-		"root.repeated.item.1": "2",
-		"root.repeated.item.2": "3",
-		"root.repeated.item.3": "4",
-		"root.repeated.other": "value",
+		"root.repeated.item.0":                  "1",
+		"root.repeated.item.1":                  "2",
+		"root.repeated.item.2":                  "3",
+		"root.repeated.item.3":                  "4",
+		"root.repeated.other":                   "value",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -261,23 +261,23 @@ func TestXML_LoadReader_EmptyAndSelfClosing(t *testing.T) {
 		<empty></empty>
 	</nested>
 </root>`
-	
+
 	xml := NewXML("")
 	reader := strings.NewReader(content)
 	result, err := xml.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	// Empty and self-closing tags should create empty values
 	expected := map[string]string{
-		"root.empty": "",
-		"root.selfclosing": "",
-		"root.withattr": "",
+		"root.empty":         "",
+		"root.selfclosing":   "",
+		"root.withattr":      "",
 		"root.withattr.attr": "val",
-		"root.nested.empty": "",
+		"root.nested.empty":  "",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -288,7 +288,7 @@ func TestXML_LoadReader_EmptyAndSelfClosing(t *testing.T) {
 func TestXML_LoadReader_ErrorReading(t *testing.T) {
 	xml := NewXML("")
 	reader := &xmlErrorReader{err: io.ErrUnexpectedEOF}
-	
+
 	_, err := xml.LoadReader(reader)
 	if err == nil {
 		t.Error("LoadReader() should return error from reader")
@@ -363,39 +363,39 @@ func TestXML_AllTypes(t *testing.T) {
 		</item>
 	</items>
 </root>`
-	
+
 	xml := NewXML("")
 	reader := strings.NewReader(content)
 	result, err := xml.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	// Verify key types are handled
 	checks := map[string]string{
-		"root.string": "Hello World",
-		"root.number": "42",
-		"root.float": "3.14159",
-		"root.boolean": "true",
-		"root.empty": "",
-		"root.selfclosing": "",
-		"root.element.0": "Content",
-		"root.element.0.id": "123",
+		"root.string":          "Hello World",
+		"root.number":          "42",
+		"root.float":           "3.14159",
+		"root.boolean":         "true",
+		"root.empty":           "",
+		"root.selfclosing":     "",
+		"root.element.0":       "Content",
+		"root.element.0.id":    "123",
 		"root.element.0.class": "test",
-		"root.element.1": "Namespaced",
+		"root.element.1":       "Namespaced",
 		"root.deeply.nested.structure.with.many.levels": "value",
-		"root.list.item.0": "First",
-		"root.list.item.1": "Second",
-		"root.list.item.2": "Third",
-		"root.special": "<>&\"'",
-		"root.unicode": "你好世界 🌍 مرحبا",
-		"root.items.item.0.name": "Item 1",
+		"root.list.item.0":        "First",
+		"root.list.item.1":        "Second",
+		"root.list.item.2":        "Third",
+		"root.special":            "<>&\"'",
+		"root.unicode":            "你好世界 🌍 مرحبا",
+		"root.items.item.0.name":  "Item 1",
 		"root.items.item.0.value": "100",
-		"root.items.item.0.type": "A",
-		"root.items.item.1.name": "Item 2",
+		"root.items.item.0.type":  "A",
+		"root.items.item.1.name":  "Item 2",
 		"root.items.item.1.value": "200",
 	}
-	
+
 	for key, expectedValue := range checks {
 		if value, ok := result[key]; !ok {
 			t.Errorf("Key %q not found in result", key)
@@ -420,11 +420,11 @@ func BenchmarkXML_LoadReader_Small(b *testing.B) {
 		<key2>42</key2>
 		<key3>true</key3>
 	</root>`
-	
+
 	xml := NewXML("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		reader := strings.NewReader(content)
 		_, _ = xml.LoadReader(reader)
@@ -443,11 +443,11 @@ func BenchmarkXML_LoadReader_Large(b *testing.B) {
 	}
 	buf.WriteString("</root>")
 	content := buf.String()
-	
+
 	xml := NewXML("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		reader := strings.NewReader(content)
 		_, _ = xml.LoadReader(reader)

@@ -144,9 +144,9 @@ func TestLRU_TTL(t *testing.T) {
 
 func TestLRU_ZeroCapacity(t *testing.T) {
 	c := kcache.NewLRU[string, int](0)
-	
+
 	c.Set("a", 1)
-	
+
 	val, ok := c.Get("a")
 	assert.True(t, ok)
 	assert.Equal(t, 1, val)
@@ -157,10 +157,10 @@ func TestLRU_Stats(t *testing.T) {
 
 	c.Set("a", 1)
 	c.Set("b", 2)
-	
+
 	c.Get("a")
 	c.Get("c")
-	
+
 	c.Set("c", 3)
 
 	stats := c.Stats()
@@ -181,7 +181,7 @@ func TestLRU_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
-				key := (id * numOperations + j) % 200
+				key := (id*numOperations + j) % 200
 				c.Set(key, key*2)
 				c.Get(key)
 				if j%10 == 0 {
@@ -222,13 +222,13 @@ func TestLRU_DifferentTypes(t *testing.T) {
 		}
 
 		c := kcache.NewLRU[string, Person](3)
-		
+
 		p1 := Person{Name: "Alice", Age: 30}
 		p2 := Person{Name: "Bob", Age: 25}
-		
+
 		c.Set("alice", p1)
 		c.Set("bob", p2)
-		
+
 		val, ok := c.Get("alice")
 		assert.True(t, ok)
 		assert.Equal(t, p1, val)
@@ -236,10 +236,10 @@ func TestLRU_DifferentTypes(t *testing.T) {
 
 	t.Run("IntToString", func(t *testing.T) {
 		c := kcache.NewLRU[int, string](3)
-		
+
 		c.Set(1, "one")
 		c.Set(2, "two")
-		
+
 		val, ok := c.Get(1)
 		assert.True(t, ok)
 		assert.Equal(t, "one", val)
@@ -252,17 +252,17 @@ func TestLRU_DifferentTypes(t *testing.T) {
 		}
 
 		c := kcache.NewLRU[Key, interface{}](3)
-		
+
 		k1 := Key{ID: 1, Type: "user"}
 		k2 := Key{ID: 2, Type: "admin"}
-		
+
 		c.Set(k1, "user_data")
 		c.Set(k2, 123)
-		
+
 		val, ok := c.Get(k1)
 		assert.True(t, ok)
 		assert.Equal(t, "user_data", val)
-		
+
 		val, ok = c.Get(k2)
 		assert.True(t, ok)
 		assert.Equal(t, 123, val)
@@ -271,16 +271,16 @@ func TestLRU_DifferentTypes(t *testing.T) {
 
 func TestLRU_MemoryRecycle(t *testing.T) {
 	c := kcache.NewLRU[int, []byte](100)
-	
+
 	data := make([]byte, 1024)
-	
+
 	for i := 0; i < 1000; i++ {
 		c.Set(i, data)
 	}
-	
+
 	runtime.GC()
 	runtime.GC()
-	
+
 	assert.Equal(t, 100, c.Size())
 }
 
@@ -385,7 +385,7 @@ func BenchmarkLRU_ConcurrentMixed(b *testing.B) {
 func TestLRU_Interface(t *testing.T) {
 	var c kcache.Cache[string, int] = kcache.NewLRU[string, int](10)
 	require.NotNil(t, c)
-	
+
 	c.Set("test", 42)
 	val, ok := c.Get("test")
 	assert.True(t, ok)

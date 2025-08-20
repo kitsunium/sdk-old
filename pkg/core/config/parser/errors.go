@@ -19,7 +19,7 @@ var (
 		Code:    1002,
 		Message: "file not found",
 	})
-	
+
 	// ErrReadFailed is returned when a file or reader cannot be read.
 	// This typically occurs due to I/O errors or permission issues.
 	ErrReadFailed = kerror.Define(kerror.KConfig{
@@ -75,7 +75,7 @@ var (
 		Code:    1070,
 		Message: "failed to parse arguments",
 	})
-	
+
 	// ErrARGSInvalid is returned when arguments don't follow expected format.
 	// In strict mode, all arguments must start with - or --.
 	ErrARGSInvalid = kerror.Define(kerror.KConfig{

@@ -30,7 +30,7 @@ func TestJSON_NewJSON(t *testing.T) {
 	if j1.options.usePool != false {
 		t.Errorf("usePool = %v, want %v", j1.options.usePool, false)
 	}
-	
+
 	// Test with options
 	j2 := NewJSON("test.json", WithBufferSize(4096), WithPool(true))
 	if j2.options.bufferSize != 4096 {
@@ -44,7 +44,7 @@ func TestJSON_NewJSON(t *testing.T) {
 func TestJSON_Load_ValidFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	jsonPath := filepath.Join(tmpDir, "test.json")
-	
+
 	content := `{
 		"database": {
 			"host": "localhost",
@@ -56,17 +56,17 @@ func TestJSON_Load_ValidFile(t *testing.T) {
 			"port": 8080
 		}
 	}`
-	
+
 	if err := os.WriteFile(jsonPath, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	
+
 	j := NewJSON(jsonPath)
 	result, err := j.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
 		"database.host": "localhost",
 		"database.port": "5432",
@@ -74,7 +74,7 @@ func TestJSON_Load_ValidFile(t *testing.T) {
 		"server.host":   "0.0.0.0",
 		"server.port":   "8080",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -112,20 +112,20 @@ func TestJSON_LoadReader(t *testing.T) {
 			"key3": "value3"
 		}
 	}`
-	
+
 	j := NewJSON("")
 	reader := strings.NewReader(content)
 	result, err := j.LoadReader(reader)
 	if err != nil {
 		t.Fatalf("LoadReader() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
 		"key1":        "value1",
 		"key2":        "value2",
 		"nested.key3": "value3",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q, want %q", key, value, expectedValue)
@@ -136,7 +136,7 @@ func TestJSON_LoadReader(t *testing.T) {
 func TestJSON_LoadReader_Error(t *testing.T) {
 	j := NewJSON("")
 	reader := &jsonErrorReader{err: io.ErrUnexpectedEOF}
-	
+
 	_, err := j.LoadReader(reader)
 	if err == nil {
 		t.Error("LoadReader() should return error from reader")
@@ -173,35 +173,35 @@ func TestJSON_LoadBytes_AllTypes(t *testing.T) {
 			{"id": 2, "name": "second"}
 		]
 	}`)
-	
+
 	// Also test with a custom decoder that might produce int64 or json.Number
 	// This simulates edge cases in JSON parsing
-	
+
 	j := NewJSON("")
 	result, err := j.LoadBytes(content)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	expected := map[string]string{
-		"string":                    "value",
-		"int":                       "42",
-		"float":                     "3.14",
-		"bool.true":                 "true",
-		"bool.false":                "false",
-		"null":                      "",
-		"array.0":                   "item1",
-		"array.1":                   "item2",
-		"array.2":                   "3",
-		"array.3":                   "true",
-		"array.4":                   "",
-		"nested.deep.value":         "nested_value",
-		"array.of.objects.0.id":     "1",
-		"array.of.objects.0.name":   "first",
-		"array.of.objects.1.id":     "2",
-		"array.of.objects.1.name":   "second",
+		"string":                  "value",
+		"int":                     "42",
+		"float":                   "3.14",
+		"bool.true":               "true",
+		"bool.false":              "false",
+		"null":                    "",
+		"array.0":                 "item1",
+		"array.1":                 "item2",
+		"array.2":                 "3",
+		"array.3":                 "true",
+		"array.4":                 "",
+		"nested.deep.value":       "nested_value",
+		"array.of.objects.0.id":   "1",
+		"array.of.objects.0.name": "first",
+		"array.of.objects.1.id":   "2",
+		"array.of.objects.1.name": "second",
 	}
-	
+
 	for key, expectedValue := range expected {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -219,7 +219,7 @@ func TestJSON_LoadBytes_InvalidJSON(t *testing.T) {
 		{"incomplete", []byte(`{"key": `)},
 		{"trailing comma", []byte(`{"key": "value",}`)},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			j := NewJSON("")
@@ -241,18 +241,18 @@ func TestJSON_LoadBytes_EdgeCases(t *testing.T) {
 		expected map[string]string
 	}{
 		{
-			name:    "empty object",
-			content: []byte(`{}`),
+			name:     "empty object",
+			content:  []byte(`{}`),
 			expected: map[string]string{},
 		},
 		{
-			name:    "empty array",
-			content: []byte(`{"array": []}`),
+			name:     "empty array",
+			content:  []byte(`{"array": []}`),
 			expected: map[string]string{},
 		},
 		{
-			name:    "nested empty objects",
-			content: []byte(`{"a": {}, "b": {"c": {}}}`),
+			name:     "nested empty objects",
+			content:  []byte(`{"a": {}, "b": {"c": {}}}`),
 			expected: map[string]string{},
 		},
 		{
@@ -260,7 +260,7 @@ func TestJSON_LoadBytes_EdgeCases(t *testing.T) {
 			content: []byte(`{"emoji": "😀", "chinese": "你好", "arabic": "مرحبا"}`),
 			expected: map[string]string{
 				"emoji":   "😀",
-				"chinese": "你好", 
+				"chinese": "你好",
 				"arabic":  "مرحبا",
 			},
 		},
@@ -268,7 +268,7 @@ func TestJSON_LoadBytes_EdgeCases(t *testing.T) {
 			name:    "special characters",
 			content: []byte(`{"quotes": "\"quoted\"", "newline": "line1\nline2", "tab": "tab\there"}`),
 			expected: map[string]string{
-				"quotes":  "quoted",  // normalize.Value strips quotes
+				"quotes":  "quoted", // normalize.Value strips quotes
 				"newline": "line1\nline2",
 				"tab":     "tab\there",
 			},
@@ -285,7 +285,7 @@ func TestJSON_LoadBytes_EdgeCases(t *testing.T) {
 			name:    "scientific notation",
 			content: []byte(`{"sci1": 1.23e10, "sci2": 1.23e-10}`),
 			expected: map[string]string{
-				"sci1": "12300000000",  // strconv.FormatFloat converts to standard notation
+				"sci1": "12300000000", // strconv.FormatFloat converts to standard notation
 				"sci2": "1.23e-10",
 			},
 		},
@@ -301,7 +301,7 @@ func TestJSON_LoadBytes_EdgeCases(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			j := NewJSON("")
@@ -309,11 +309,11 @@ func TestJSON_LoadBytes_EdgeCases(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadBytes() error = %v", err)
 			}
-			
+
 			if len(result) != len(tc.expected) {
 				t.Errorf("Result has %d items, want %d", len(result), len(tc.expected))
 			}
-			
+
 			for key, expectedValue := range tc.expected {
 				if value, ok := result[key]; !ok || value != expectedValue {
 					t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -326,13 +326,13 @@ func TestJSON_LoadBytes_EdgeCases(t *testing.T) {
 func TestJSON_LoadBytes_SmallSize(t *testing.T) {
 	// Test with very small JSON to trigger the minimum size allocation
 	content := []byte(`{"a": 1}`)
-	
+
 	j := NewJSON("")
 	result, err := j.LoadBytes(content)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	if result["a"] != "1" {
 		t.Errorf("a = %q, want %q", result["a"], "1")
 	}
@@ -356,7 +356,7 @@ func TestJSON_NormalizeAnyValue(t *testing.T) {
 		{"array", []int{1, 2, 3}, "[1 2 3]"},
 		{"map", map[string]int{"a": 1}, "map[a:1]"},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := normalizeAnyValue(tc.input)
@@ -371,7 +371,7 @@ func TestJSON_LoadBytes_DefaultCase(t *testing.T) {
 	// Test to ensure the default case works (though it shouldn't be hit in normal operation)
 	// This test ensures our defensive programming is tested
 	j := NewJSON("")
-	
+
 	// Test with complex nested arrays that might contain unexpected types
 	content := []byte(`{
 		"arrays": [
@@ -381,12 +381,12 @@ func TestJSON_LoadBytes_DefaultCase(t *testing.T) {
 			[{"nested": "object"}, {"another": "one"}]
 		]
 	}`)
-	
+
 	result, err := j.LoadBytes(content)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	// Verify we handle nested arrays correctly
 	// Note: nested arrays become strings when encountered in normalizeAnyValue
 	if result["arrays.0"] != "[1 2 3]" {
@@ -413,18 +413,18 @@ func TestJSON_ComplexNesting(t *testing.T) {
 			} `json:"level2"`
 		} `json:"level1"`
 	}
-	
+
 	data := DeepStruct{}
 	data.Level1.Level2.Level3.Level4.Value = "deep"
-	
+
 	jsonBytes, _ := json.Marshal(data)
-	
+
 	j := NewJSON("")
 	result, err := j.LoadBytes(jsonBytes)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	expectedKey := "level1.level2.level3.level4.value"
 	if result[expectedKey] != "deep" {
 		t.Errorf("%s = %q, want %q", expectedKey, result[expectedKey], "deep")
@@ -441,15 +441,15 @@ func TestJSON_LargeDocument(t *testing.T) {
 		}
 		data[fmt.Sprintf("section_%d", i)] = section
 	}
-	
+
 	jsonBytes, _ := json.Marshal(data)
-	
+
 	j := NewJSON("")
 	result, err := j.LoadBytes(jsonBytes)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	// Check a few samples
 	if result["section.0.key.0"] != "value_0_0" {
 		t.Errorf("section.0.key.0 = %q, want %q", result["section.0.key.0"], "value_0_0")
@@ -540,75 +540,75 @@ func TestJSON_LoadBytes_ExhaustiveTypes(t *testing.T) {
 			"special-chars!@#$": "special"
 		}
 	}`)
-	
+
 	j := NewJSON("")
 	result, err := j.LoadBytes(content)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	// Test a comprehensive set of values
 	tests := map[string]string{
 		// Basic types
-		"string":           "hello",
-		"number.int":       "42",
-		"number.float":     "3.14159",
-		"number.negative":  "-123",
-		"number.zero":      "0",
+		"string":            "hello",
+		"number.int":        "42",
+		"number.float":      "3.14159",
+		"number.negative":   "-123",
+		"number.zero":       "0",
 		"number.scientific": "12300000000",
-		"bool.true":        "true",
-		"bool.false":       "false",
-		"null.value":       "",
-		"empty.string":     "",
-		"unicode.string":   "Hello 世界 🌍 مرحبا",
-		
+		"bool.true":         "true",
+		"bool.false":        "false",
+		"null.value":        "",
+		"empty.string":      "",
+		"unicode.string":    "Hello 世界 🌍 مرحبا",
+
 		// Nested objects
-		"object.simple.key":                     "value",
+		"object.simple.key":                       "value",
 		"object.nested.level1.level2.level3.deep": "value",
-		
+
 		// Arrays
-		"array.strings.0":   "a",
-		"array.strings.1":   "b",
-		"array.numbers.0":   "1",
-		"array.numbers.1":   "2.5",
-		"array.numbers.2":   "-3",
-		"array.bools.0":     "true",
-		"array.bools.1":     "false",
-		"array.nulls.0":     "",
-		"array.mixed.0":     "string",
-		"array.mixed.1":     "123",
-		"array.mixed.2":     "true",
-		"array.mixed.3":     "",
+		"array.strings.0":      "a",
+		"array.strings.1":      "b",
+		"array.numbers.0":      "1",
+		"array.numbers.1":      "2.5",
+		"array.numbers.2":      "-3",
+		"array.bools.0":        "true",
+		"array.bools.1":        "false",
+		"array.nulls.0":        "",
+		"array.mixed.0":        "string",
+		"array.mixed.1":        "123",
+		"array.mixed.2":        "true",
+		"array.mixed.3":        "",
 		"array.mixed.4.nested": "object",
-		
+
 		// Arrays of arrays (become strings)
 		"array.of.arrays.0": "[1 2 3]",
 		"array.of.arrays.1": "[a b c]",
 		"array.of.arrays.2": "[true false]",
 		"array.of.arrays.3": "[<nil>]",
 		"array.of.arrays.4": "[[1 2] [3 4]]",
-		
+
 		// Arrays of objects
-		"array.of.objects.0.id":   "1",
-		"array.of.objects.0.name": "first",
-		"array.of.objects.1.id":   "2",
+		"array.of.objects.0.id":         "1",
+		"array.of.objects.0.name":       "first",
+		"array.of.objects.1.id":         "2",
 		"array.of.objects.1.nested.key": "value",
-		
+
 		// Complex nesting
-		"complex.nesting.array.in.object.0": "1",
-		"complex.nesting.array.in.object.1": "2",
+		"complex.nesting.array.in.object.0":       "1",
+		"complex.nesting.array.in.object.1":       "2",
 		"complex.nesting.array.in.object.2.key.0": "true",
 		"complex.nesting.array.in.object.2.key.1": "false",
 		"complex.nesting.array.in.object.2.key.2": "",
-		
+
 		// Edge cases
-		"edge.cases.very.long.number":  "9223372036854775807",
-		"edge.cases.very.small.number": "1e-12",
+		"edge.cases.very.long.number":     "9223372036854775807",
+		"edge.cases.very.small.number":    "1e-12",
 		"edge.cases.null.in.object.value": "",
-		"edge.cases.unicode.key.名前":    "value",
-		"edge.cases.special-chars!@#$":  "special",
+		"edge.cases.unicode.key.名前":       "value",
+		"edge.cases.special-chars!@#$":    "special",
 	}
-	
+
 	for key, expected := range tests {
 		if actual, exists := result[key]; !exists {
 			t.Errorf("Key %q not found in result", key)
@@ -616,7 +616,7 @@ func TestJSON_LoadBytes_ExhaustiveTypes(t *testing.T) {
 			t.Errorf("Key %q = %q, want %q", key, actual, expected)
 		}
 	}
-	
+
 	// Verify we handle all types
 	if len(result) < 50 {
 		t.Errorf("Expected at least 50 keys, got %d", len(result))
@@ -650,25 +650,25 @@ func TestJSON_RealWorldExample(t *testing.T) {
 			}
 		}
 	}`)
-	
+
 	j := NewJSON("")
 	result, err := j.LoadBytes(content)
 	if err != nil {
 		t.Fatalf("LoadBytes() error = %v", err)
 	}
-	
+
 	checks := map[string]string{
-		"name":                     "myapp",
-		"version":                  "1.0.0",
-		"dependencies.express":     "^4.17.1",
-		"scripts.start":            "node index.js",
-		"author.email":             "john@example.com",
-		"keywords.0":               "web",
-		"keywords.2":               "rest",
-		"config.port":              "3000",
-		"config.database.name":     "mydb",
+		"name":                 "myapp",
+		"version":              "1.0.0",
+		"dependencies.express": "^4.17.1",
+		"scripts.start":        "node index.js",
+		"author.email":         "john@example.com",
+		"keywords.0":           "web",
+		"keywords.2":           "rest",
+		"config.port":          "3000",
+		"config.database.name": "mydb",
 	}
-	
+
 	for key, expectedValue := range checks {
 		if value, ok := result[key]; !ok || value != expectedValue {
 			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
@@ -684,11 +684,11 @@ func BenchmarkJSON_LoadBytes_Small(b *testing.B) {
 			"key3": true
 		}
 	}`)
-	
+
 	j := NewJSON("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = j.LoadBytes(content)
 	}
@@ -704,11 +704,11 @@ func BenchmarkJSON_LoadBytes_Medium(b *testing.B) {
 		data[fmt.Sprintf("section_%d", i)] = section
 	}
 	content, _ := json.Marshal(data)
-	
+
 	j := NewJSON("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = j.LoadBytes(content)
 	}
@@ -724,11 +724,11 @@ func BenchmarkJSON_LoadBytes_Large(b *testing.B) {
 		data[fmt.Sprintf("section_%d", i)] = section
 	}
 	content, _ := json.Marshal(data)
-	
+
 	j := NewJSON("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, _ = j.LoadBytes(content)
 	}
@@ -745,11 +745,11 @@ func BenchmarkJSON_LoadReader(b *testing.B) {
 			"port": 8080
 		}
 	}`
-	
+
 	j := NewJSON("")
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		reader := strings.NewReader(content)
 		_, _ = j.LoadReader(reader)

@@ -70,11 +70,11 @@ func TestFromContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := tt.setup()
 			inst, ok := FromContext(ctx)
-			
+
 			if ok != tt.wantInst {
 				t.Errorf("FromContext() ok = %v, want %v", ok, tt.wantInst)
 			}
-			
+
 			if tt.wantNil {
 				if inst != nil {
 					t.Errorf("FromContext() inst = %v, want nil", inst)
@@ -82,7 +82,7 @@ func TestFromContext(t *testing.T) {
 			} else if tt.wantInst && inst == nil {
 				t.Errorf("FromContext() inst = nil, want non-nil")
 			}
-			
+
 			// Clean up
 			if inst != nil {
 				inst.Release()
@@ -136,9 +136,9 @@ func TestToContext(t *testing.T) {
 					tt.inst.Release()
 				}
 			}()
-			
+
 			newCtx := ToContext(tt.ctx, tt.inst)
-			
+
 			// Verify instance can be retrieved
 			retrieved, ok := FromContext(newCtx)
 			if tt.inst != nil {
@@ -153,7 +153,7 @@ func TestToContext(t *testing.T) {
 					t.Errorf("ToContext() stored non-nil for nil instance")
 				}
 			}
-			
+
 			// Verify original context values are preserved
 			if tt.ctx != nil {
 				if val := tt.ctx.Value("key"); val != nil {
@@ -226,7 +226,7 @@ func TestExtractSpanID(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "cancelled context",
+			name: "cancelled context",
 			ctx: func() context.Context {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
@@ -251,41 +251,41 @@ func TestContextIntegration(t *testing.T) {
 	// Test full integration flow
 	err1 := Define(KConfig{Code: 404, Message: "not found"}).New()
 	defer err1.Release()
-	
+
 	// Add to context
 	ctx := ToContext(context.Background(), err1)
-	
+
 	// Retrieve from context
 	retrieved, ok := FromContext(ctx)
 	if !ok {
 		t.Fatal("Failed to retrieve error from context")
 	}
-	
+
 	if retrieved.Code() != 404 {
 		t.Errorf("Retrieved error code = %d, want 404", retrieved.Code())
 	}
-	
+
 	// Test with nested contexts
 	ctx2 := context.WithValue(ctx, "user", "john")
 	retrieved2, ok := FromContext(ctx2)
 	if !ok {
 		t.Fatal("Failed to retrieve error from nested context")
 	}
-	
+
 	if retrieved2 != retrieved {
 		t.Error("Retrieved different instance from nested context")
 	}
-	
+
 	// Test overwriting
 	err2 := Define(KConfig{Code: 500, Message: "internal error"}).New()
 	defer err2.Release()
-	
+
 	ctx3 := ToContext(ctx, err2)
 	retrieved3, ok := FromContext(ctx3)
 	if !ok {
 		t.Fatal("Failed to retrieve overwritten error")
 	}
-	
+
 	if retrieved3.Code() != 500 {
 		t.Errorf("Overwritten error code = %d, want 500", retrieved3.Code())
 	}
@@ -296,9 +296,9 @@ func TestContextConcurrency(t *testing.T) {
 	// Test concurrent access to context
 	err := Define(KConfig{Code: 503}).New()
 	defer err.Release()
-	
+
 	ctx := ToContext(context.Background(), err)
-	
+
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
 		go func() {
@@ -309,7 +309,7 @@ func TestContextConcurrency(t *testing.T) {
 			done <- true
 		}()
 	}
-	
+
 	for i := 0; i < 10; i++ {
 		<-done
 	}
@@ -320,21 +320,19 @@ func TestContextKeyUniqueness(t *testing.T) {
 	// Ensure our context key doesn't conflict
 	type otherKey int
 	const testKey otherKey = 0
-	
+
 	err := Define(KConfig{Code: 400}).New()
 	defer err.Release()
-	
+
 	ctx := context.WithValue(context.Background(), testKey, "test value")
 	ctx = ToContext(ctx, err)
-	
+
 	// Both values should be retrievable
 	if val := ctx.Value(testKey); val != "test value" {
 		t.Error("Context key conflict: lost original value")
 	}
-	
+
 	if inst, ok := FromContext(ctx); !ok || inst == nil {
 		t.Error("Context key conflict: lost error instance")
 	}
 }
-
-
