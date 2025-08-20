@@ -47,3 +47,8 @@ config.yml
 coverage.out
 coverage-html/
 *.coverage
+coverage.html
+
+# Profiling
+*.prof
+*.test
