@@ -1,15 +1,13 @@
-// Package kbuffer provides high-performance, memory-efficient buffer management.
-// It includes optimized buffer types and pooling mechanisms designed for
-// minimal allocations and maximum throughput in concurrent environments.
+// Package kbuffer provides buffer management utilities.
+// It includes buffer types and pooling mechanisms for memory reuse.
 package kbuffer
 
 import (
 	"unsafe"
 )
 
-// Buffer represents a fixed-size byte buffer optimized for performance.
-// It provides zero-allocation operations for common use cases and is designed
-// to work efficiently with the buffer pool for memory reuse.
+// Buffer represents a fixed-size byte buffer.
+// It provides operations for writing and reading data.
 type Buffer struct {
 	b   []byte // Pre-allocated buffer
 	pos int    // Current write position
@@ -63,7 +61,6 @@ func (b *Buffer) Write(p []byte) (int, error) {
 	if pLen > remaining {
 		return 0, ErrBufferOverflow
 	}
-	// Use Go 1.24 optimized copy
 	n := copy(b.b[b.pos:b.pos+pLen], p)
 	b.pos += n
 	return n, nil
@@ -83,7 +80,6 @@ func (b *Buffer) WriteString(s string) (int, error) {
 	if sLen > remaining {
 		return 0, ErrBufferOverflow
 	}
-	// Direct string copy (Go 1.24 optimized)
 	n := copy(b.b[b.pos:], s)
 	b.pos += n
 	return n, nil
@@ -142,7 +138,7 @@ func (b *Buffer) Free() {
 
 // Clear zeroes the buffer content and resets position.
 func (b *Buffer) Clear() {
-	clear(b.b) // Go 1.21+ builtin
+	clear(b.b)
 	b.pos = 0
 }
 
@@ -179,15 +175,14 @@ func (b *Buffer) Reset(buf []byte) {
 	b.pos = 0
 }
 
-// AppendBytes appends bytes efficiently using Go 1.24 optimizations.
+// AppendBytes appends bytes to the buffer.
 //go:inline
 func (b *Buffer) AppendBytes(data ...byte) error {
 	dataLen := len(data)
 	if b.pos+dataLen > b.c {
 		return ErrBufferOverflow
 	}
-	// Direct append pattern (optimized in Go 1.24)
-	for i := range dataLen { // Go 1.22+ range over int
+	for i := range dataLen {
 		b.b[b.pos+i] = data[i]
 	}
 	b.pos += dataLen
@@ -226,7 +221,7 @@ func (b *Buffer) Extend(n int) error {
 // Truncate reduces the buffer to n bytes.
 //go:inline
 func (b *Buffer) Truncate(n int) {
-	b.pos = min(n, b.pos) // Go 1.21+ builtin min
+	b.pos = min(n, b.pos)
 }
 
 // Grow ensures the buffer has at least n bytes available.

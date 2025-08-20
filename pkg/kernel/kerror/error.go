@@ -1,6 +1,5 @@
-// Package kerror provides advanced error management for the Kitsunium SDK.
-// It offers constant error definitions with unique IDs, comprehensive error tracking,
-// and integration with observability tools.
+// Package kerror provides error management for the Kitsunium SDK.
+// It offers constant error definitions with unique IDs and error tracking.
 package kerror
 
 import (

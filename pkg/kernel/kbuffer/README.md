@@ -1,26 +1,24 @@
 # KBuffer Package
 
-High-performance, zero-allocation buffer management package for the Kitsunium SDK kernel.
+Buffer management package for the Kitsunium SDK kernel.
 
 ## Overview
 
-The kbuffer package provides two main components optimized for performance:
+The kbuffer package provides two main components:
 
-1. **Buffer** - A fixed-size byte buffer with zero-allocation operations
-2. **BufferPool** - An intelligent buffer pool with automatic size management
+1. **Buffer** - A fixed-size byte buffer
+2. **BufferPool** - A buffer pool with automatic size management
 
 ## Features
 
-- **Zero allocations** on most operations
-- **Go 1.24 optimizations** with inline directives and builtin functions
-- **Thread-safe** pool operations
-- **Automatic power-of-2 sizing** for optimal memory alignment
-- **Statistics tracking** for monitoring pool efficiency
-- **96.4% test coverage**
+- Thread-safe pool operations
+- Automatic power-of-2 sizing for memory alignment
+- Statistics tracking for monitoring pool usage
+- Buffer reuse through pooling
 
 ## Buffer
 
-A fixed-size buffer optimized for performance with methods for writing, reading, and manipulation.
+A fixed-size buffer with methods for writing, reading, and manipulation.
 
 ### Basic Usage
 
@@ -36,7 +34,7 @@ if err != nil {
     // Handle overflow
 }
 
-// Write string (zero-allocation)
+// Write string
 n, err = buf.WriteString("World!")
 
 // Get content
@@ -56,7 +54,7 @@ buf.Free()
 // Write single byte
 err := buf.WriteByte('A')
 
-// Try write without error (for hot paths)
+// Try write without error
 if buf.TryWrite([]byte("data")) {
     // Success
 }
@@ -64,7 +62,7 @@ if buf.TryWrite([]byte("data")) {
 // Write at specific offset
 n, err := buf.WriteAt([]byte("Go"), 6)
 
-// Append bytes efficiently
+// Append bytes
 err = buf.AppendBytes('H', 'e', 'l', 'l', 'o')
 
 // Get remaining buffer slice
@@ -86,7 +84,7 @@ buf.Reset(newSlice)
 
 ## BufferPool
 
-An intelligent pool that manages buffers of various sizes, automatically rounding to powers of 2 for efficient pooling.
+A pool that manages buffers of various sizes, automatically rounding to powers of 2 for pooling.
 
 ### Basic Usage
 
@@ -109,7 +107,7 @@ pool := kbuffer.NewBufferPool()
 pool.SetMaxSize(1 << 20)      // Max 1MB buffers
 pool.SetClearOnPut(true)      // Clear buffers for security
 
-// Pre-warm pool for better initial performance
+// Pre-warm pool
 sizes := []int{256, 512, 1024, 4096, 8192}
 pool.Prewarm(sizes, 10) // Pre-allocate 10 buffers of each size
 
@@ -150,16 +148,16 @@ fmt.Printf("Allocs: %d\n", stats.Allocs)
 pool.ResetStats()
 ```
 
-## Performance Optimizations
+## Implementation Details
 
-This package uses several Go 1.24 features for maximum performance:
+This package uses several Go features:
 
-- **`//go:inline`** directives on hot path methods
-- **`clear()` builtin** for efficient slice zeroing
-- **`min()` builtin** for comparisons
-- **Range over integers** for loops
-- **`unsafe.String()`** for zero-allocation string conversions
-- **`sync.Map`** for lock-free pool access
+- `//go:inline` directives on frequently called methods
+- `clear()` builtin for slice zeroing
+- `min()` builtin for comparisons
+- Range over integers for loops
+- `unsafe.String()` for string conversions
+- `sync.Map` for concurrent pool access
 
 ## Example: HTTP Response Buffer
 
@@ -215,8 +213,8 @@ func processData(input []byte) ([]byte, error) {
 2. **Use appropriate sizes** - the pool will round up to the next power of 2
 3. **Pre-warm pools** in init() for frequently used sizes
 4. **Use TryWrite** in hot paths to avoid error checking overhead
-5. **Disable clearing** (`SetClearOnPut(false)`) for maximum performance when security isn't critical
-6. **Monitor statistics** in production to tune pool configuration
+5. **Configure clearing** (`SetClearOnPut()`) based on security requirements
+6. **Monitor statistics** to tune pool configuration
 
 ## Testing
 
@@ -224,7 +222,7 @@ func processData(input []byte) ([]byte, error) {
 # Run tests
 go test ./pkg/kernel/kbuffer/...
 
-# Check coverage (96.4%)
+# Check coverage
 go test -cover ./pkg/kernel/kbuffer/...
 
 # Generate coverage report

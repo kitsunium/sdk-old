@@ -14,10 +14,9 @@ const (
 	MaxBitSize = 20
 )
 
-// BufferPool is an optimized buffer pool that supports any size.
-// It automatically rounds up to the nearest power of 2 for efficient pooling.
-// The pool uses sync.Map for lock-free read operations and includes comprehensive
-// statistics tracking for performance monitoring.
+// BufferPool is a buffer pool that supports any size.
+// It automatically rounds up to the nearest power of 2 for pooling.
+// The pool uses sync.Map and includes statistics tracking.
 type BufferPool struct {
 	pools      sync.Map // Use sync.Map for lock-free reads
 	stats      PoolStats
@@ -25,8 +24,8 @@ type BufferPool struct {
 	clearOnPut bool // Whether to clear buffers on return
 }
 
-// PoolStats tracks pool usage statistics for performance monitoring and optimization.
-// All fields are atomically updated to avoid locking overhead.
+// PoolStats tracks pool usage statistics.
+// All fields are atomically updated.
 type PoolStats struct {
 	Gets      int64
 	Puts      int64
@@ -41,7 +40,6 @@ var GlobalPool = initGlobalPool()
 
 func initGlobalPool() *BufferPool {
 	pool := NewBufferPool()
-	// Disable clearing for performance (can be re-enabled if security is needed)
 	pool.SetClearOnPut(false)
 	// Pre-warm with common sizes
 	pool.Prewarm([]int{256, 512, 1024, 4096, 8192, 16384, 65536}, 10)
@@ -51,8 +49,8 @@ func initGlobalPool() *BufferPool {
 // NewBufferPool creates a new buffer pool.
 func NewBufferPool() *BufferPool {
 	p := &BufferPool{
-		maxSize:    1 << MaxBitSize, // Max 1MB by default
-		clearOnPut: false,            // Disabled by default for performance
+		maxSize:    1 << MaxBitSize,
+		clearOnPut: false,
 	}
 	// Pre-allocate pools for common sizes
 	p.initializePools()
@@ -65,14 +63,14 @@ func (p *BufferPool) initializePools() {
 	commonSizes := []int{256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536}
 	for _, size := range commonSizes {
 		pool := &sync.Pool{
-			New: nil, // Don't allocate in pool.New
+			New: nil,
 		}
 		p.pools.Store(size, pool)
 	}
 }
 
 // Get retrieves a buffer of at least the requested size.
-// It automatically rounds up to the nearest power of 2 for pooling efficiency.
+// It automatically rounds up to the nearest power of 2.
 func (p *BufferPool) Get(size int) []byte {
 	atomic.AddInt64(&p.stats.Gets, 1)
 
@@ -167,7 +165,7 @@ func (p *BufferPool) Put(buf []byte) {
 
 	// Clear the buffer if enabled (for security)
 	if p.clearOnPut {
-		clear(buf) // Use builtin clear function (Go 1.21+)
+		clear(buf)
 	}
 
 	// Reset slice to full capacity
@@ -234,7 +232,7 @@ func (p *BufferPool) SetClearOnPut(clear bool) {
 	p.clearOnPut = clear
 }
 
-// Prewarm pre-allocates buffers of common sizes to improve initial performance.
+// Prewarm pre-allocates buffers of common sizes.
 func (p *BufferPool) Prewarm(sizes []int, count int) {
 	for _, size := range sizes {
 		poolSize := nextPowerOf2(size)
@@ -258,7 +256,7 @@ func (p *BufferPool) getPool(size int) *sync.Pool {
 
 	// Create new pool if not exists
 	pool := &sync.Pool{
-		New: nil, // Don't allocate in pool.New to avoid hidden allocations
+		New: nil,
 	}
 
 	// Store and return (LoadOrStore for race safety)
@@ -272,13 +270,12 @@ func nextPowerOf2(n int) int {
 		return 1
 	}
 	if n > (1 << 30) {
-		return 1 << 30 // Cap at 1GB
+		return 1 << 30
 	}
 	// Fast path for already power of 2
 	if n&(n-1) == 0 {
 		return n
 	}
-	// Use CPU's CLZ instruction via bits.Len
 	return 1 << bits.Len(uint(n-1))
 }
 

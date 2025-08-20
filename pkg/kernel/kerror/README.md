@@ -1,9 +1,6 @@
-# KError - Advanced Error Management for Go
+# KError - Error Management for Go
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/kitsunium/sdk/pkg/kernel/kerror.svg)](https://pkg.go.dev/github.com/kitsunium/sdk/pkg/kernel/kerror)
-[![Coverage](https://img.shields.io/badge/coverage-97.3%25-brightgreen.svg)](./coverage.html)
-
-A high-performance, production-ready error management package for Go with zero-allocation design, comprehensive metrics, and distributed tracing support.
+Error management package for Go with metrics and distributed tracing support.
 
 ## Table of Contents
 
@@ -24,15 +21,15 @@ A high-performance, production-ready error management package for Go with zero-a
 
 ## Features
 
-- **Zero-Allocation Design**: Object pooling and efficient string building minimize GC pressure
-- **Type-Safe Generics**: Generic `Result[T]` type for better error handling
-- **Comprehensive Metrics**: Built-in metrics collection with custom collector support
-- **Stack Trace Capture**: Optional stack trace capture for debugging
-- **Context Propagation**: Automatic trace and span ID extraction from context
-- **Thread-Safe Operations**: All operations are concurrent-safe
-- **Flexible Configuration**: Extensive configuration options with sensible defaults
-- **JSON Serialization**: Built-in JSON marshal/unmarshal support
-- **Error Registry**: Global registry for error management and lookup
+- Object pooling for instance reuse
+- Generic `Result[T]` type for error handling
+- Metrics collection with custom collector support
+- Optional stack trace capture for debugging
+- Automatic trace and span ID extraction from context
+- Thread-safe operations
+- Configuration options with defaults
+- JSON marshal/unmarshal support
+- Global registry for error management and lookup
 
 ## Installation
 
@@ -413,27 +410,15 @@ var inst kerror.Instance
 err := json.Unmarshal(data, &inst)
 ```
 
-## Performance
+## Implementation Details
 
-The package is designed for high performance with zero allocations in hot paths:
+The package uses several techniques for efficiency:
 
-- **Object Pooling**: Instances are pooled to reduce GC pressure
-- **Zero-Allocation**: String building uses pools to avoid allocations
-- **Lock-Free Operations**: Uses `sync.Map` for concurrent access
-- **Lazy Initialization**: Stack traces captured only when enabled
-- **Cached Lookups**: Package names are cached for performance
-
-### Benchmarks
-
-```bash
-go test -bench=. -benchmem
-
-BenchmarkNew-8              10000000    120 ns/op    0 B/op    0 allocs/op
-BenchmarkWithTag-8           5000000    250 ns/op    0 B/op    0 allocs/op
-BenchmarkWithDetail-8        5000000    280 ns/op    0 B/op    0 allocs/op
-BenchmarkError-8             3000000    450 ns/op    0 B/op    0 allocs/op
-BenchmarkRelease-8         20000000     80 ns/op    0 B/op    0 allocs/op
-```
+- Object pooling to reuse instances
+- String building with pools
+- `sync.Map` for concurrent access
+- Stack traces captured only when enabled
+- Package names are cached
 
 ## Best Practices
 
@@ -493,8 +478,6 @@ All operations in this package are thread-safe:
 - Registry queries
 
 ## Testing
-
-The package maintains 97.3% test coverage with comprehensive test suites.
 
 ```bash
 # Run tests
