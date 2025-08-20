@@ -111,6 +111,24 @@ func fastFloat64ToString(f float64) string {
 	return strconv.FormatFloat(f, 'g', -1, 64)
 }
 
+// normalizeJSONNumber converts json.Number to string.
+// Tries to preserve exact representation for integers,
+// and converts scientific notation appropriately.
+func normalizeJSONNumber(n json.Number) string {
+	// First try as int64 to preserve exact integers
+	if i, err := n.Int64(); err == nil {
+		return strconv.FormatInt(i, 10)
+	}
+
+	// Then try as float64
+	if f, err := n.Float64(); err == nil {
+		return fastFloat64ToString(f)
+	}
+
+	// Fallback to string representation
+	return string(n)
+}
+
 // LoadBytes parses JSON from a byte slice.
 //
 // This method:
@@ -127,13 +145,31 @@ func fastFloat64ToString(f float64) string {
 func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
 	var config map[string]any
 
-	// Use json.Unmarshal which is faster than Decoder
-	if err := json.Unmarshal(data, &config); err != nil {
+	// Try standard unmarshal first (faster path)
+	if err := json.Unmarshal(data, &config); err == nil {
+		// Fast path succeeded, process the result
+		result, processErr := j.processConfig(config, len(data))
+		if processErr == nil {
+			return result, nil
+		}
+		// If processing fails due to precision issues, fall back to UseNumber
+	}
+
+	// Fallback: Use decoder with UseNumber to preserve large integers
+	config = nil // Reset config
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&config); err != nil {
 		return nil, ErrJSONParse.Wrap(err).WithDetail("size", len(data))
 	}
 
+	return j.processConfig(config, len(data))
+}
+
+// processConfig converts the parsed JSON config to a flat string map
+func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]string, error) {
 	// Better size estimation: ~1 key per 30 bytes of JSON
-	estimatedSize := max(len(data)/30, 16)
+	estimatedSize := max(dataSize/30, 16)
 	result := make(map[string]string, estimatedSize)
 
 	// Pre-allocate string builder for key construction
@@ -189,6 +225,8 @@ func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
 						result[normalize.Key(itemKey)] = normalizeAnyValue(item)
 					}
 				}
+			case json.Number:
+				result[normalize.Key(fullKey)] = normalizeJSONNumber(v)
 			case float64:
 				result[normalize.Key(fullKey)] = fastFloat64ToString(v)
 			case bool:
@@ -215,6 +253,8 @@ func normalizeAnyValue(v any) string {
 	switch val := v.(type) {
 	case string:
 		return normalize.Value(val)
+	case json.Number:
+		return normalizeJSONNumber(val)
 	case float64:
 		return fastFloat64ToString(val)
 	case bool:
@@ -226,8 +266,6 @@ func normalizeAnyValue(v any) string {
 		return ""
 	case int64:
 		return strconv.FormatInt(val, 10)
-	case json.Number:
-		return string(val)
 	default:
 		// This handles any unexpected types
 		return normalize.Value(fmt.Sprint(val))

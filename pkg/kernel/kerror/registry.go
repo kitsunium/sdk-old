@@ -21,12 +21,18 @@ var (
 	cacheInit sync.Once
 )
 
+// init ensures caches are initialized at package load time
+func init() {
+	initCaches()
+}
+
 // initCaches initializes all caches with optimal settings
 func initCaches() {
 	cacheInit.Do(func() {
-		// Use AtomicCache for read-heavy workloads
+		// Use AtomicCache for read-heavy workloads with pre-allocation
 		registryByID = kcache.NewAtomicCache[uint32, *KError](10000)
-		registryByPkgCode = kcache.NewShardedLRU[string, kcache.Cache[int, *KError]](1000, 64)
+		// Use more shards for better concurrency (128 instead of 64)
+		registryByPkgCode = kcache.NewShardedLRU[string, kcache.Cache[int, *KError]](1000, 128)
 		callerPackageCache = kcache.NewAtomicCache[uintptr, string](1000)
 	})
 }

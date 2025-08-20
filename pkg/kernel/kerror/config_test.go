@@ -208,8 +208,8 @@ func TestInitializePools(t *testing.T) {
 }
 
 func TestConfigureOnce(t *testing.T) {
-	// Reset configOnce for testing
-	configOnce = sync.Once{}
+	// Test that Configure updates config
+	// (configOnce was removed, so Configure can be called multiple times)
 
 	// First call should execute
 	Configure(GlobalConfig{

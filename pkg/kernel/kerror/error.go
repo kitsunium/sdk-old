@@ -39,12 +39,14 @@ var (
 
 // getCallerPackage returns the package name of the caller with caching.
 func getCallerPackage() string {
-	initCaches()
 	// Skip 2 frames: getCallerPackage and Define
 	pc, _, _, ok := runtime.Caller(2)
 	if !ok {
 		return GetConfig().DefaultPackage
 	}
+
+	// Ensure caches are initialized
+	initCaches()
 
 	// Check cache first
 	if cached, found := callerPackageCache.Get(pc); found {
@@ -83,6 +85,9 @@ func getCallerPackage() string {
 
 // Define creates a new error constant for a package using a config struct
 func Define(config KConfig) KError {
+	// Initialize caches once at the beginning
+	initCaches()
+
 	// Auto-detect package if not provided
 	pkg := config.Package
 	if pkg == "" {
@@ -92,8 +97,6 @@ func Define(config KConfig) KError {
 	// Lock for atomic operations on registry
 	defineMu.Lock()
 	defer defineMu.Unlock()
-
-	initCaches()
 	// Get or create package cache
 	var pkgCache kcache.Cache[int, *KError]
 	if existing, ok := registryByPkgCode.Get(pkg); ok {

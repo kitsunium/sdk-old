@@ -1,6 +1,7 @@
 package kcache
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -316,12 +317,16 @@ func (c *ShardedLRU[K, V]) incrementEvictions(s *shard[K, V]) {
 
 // hashKey computes a hash for different key types.
 // It uses specific hash functions for common types and falls back
-// to pointer-based hashing for unknown types.
+// to string representation for complex types.
 func hashKey[K comparable](key K) uint32 {
 	switch k := any(key).(type) {
 	case string:
 		return fnvHash([]byte(k))
 	case int:
+		return uint32(k)
+	case int8:
+		return uint32(k)
+	case int16:
 		return uint32(k)
 	case int32:
 		return uint32(k)
@@ -329,13 +334,31 @@ func hashKey[K comparable](key K) uint32 {
 		return uint32(k ^ (k >> 32))
 	case uint:
 		return uint32(k)
+	case uint8:
+		return uint32(k)
+	case uint16:
+		return uint32(k)
 	case uint32:
 		return k
 	case uint64:
 		return uint32(k ^ (k >> 32))
+	case float32:
+		// Convert float32 bits to uint32 for hashing
+		return *(*uint32)(unsafe.Pointer(&k))
+	case float64:
+		// Convert float64 bits to uint64 then to uint32
+		bits := *(*uint64)(unsafe.Pointer(&k))
+		return uint32(bits ^ (bits >> 32))
+	case bool:
+		if k {
+			return 1
+		}
+		return 0
 	default:
-		// Fallback: use Go's built-in hash
-		return uint32(uintptr(unsafe.Pointer(&key)))
+		// For structs and other complex types, use fmt.Sprintf
+		// This ensures consistent hashing based on content, not memory address
+		data := fmt.Sprintf("%v", key)
+		return fnvHash([]byte(data))
 	}
 }
 

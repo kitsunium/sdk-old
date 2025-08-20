@@ -2,7 +2,6 @@ package kerror
 
 import (
 	"sync"
-	"sync/atomic"
 )
 
 // MetricsCollector interface for pluggable metrics implementations
@@ -21,10 +20,7 @@ type SimpleMetrics struct {
 }
 
 // Global metrics instance
-var (
-	metricsCollector MetricsCollector = NewSimpleMetrics()
-	metricsEnabled   atomic.Bool
-)
+var metricsCollector MetricsCollector = NewSimpleMetrics()
 
 // NewSimpleMetrics creates a new simple metrics collector
 func NewSimpleMetrics() *SimpleMetrics {

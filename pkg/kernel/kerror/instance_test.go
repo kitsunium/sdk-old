@@ -160,7 +160,7 @@ func TestWrap(t *testing.T) {
 
 			defer inst.Release()
 
-			if inst.cause != tt.cause {
+			if !errors.Is(inst.cause, tt.cause) {
 				t.Error("cause not properly set")
 			}
 
@@ -187,7 +187,7 @@ func TestWrapf(t *testing.T) {
 		t.Errorf("message = %s, want service database unavailable", inst.message)
 	}
 
-	if inst.cause != cause {
+	if !errors.Is(inst.cause, cause) {
 		t.Error("cause not properly set")
 	}
 
@@ -271,7 +271,8 @@ func TestWithContext(t *testing.T) {
 	inst := err.New()
 	defer inst.Release()
 
-	ctx := context.WithValue(context.Background(), "key", "value")
+	type instContextKey string
+	ctx := context.WithValue(context.Background(), instContextKey("key"), "value")
 	inst.WithContext(ctx)
 
 	if inst.context != ctx {
@@ -337,7 +338,7 @@ func TestUnwrap(t *testing.T) {
 	defer inst.Release()
 
 	unwrapped := inst.Unwrap()
-	if unwrapped != cause {
+	if !errors.Is(unwrapped, cause) {
 		t.Error("Unwrap() should return original cause")
 	}
 

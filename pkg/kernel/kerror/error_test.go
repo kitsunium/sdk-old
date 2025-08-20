@@ -474,7 +474,7 @@ func TestCallerPackageCaching(t *testing.T) {
 	}
 
 	// Verify cache has entry
-	pc, _, _, _ := runtime.Caller(1)
+	pc, _, _, _ := runtime.Caller(1) //nolint:dogsled
 	if cached, ok := callerPackageCache.Get(pc); !ok {
 		t.Error("Cache should contain entry")
 	} else if cached == "" {

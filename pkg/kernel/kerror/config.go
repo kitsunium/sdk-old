@@ -1,7 +1,6 @@
 package kerror
 
 import (
-	"sync"
 	"sync/atomic"
 )
 
@@ -33,10 +32,7 @@ var defaultConfig = GlobalConfig{
 	EnableValidation: true,
 }
 
-var (
-	config     atomic.Value // GlobalConfig
-	configOnce sync.Once
-)
+var config atomic.Value // GlobalConfig
 
 func init() {
 	config.Store(defaultConfig)

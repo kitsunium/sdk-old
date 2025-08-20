@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+type testContextKey string
+
 func TestFromContext(t *testing.T) {
 	ClearRegistry()
 	tests := []struct {
@@ -59,7 +61,7 @@ func TestFromContext(t *testing.T) {
 			setup: func() context.Context {
 				err := Define(KConfig{Code: 500}).New()
 				ctx := ToContext(context.Background(), err)
-				return context.WithValue(ctx, "other", "value")
+				return context.WithValue(ctx, testContextKey("other"), "value")
 			},
 			wantInst: true,
 			wantNil:  false,
@@ -110,7 +112,7 @@ func TestToContext(t *testing.T) {
 		},
 		{
 			name: "with valued context",
-			ctx:  context.WithValue(context.Background(), "key", "value"),
+			ctx:  context.WithValue(context.Background(), testContextKey("key"), "value"),
 			inst: Define(KConfig{Code: 401}).New(),
 		},
 		{
@@ -184,7 +186,7 @@ func TestExtractTraceID(t *testing.T) {
 		},
 		{
 			name:     "context with values",
-			ctx:      context.WithValue(context.Background(), "key", "value"),
+			ctx:      context.WithValue(context.Background(), testContextKey("key"), "value"),
 			expected: "",
 		},
 		{
@@ -222,7 +224,7 @@ func TestExtractSpanID(t *testing.T) {
 		},
 		{
 			name:     "context with values",
-			ctx:      context.WithValue(context.Background(), "span", "123"),
+			ctx:      context.WithValue(context.Background(), testContextKey("span"), "123"),
 			expected: "",
 		},
 		{
@@ -266,7 +268,7 @@ func TestContextIntegration(t *testing.T) {
 	}
 
 	// Test with nested contexts
-	ctx2 := context.WithValue(ctx, "user", "john")
+	ctx2 := context.WithValue(ctx, testContextKey("user"), "john")
 	retrieved2, ok := FromContext(ctx2)
 	if !ok {
 		t.Fatal("Failed to retrieve error from nested context")

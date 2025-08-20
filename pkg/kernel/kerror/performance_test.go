@@ -12,14 +12,13 @@ func BenchmarkGetError(b *testing.B) {
 	ClearRegistry()
 	defer ClearRegistry()
 
-	var errors []KError
+	// Pre-register errors for benchmark
 	for i := 0; i < 1000; i++ {
-		err := Define(KConfig{
+		Define(KConfig{
 			Code:    i,
 			Message: fmt.Sprintf("Error %d", i),
 			Package: "benchmark",
 		})
-		errors = append(errors, err)
 	}
 
 	b.ResetTimer()

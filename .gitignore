@@ -51,4 +51,5 @@ coverage.html
 
 # Profiling
 *.prof
-*.test
+*.testpr-review-issues/
+process_reviews*.py
