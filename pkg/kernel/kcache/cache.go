@@ -1,6 +1,5 @@
-// Package cache provides high-performance, thread-safe caching implementations.
-// It includes a generic LRU (Least Recently Used) cache with TTL support,
-// designed for maximum performance with minimal allocations.
+// Package kcache provides thread-safe caching implementations.
+// It includes a generic LRU (Least Recently Used) cache with TTL support.
 package kcache
 
 import (
@@ -9,8 +8,8 @@ import (
 )
 
 // Cache defines the interface for cache implementations.
-// It provides a generic, type-safe interface for storing and retrieving
-// key-value pairs with optional TTL (Time To Live) support.
+// It provides a generic interface for storing and retrieving
+// key-value pairs with optional TTL support.
 //
 // Type parameters:
 //   - K: The type of keys (must be comparable)
@@ -41,8 +40,7 @@ type Cache[K comparable, V any] interface {
 	Has(key K) bool
 }
 
-// Stats holds cache performance statistics.
-// These statistics can be used for monitoring and optimization.
+// Stats holds cache statistics for monitoring.
 type Stats struct {
 	// Hits is the number of successful cache retrievals.
 	Hits   uint64
@@ -63,7 +61,7 @@ type entry[V any] struct {
 }
 
 // LRU implements a Least Recently Used cache with optional TTL support.
-// It is thread-safe and uses a doubly-linked list for O(1) operations.
+// It is thread-safe and uses a doubly-linked list.
 // The cache automatically evicts the least recently used items when capacity is reached.
 //
 // Type parameters:

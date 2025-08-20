@@ -1,27 +1,27 @@
-# Cache Package
+# KCache Package
 
-High-performance, thread-safe caching library for Go with multiple implementations optimized for different use cases.
+Thread-safe caching library for Go with multiple implementations for different use cases.
 
 ## Installation
 
 ```go
-import "github.com/kitsunium/sdk/pkg/kernel/cache"
+import "github.com/kitsunium/sdk/pkg/kernel/kcache"
 ```
 
 ## Features
 
-- 🚀 **Multiple implementations** for different use cases
-- 🔒 **Thread-safe** with optimized locking strategies
-- ⏱️ **TTL support** for automatic expiration
-- 📊 **Built-in statistics** for monitoring
-- 🎯 **Generic types** for type safety
-- 0️⃣ **Zero allocations** on read operations
+- Multiple implementations for different use cases
+- Thread-safe with various locking strategies
+- TTL support for automatic expiration
+- Built-in statistics for monitoring
+- Generic types for type safety
+- Minimal allocations on read operations
 
 ## Cache Implementations
 
 ### 1. LRU Cache
 
-Standard Least Recently Used cache with O(1) operations.
+Standard Least Recently Used cache implementation.
 
 ```go
 // Create an LRU cache with capacity of 1000
@@ -50,7 +50,7 @@ fmt.Printf("Hit rate: %.2f%%\n",
 
 ### 2. Sharded LRU Cache
 
-High-performance cache that reduces lock contention by dividing the cache into independent shards.
+Cache that reduces lock contention by dividing the cache into independent shards.
 
 ```go
 // Create a sharded cache with 10000 capacity and 256 shards
@@ -72,14 +72,14 @@ for i := 0; i < 1000; i++ {
 - Balanced read/write workloads
 - When you need predictable performance under load
 
-**Performance:**
-- 5x faster than standard LRU on 8 cores
-- Linear scalability with CPU cores
-- Minimal lock contention
+**Characteristics:**
+- Reduced lock contention compared to standard LRU
+- Scalability with multiple CPU cores
+- Distributed key storage across shards
 
 ### 3. Atomic Cache
 
-Lock-free cache optimized for read-heavy workloads using RCU (Read-Copy-Update) pattern.
+Lock-free cache for read-heavy workloads using RCU (Read-Copy-Update) pattern.
 
 ```go
 // Create an atomic cache with capacity of 1000
@@ -108,13 +108,13 @@ results := cache.BatchGet([]string{"key1", "key2", "key3"})
 **Best for:**
 - Read-heavy workloads (90%+ reads)
 - Small to medium cache sizes
-- When you need absolute minimum read latency
+- When you need low read latency
 - Scenarios where writes are infrequent
 
 **Features:**
 - Lock-free reads
-- Batch operations for better throughput
-- FastGet for zero-copy reads
+- Batch operations
+- FastGet for pointer access
 
 ## Common Interface
 
@@ -188,7 +188,7 @@ configCache := cache.NewLRU[string, any](100)
 configCache.Set("database.host", "localhost")
 ```
 
-## Performance Guidelines
+## Usage Guidelines
 
 ### Choosing the Right Implementation
 
@@ -238,7 +238,7 @@ Expired entries are lazily removed on access or during eviction.
 - **ShardedLRU**: Memory divided across shards, slightly higher overhead
 - **AtomicCache**: Copy-on-write may temporarily use more memory during updates
 
-All implementations use object pooling to reduce GC pressure.
+Implementations use object pooling where applicable.
 
 ## Integration with Config Package
 

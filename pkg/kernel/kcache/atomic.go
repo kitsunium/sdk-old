@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// AtomicCache is a lock-free cache optimized for read-heavy workloads.
-// It uses atomic operations and RCU (Read-Copy-Update) pattern for maximum performance.
+// AtomicCache is a lock-free cache for read-heavy workloads.
+// It uses atomic operations and RCU (Read-Copy-Update) pattern.
 //
-// Best for:
+// Suitable for:
 //   - Read-heavy workloads (90%+ reads)
 //   - Small to medium sized caches
-//   - When you need absolute minimum latency
+//   - Low latency requirements
 //
 // Type parameters:
 //   - K: The type of keys (must be comparable)  
@@ -282,7 +282,7 @@ func (c *AtomicCache[K, V]) Range(f func(key K, value V) bool) {
 // Ensure AtomicCache implements Cache interface.
 var _ Cache[string, any] = (*AtomicCache[string, any])(nil)
 
-// FastGet is an optimized version that returns a pointer to avoid copying large values.
+// FastGet returns a pointer to avoid copying large values.
 // WARNING: The returned pointer should not be modified as it's shared across goroutines.
 func (c *AtomicCache[K, V]) FastGet(key K) (*V, bool) {
 	data := c.data.Load()
@@ -300,7 +300,7 @@ func (c *AtomicCache[K, V]) FastGet(key K) (*V, bool) {
 	return &entry.value, true
 }
 
-// BatchGet retrieves multiple values in a single operation for better performance.
+// BatchGet retrieves multiple values in a single operation.
 func (c *AtomicCache[K, V]) BatchGet(keys []K) map[K]V {
 	result := make(map[K]V, len(keys))
 	data := c.data.Load()

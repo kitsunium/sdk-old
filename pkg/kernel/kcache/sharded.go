@@ -14,7 +14,7 @@ const (
 	MaxShards = 1024
 )
 
-// ShardedLRU is a high-performance sharded LRU cache that reduces lock contention
+// ShardedLRU is a sharded LRU cache that reduces lock contention
 // by distributing entries across multiple independent LRU caches.
 //
 // Type parameters:
@@ -31,7 +31,7 @@ type shard[K comparable, V any] struct {
 	mu    sync.RWMutex
 }
 
-// FastLRU is an optimized LRU with minimal locking.
+// FastLRU is an LRU implementation with reduced locking.
 type FastLRU[K comparable, V any] struct {
 	capacity int
 	items    map[K]*fastEntry[V]
@@ -256,7 +256,7 @@ func (c *ShardedLRU[K, V]) Stats() Stats {
 }
 
 // getShard returns the shard responsible for the given key.
-// It uses fast bit masking for modulo operation.
+// It uses bit masking for modulo operation.
 func (c *ShardedLRU[K, V]) getShard(key K) *shard[K, V] {
 	hash := c.hashFn(key)
 	return c.shards[hash&c.shardMask]
@@ -315,7 +315,7 @@ func (c *ShardedLRU[K, V]) incrementEvictions(s *shard[K, V]) {
 }
 
 // hashKey computes a hash for different key types.
-// It uses optimized hash functions for common types and falls back
+// It uses specific hash functions for common types and falls back
 // to pointer-based hashing for unknown types.
 func hashKey[K comparable](key K) uint32 {
 	switch k := any(key).(type) {
@@ -339,8 +339,8 @@ func hashKey[K comparable](key K) uint32 {
 	}
 }
 
-// fnvHash implements FNV-1a hash algorithm for fast string hashing.
-// FNV-1a provides good distribution and is faster than cryptographic hashes.
+// fnvHash implements FNV-1a hash algorithm for string hashing.
+// FNV-1a provides good distribution.
 func fnvHash(data []byte) uint32 {
 	const (
 		offset32 = 2166136261
@@ -356,7 +356,7 @@ func fnvHash(data []byte) uint32 {
 
 // nextPowerOf2 rounds up to the next power of 2.
 // For example: 3 -> 4, 5 -> 8, 100 -> 128.
-// This is used to optimize modulo operations using bit masking.
+// This is used for modulo operations using bit masking.
 func nextPowerOf2(n int) int {
 	n--
 	n |= n >> 1
