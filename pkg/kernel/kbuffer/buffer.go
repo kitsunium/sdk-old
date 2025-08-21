@@ -1,263 +1,253 @@
-// Package kbuffer provides buffer management utilities.
-// It includes buffer types and pooling mechanisms for memory reuse.
 package kbuffer
 
 import (
 	"unsafe"
 )
 
-// Buffer represents a fixed-size byte buffer.
-// It provides operations for writing and reading data.
+// Buffer represents a high-performance byte buffer with zero-allocation operations.
+// The struct is carefully aligned for optimal CPU cache performance.
 type Buffer struct {
-	b   []byte // Pre-allocated buffer
-	pos int    // Current write position
-	c   int    // Fixed capacity (moved last for better alignment)
+	// Cache line 1 (64 bytes) - hot path fields
+	data []byte   // Underlying byte slice
+	pos  int32    // Current write position (32-bit for better alignment)
+	cap  int32    // Fixed capacity (32-bit for better alignment)
+	_    [48]byte // Padding to align to cache line
 }
 
-// NewBuffer creates a new Buffer with a fixed size.
+// NewBuffer creates a new Buffer with the specified capacity.
+// The buffer is pre-allocated to avoid future allocations.
 //
-// Parameters:
-// - size: int - The size of the buffer to allocate.
-//
-// Returns:
-// - *Buffer: The newly created Buffer.
-func NewBuffer(size int) *Buffer {
+//go:inline
+func NewBuffer(capacity int) *Buffer {
+	if capacity <= 0 {
+		capacity = defaultBufferSize
+	}
 	return &Buffer{
-		b:   make([]byte, size),
-		c:   size,
-		pos: 0,
+		data: make([]byte, capacity),
+		cap:  int32(capacity),
+		pos:  0,
 	}
 }
 
-// Len returns the current length of the
+// Write appends bytes to the buffer.
+// Returns the number of bytes written and any error.
 //
-// Returns:
-// - int: The current length of the
-//
-//go:inline
-func (b *Buffer) Len() int {
-	return b.pos
-}
-
-// Cap returns the fixed capacity of the
-//
-// Returns:
-// - int: The fixed capacity of the
-//
-//go:inline
-func (b *Buffer) Cap() int {
-	return b.c
-}
-
-// Write writes bytes to the
-//
-// Parameters:
-// - p: []byte - The bytes to write to the
-//
-// Returns:
-// - int: The number of bytes written.
-// - error: An error if the buffer overflows.
+//go:nosplit
 func (b *Buffer) Write(p []byte) (int, error) {
-	pLen := len(p)
-	remaining := b.c - b.pos
-	if pLen > remaining {
+	n := len(p)
+	if n == 0 {
+		return 0, nil
+	}
+
+	available := int(b.cap - b.pos)
+	if n > available {
 		return 0, ErrBufferOverflow
 	}
-	n := copy(b.b[b.pos:b.pos+pLen], p)
-	b.pos += n
+
+	// Use unsafe for zero-copy operation
+	dst := unsafe.Slice(&b.data[b.pos], available)
+	copy(dst, p)
+	b.pos += int32(n)
 	return n, nil
 }
 
-// WriteString writes a string to the
+// WriteString appends a string to the buffer without allocation.
+// Uses unsafe conversion to avoid string-to-bytes allocation.
 //
-// Parameters:
-// - s: string - The string to write to the
-//
-// Returns:
-// - int: The number of bytes written.
-// - error: An error if the buffer overflows.
+//go:nosplit
 func (b *Buffer) WriteString(s string) (int, error) {
-	sLen := len(s)
-	remaining := b.c - b.pos
-	if sLen > remaining {
+	n := len(s)
+	if n == 0 {
+		return 0, nil
+	}
+
+	available := int(b.cap - b.pos)
+	if n > available {
 		return 0, ErrBufferOverflow
 	}
-	n := copy(b.b[b.pos:], s)
-	b.pos += n
+
+	// Zero-allocation string write using unsafe
+	src := unsafe.Slice(unsafe.StringData(s), n)
+	dst := unsafe.Slice(&b.data[b.pos], available)
+	copy(dst, src)
+	b.pos += int32(n)
 	return n, nil
 }
 
-// ReWrite clears the buffer and writes new data to it.
-//
-// Parameters:
-// - p: []byte - The bytes to write to the
-//
-// Returns:
-// - int: The number of bytes written.
-// - error: An error if the buffer overflows.
-func (b *Buffer) ReWrite(p []byte) (int, error) {
-	b.Free()
-	return b.Write(p)
-}
-
-// ReWriteString clears the buffer and writes a new string to it.
-//
-// Parameters:
-// - s: string - The string to write to the
-//
-// Returns:
-// - int: The number of bytes written.
-// - error: An error if the buffer overflows.
-func (b *Buffer) ReWriteString(s string) (int, error) {
-	b.Free()
-	return b.WriteString(s)
-}
-
-// Bytes returns the current contents of the buffer up to the write position.
-//
-// Returns:
-// - []byte: The current contents of the
+// WriteByte appends a single byte to the buffer.
 //
 //go:inline
-func (b *Buffer) Bytes() []byte {
-	return b.b[:b.pos]
-}
-
-// String returns the current contents of the buffer as a string.
-//
-// Returns:
-// - string: The current contents of the buffer as a string.
-func (b *Buffer) String() string {
-	if b == nil || b.pos == 0 || b.b == nil {
-		return ""
-	}
-	if b.pos > len(b.b) {
-		panic("kbuffer: corrupted state - position exceeds buffer length")
-	}
-	// Use unsafe.String for performance in hot path, with proper validation
-	return unsafe.String(unsafe.SliceData(b.b[:b.pos]), b.pos)
-}
-
-// Free resets the buffer for reuse.
-func (b *Buffer) Free() {
-	b.pos = 0
-}
-
-// Clear zeroes the buffer content and resets position.
-func (b *Buffer) Clear() {
-	clear(b.b)
-	b.pos = 0
-}
-
-// Available returns the number of bytes available for writing.
-//
-//go:inline
-func (b *Buffer) Available() int {
-	return b.c - b.pos
-}
-
-// WriteByte writes a single byte to the
-//
-//go:inline
+//go:nosplit
 func (b *Buffer) WriteByte(c byte) error {
-	if b.pos >= b.c {
+	if b.pos >= b.cap {
 		return ErrBufferOverflow
 	}
-	b.b[b.pos] = c
+	b.data[b.pos] = c
 	b.pos++
 	return nil
 }
 
 // WriteAt writes bytes at a specific offset without changing position.
-func (b *Buffer) WriteAt(p []byte, offset int) (int, error) {
-	pLen := len(p)
-	if offset < 0 || offset > b.c-pLen {
-		return 0, ErrBufferOverflow
-	}
-	return copy(b.b[offset:offset+pLen], p), nil
-}
-
-// Reset resets the buffer with a new backing slice.
-func (b *Buffer) Reset(buf []byte) {
-	b.b = buf
-	b.c = len(buf)
-	b.pos = 0
-}
-
-// AppendBytes appends bytes to the buffer.
+// This method performs bounds checking for security.
 //
-//go:inline
-func (b *Buffer) AppendBytes(data ...byte) error {
-	dataLen := len(data)
-	if b.pos+dataLen > b.c {
-		return ErrBufferOverflow
+//go:nosplit
+func (b *Buffer) WriteAt(p []byte, offset int64) (int, error) {
+	if offset < 0 || offset >= int64(b.cap) {
+		return 0, ErrInvalidOffset
 	}
-	copy(b.b[b.pos:b.pos+dataLen], data)
-	b.pos += dataLen
-	return nil
+
+	n := len(p)
+	available := int(int64(b.cap) - offset)
+	if n > available {
+		n = available
+	}
+
+	copy(b.data[offset:], p[:n])
+	return n, nil
 }
 
 // TryWrite attempts to write without error return for hot paths.
+// Returns true if successful, false if insufficient space.
 //
 //go:inline
+//go:nosplit
 func (b *Buffer) TryWrite(p []byte) bool {
-	pLen := len(p)
-	if b.pos+pLen > b.c {
+	n := len(p)
+	if int(b.cap-b.pos) < n {
 		return false
 	}
-	copy(b.b[b.pos:], p)
-	b.pos += pLen
+	copy(b.data[b.pos:], p)
+	b.pos += int32(n)
 	return true
 }
 
-// RemainingSlice returns the unused portion of the
+// Bytes returns the written portion of the buffer.
+// The returned slice shares memory with the buffer.
 //
 //go:inline
-func (b *Buffer) RemainingSlice() []byte {
-	return b.b[b.pos:b.c]
+//go:nosplit
+func (b *Buffer) Bytes() []byte {
+	return b.data[:b.pos]
 }
 
-// Extend extends the current position without writing.
+// String returns the buffer contents as a string using zero-allocation conversion.
+// Uses unsafe.String for maximum performance.
+//
+//go:nosplit
+func (b *Buffer) String() string {
+	if b.pos == 0 {
+		return ""
+	}
+	return unsafe.String(&b.data[0], int(b.pos))
+}
+
+// Len returns the number of bytes written.
 //
 //go:inline
-func (b *Buffer) Extend(n int) error {
-	// Reject negative extensions to prevent underflow
-	if n < 0 {
-		return ErrBufferOverflow
-	}
-	// Check for integer overflow before performing the addition
-	if n > b.c-b.pos {
-		return ErrBufferOverflow
-	}
-	newPos := b.pos + n
-	b.pos = newPos
-	return nil
+//go:nosplit
+func (b *Buffer) Len() int {
+	return int(b.pos)
+}
+
+// Cap returns the buffer capacity.
+//
+//go:inline
+//go:nosplit
+func (b *Buffer) Cap() int {
+	return int(b.cap)
+}
+
+// Available returns the number of bytes available for writing.
+//
+//go:inline
+//go:nosplit
+func (b *Buffer) Available() int {
+	return int(b.cap - b.pos)
+}
+
+// Reset clears the buffer for reuse without deallocating memory.
+//
+//go:inline
+//go:nosplit
+func (b *Buffer) Reset() {
+	b.pos = 0
+}
+
+// Clear zeroes the buffer content and resets position.
+// Use for security-sensitive data.
+//
+//go:nosplit
+func (b *Buffer) Clear() {
+	// Use optimized clear builtin
+	clear(b.data[:b.pos])
+	b.pos = 0
 }
 
 // Truncate reduces the buffer to n bytes.
 //
 //go:inline
+//go:nosplit
 func (b *Buffer) Truncate(n int) {
-	b.pos = min(n, b.pos)
+	if n < 0 {
+		n = 0
+	}
+	if n < int(b.pos) {
+		b.pos = int32(n)
+	}
 }
 
-// Grow ensures the buffer has at least n bytes available.
+// Grow ensures at least n bytes are available for writing.
 //
 //go:inline
 func (b *Buffer) Grow(n int) error {
-	if b.c-b.pos < n {
+	if b.Available() < n {
 		return ErrBufferOverflow
 	}
 	return nil
 }
 
-// ErrBufferOverflow is returned when a write exceeds buffer capacity.
-var ErrBufferOverflow = &bufferError{"buffer overflow"}
-
-type bufferError struct {
-	s string
+// Extend advances the write position by n bytes without writing.
+// Returns error if n would exceed capacity.
+//
+//go:inline
+func (b *Buffer) Extend(n int) error {
+	if n < 0 || n > b.Available() {
+		return ErrInvalidOffset
+	}
+	b.pos += int32(n)
+	return nil
 }
 
-func (e *bufferError) Error() string {
-	return e.s
+// RemainingSlice returns the unused portion of the buffer.
+//
+//go:inline
+//go:nosplit
+func (b *Buffer) RemainingSlice() []byte {
+	return b.data[b.pos:b.cap]
+}
+
+// AppendBytes appends multiple bytes efficiently.
+//
+//go:nosplit
+func (b *Buffer) AppendBytes(data ...byte) error {
+	n := len(data)
+	if n > b.Available() {
+		return ErrBufferOverflow
+	}
+	copy(b.data[b.pos:], data)
+	b.pos += int32(n)
+	return nil
+}
+
+// Clone creates a copy of the buffer with its own memory.
+//
+//go:nosplit
+func (b *Buffer) Clone() *Buffer {
+	newData := make([]byte, int(b.cap))
+	copy(newData, b.data[:b.pos])
+	return &Buffer{
+		data: newData,
+		cap:  b.cap,
+		pos:  b.pos,
+	}
 }

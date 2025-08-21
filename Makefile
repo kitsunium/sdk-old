@@ -44,6 +44,7 @@ help:
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test" "run all tests with Bazel"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/unit" "run unit tests only"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/coverage" "run tests with coverage report"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks for all packages"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
 	@echo ''
 	@echo 'Quality:'
@@ -109,6 +110,18 @@ test/coverage:
 	@echo "$(YELLOW)▶ Running tests with coverage...$(NC)"
 	@$(BAZEL) coverage //... --combined_report=lcov
 	@echo "$(GREEN)✓ Coverage report generated$(NC)"
+
+## bench: run benchmarks for all packages
+.PHONY: bench
+bench:
+	@echo "$(YELLOW)▶ Running benchmarks...$(NC)"
+	@for dir in $$(find pkg -name Makefile -type f -exec dirname {} \;); do \
+		if grep -q "^bench:" $$dir/Makefile 2>/dev/null; then \
+			echo "$(CYAN)  Benchmarking $$dir...$(NC)"; \
+			(cd $$dir && make bench); \
+		fi \
+	done
+	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
 
 ## deps: download and verify dependencies
 .PHONY: deps
