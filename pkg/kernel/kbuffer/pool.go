@@ -128,8 +128,8 @@ func (p *BufferPool) Put(buf []byte) {
 
 	// Reset to full capacity and return to pool
 	buf = buf[:capacity]
-	//nolint:staticcheck // SA6002: sync.Pool is optimized for []byte in Go 1.18+
-	p.pools[poolIdx].Put(buf)
+	// SA6002: sync.Pool is optimized for []byte in Go 1.18+, this is intentional
+	p.pools[poolIdx].Put(buf) //nolint:staticcheck
 }
 
 // GetBuffer retrieves a Buffer from the pool.
@@ -215,8 +215,8 @@ func (p *BufferPool) prewarm() {
 
 		// Return to pool
 		for _, buf := range bufs {
-			//nolint:staticcheck // SA6002: sync.Pool is optimized for []byte in Go 1.18+
-			p.pools[poolIdx].Put(buf)
+			// SA6002: sync.Pool is optimized for []byte in Go 1.18+, this is intentional
+			p.pools[poolIdx].Put(buf) //nolint:staticcheck
 		}
 	}
 }
