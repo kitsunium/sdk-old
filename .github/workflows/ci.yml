@@ -53,19 +53,10 @@ jobs:
       - name: Coverage
         if: github.event_name == 'pull_request'
         run: |
-          bazel coverage //pkg/... \
-            --combined_report=lcov \
-            --instrumentation_filter="//pkg[/:]" \
-            --test_output=errors
-
-          # Ensure coverage report exists and is readable
-          if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
-            echo "✅ Coverage report generated at bazel-out/_coverage/_coverage_report.dat"
-            echo "Coverage report size: $(wc -c < bazel-out/_coverage/_coverage_report.dat) bytes"
-          else
-            echo "❌ Coverage report not found!"
-            exit 1
-          fi
+          # Generate coverage report using go test for SonarCloud
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./pkg/...
+          echo "✅ Coverage report generated at coverage.out"
+          echo "Coverage report size: $(wc -c < coverage.out) bytes"
 
       - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
