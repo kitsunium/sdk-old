@@ -50,8 +50,7 @@ func NewAtomicCache[K comparable, V any](capacity int) *AtomicCache[K, V] {
 	}
 	c.data.Store(initial)
 
-	stats := &Stats{}
-	c.stats.Store(stats)
+	c.stats.Store(NewStats())
 
 	return c
 }
@@ -197,9 +196,15 @@ func (c *AtomicCache[K, V]) Has(key K) bool {
 func (c *AtomicCache[K, V]) Stats() Stats {
 	stats := c.stats.Load()
 	if stats == nil {
-		return Stats{}
+		return *NewStats()
 	}
-	return *stats
+	// Create new Stats and copy values to avoid copying atomic types
+	result := NewStats()
+	result.Hits.Store(stats.Hits.Load())
+	result.Misses.Store(stats.Misses.Load())
+	result.Sets.Store(stats.Sets.Load())
+	result.Evictions.Store(stats.Evictions.Load())
+	return *result
 }
 
 // evictLRU removes the least recently used entry, prioritizing expired entries.
