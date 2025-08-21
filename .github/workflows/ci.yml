@@ -85,6 +85,9 @@ jobs:
           args: >
             -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
+            -Dsonar.pullrequest.branch=${{ github.head_ref }}
+            -Dsonar.pullrequest.base=${{ github.base_ref }}
         continue-on-error: true
 
       - name: Security Scan
