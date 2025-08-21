@@ -241,7 +241,7 @@ func (c *ShardedLRU[K, V]) Has(key K) bool {
 }
 
 // Stats returns aggregated statistics from all shards.
-func (c *ShardedLRU[K, V]) Stats() Stats {
+func (c *ShardedLRU[K, V]) Stats() *Stats {
 	// Create new Stats for aggregation
 	aggregated := NewStats()
 	for _, shard := range c.shards {
@@ -253,8 +253,8 @@ func (c *ShardedLRU[K, V]) Stats() Stats {
 			aggregated.Evictions.Add(stats.Evictions.Load())
 		}
 	}
-	// Return the aggregated stats struct (contains pointers, not copies)
-	return *aggregated
+	// Return pointer to avoid copying atomic values
+	return aggregated
 }
 
 // getShard returns the shard responsible for the given key.
