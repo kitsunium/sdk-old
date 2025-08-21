@@ -354,6 +354,11 @@ func (c *LRU[K, V]) Has(key K) bool {
 //	fmt.Printf("Cache hit rate: %.2f%%\n", hitRate * 100)
 func (c *LRU[K, V]) Stats() Stats {
 	// Return copy of stats struct (pointers are shared, values are not copied)
+	// Ensure all pointers are valid
+	if c.stats.Hits == nil || c.stats.Misses == nil || c.stats.Sets == nil || c.stats.Evictions == nil {
+		// Return a properly initialized Stats if any pointer is nil
+		return *NewStats()
+	}
 	return c.stats
 }
 
