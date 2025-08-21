@@ -1,0 +1,37 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kerror",
+    srcs = [
+        "config.go",
+        "context.go",
+        "error.go",
+        "instance.go",
+        "metrics.go",
+        "registry.go",
+        "result.go",
+    ],
+    importpath = "github.com/kitsunium/sdk/pkg/kernel/kerror",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kernel/kcache",
+    ],
+)
+
+go_test(
+    name = "kerror_test",
+    size = "small",
+    timeout = "short",
+    srcs = [
+        "config_test.go",
+        "context_test.go",
+        "error_test.go",
+        "instance_test.go",
+        "metrics_test.go",
+        "performance_test.go",
+        "registry_test.go",
+        "result_test.go",
+    ],
+    embed = [":kerror"],
+    deps = ["//pkg/kernel/kcache"],
+)

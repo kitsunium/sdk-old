@@ -3,7 +3,7 @@ package normalize_test
 import (
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/config/normalize"
+	"github.com/kitsunium/sdk/pkg/kernel/config/normalize"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +19,8 @@ func TestKey(t *testing.T) {
 		input := "key_with_underscores"
 		expected := "key.with.underscores"
 		result := normalize.Key(input)
-		assert.Equal(t, expected, result, "Key with underscores should replace underscores with dots and convert to lowercase")
+		assert.Equal(t, expected, result,
+			"Key with underscores should replace underscores with dots and convert to lowercase")
 	})
 
 	t.Run("MixedCaseAndUnderscores", func(t *testing.T) {

@@ -2,12 +2,13 @@ package parser
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path"
 
-	"github.com/kistunium/sdk/pkg/kernel/config/normalize"
+	"github.com/kitsunium/sdk/pkg/kernel/config/normalize"
 )
 
 type XML struct {
@@ -22,7 +23,7 @@ type XML struct {
 // - None
 //
 // Returns:
-// - string: file type "xml"
+// - string: file type "xml".
 func (x *XML) Type() string {
 	return "xml"
 }
@@ -37,13 +38,13 @@ func (x *XML) Type() string {
 //
 // Returns:
 // - map[string]string: normalized configuration map
-// - error: error if any issues occurred during loading or deserialization
+// - error: error if any issues occurred during loading or deserialization.
 func (x *XML) Load() (map[string]string, error) {
 	if ext := path.Ext(x.Path); ext != ".xml" {
 		return nil, fmt.Errorf("invalid file extension: %s", ext)
 	}
 
-	var config map[string]string = make(map[string]string)
+	config := make(map[string]string)
 
 	file, err := os.Open(x.Path)
 	if err != nil {
@@ -68,19 +69,19 @@ func (x *XML) Load() (map[string]string, error) {
 // - output: map[string]any - the map to populate with the deserialized XML data
 //
 // Returns:
-// - error: error if any issues occurred during deserialization
+// - error: error if any issues occurred during deserialization.
 func (x *XML) unmarshal(file io.Reader, output map[string]string) error {
 	decoder := xml.NewDecoder(file)
 	n := makeNode("", nil)
 
 	for {
 		token, err := decoder.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to parse XML token: %w", err)
 		}
 
 		switch token := token.(type) {
@@ -111,7 +112,7 @@ func (x *XML) unmarshal(file io.Reader, output map[string]string) error {
 // - output: map[string]any - the map to populate with node values
 //
 // Returns:
-// - error: error if any issues occurred during exploration
+// - error: error if any issues occurred during exploration.
 func explore(n *node, output map[string]string) error {
 	if n.value != "" {
 		output[n.getPath()] = n.value
@@ -128,7 +129,7 @@ func explore(n *node, output map[string]string) error {
 	return nil
 }
 
-// node represents a node in the XML structure
+// node represents a node in the XML structure.
 type node struct {
 	value         string
 	name          string
@@ -146,7 +147,7 @@ type node struct {
 // - None
 //
 // Returns:
-// - bool: true if the node has multiple children with the same name, false otherwise
+// - bool: true if the node has multiple children with the same name, false otherwise.
 func (t *node) hasMultipleChildName() bool {
 	count := 0
 	for range t.childrenNames {
@@ -168,7 +169,7 @@ func (t *node) hasMultipleChildName() bool {
 // - None
 //
 // Returns:
-// - string: the full path of the node
+// - string: the full path of the node.
 func (t *node) getPath() string {
 	if t.parent == nil {
 		return ""
@@ -198,7 +199,7 @@ func (t *node) getPath() string {
 // - name: string - the name of the child node
 //
 // Returns:
-// - *node: pointer to the newly created child node
+// - *node: pointer to the newly created child node.
 func (t *node) inNode(name string) *node {
 	if t.parent == nil && t.name == "" {
 		t.name = name
@@ -225,7 +226,7 @@ func (t *node) inNode(name string) *node {
 // - parent: *node - the parent node of the new node
 //
 // Returns:
-// - *node: pointer to the newly created node
+// - *node: pointer to the newly created node.
 func makeNode(name string, parent *node) *node {
 	n := &node{
 		parent:        parent,
@@ -245,7 +246,7 @@ func makeNode(name string, parent *node) *node {
 // - None
 //
 // Returns:
-// - *node: pointer to the parent node, or the current node if it has no parent
+// - *node: pointer to the parent node, or the current node if it has no parent.
 func (t *node) outNode() *node {
 	if t.parent == nil {
 		return t

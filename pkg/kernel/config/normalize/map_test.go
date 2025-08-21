@@ -3,7 +3,7 @@ package normalize_test
 import (
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/config/normalize"
+	"github.com/kitsunium/sdk/pkg/kernel/config/normalize"
 	"github.com/stretchr/testify/assert"
 )
 

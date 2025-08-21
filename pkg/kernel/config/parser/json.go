@@ -7,7 +7,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/kistunium/sdk/pkg/kernel/config/normalize"
+	"github.com/kitsunium/sdk/pkg/kernel/config/normalize"
 )
 
 type JSON struct {
@@ -22,7 +22,7 @@ type JSON struct {
 // - None
 //
 // Returns:
-// - string: file type "json"
+// - string: file type "json".
 func (j *JSON) Type() string {
 	return "json"
 }
@@ -37,7 +37,7 @@ func (j *JSON) Type() string {
 //
 // Returns:
 // - map[string]string: normalized configuration map from the JSON content
-// - error: error if any issues occurred during loading or deserialization
+// - error: error if any issues occurred during loading or deserialization.
 func (j *JSON) Load() (map[string]string, error) {
 	if ext := path.Ext(j.Path); ext != ".json" {
 		return nil, fmt.Errorf("invalid file extension: %s", ext)

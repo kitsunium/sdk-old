@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pointer",
+    srcs = ["pointer.go"],
+    importpath = "github.com/kitsunium/sdk/pkg/lib/pointer",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "pointer_test",
+    size = "small",
+    srcs = ["pointer_test.go"],
+    deps = [
+        ":pointer",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

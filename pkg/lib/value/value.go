@@ -1,7 +1,33 @@
 package value
 
+// Convert returns the value of a pointer or the zero value if nil.
+// This generic function replaces all type-specific functions for better performance.
+//
+//go:inline
+func Convert[T any](ptr *T) T {
+	if ptr == nil {
+		var zero T
+		return zero
+	}
+	return *ptr
+}
+
+// ConvertOr returns the value of a pointer or a default value if nil.
+// Useful when you need a specific default value instead of zero value.
+//
+//go:inline
+func ConvertOr[T any](ptr *T, defaultValue T) T {
+	if ptr == nil {
+		return defaultValue
+	}
+	return *ptr
+}
+
 // String dereferences the given *string pointer.
 // If the pointer is nil, it returns an empty string.
+// Deprecated: Use Convert[string](ptr) instead.
+//
+//go:inline
 func String(ptr *string) string {
 	if ptr == nil {
 		return ""

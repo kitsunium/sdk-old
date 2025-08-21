@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/fs"
-	"github.com/kistunium/sdk/pkg/lib/pointer"
+	"github.com/kitsunium/sdk/pkg/kernel/fs"
+	"github.com/kitsunium/sdk/pkg/lib/pointer"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -83,14 +83,16 @@ func TestFile(t *testing.T) {
 			origin := tmpDir + "/original"
 			symlink := tmpDir + "/symlink"
 
-			f, err := fs.NewFile(fs.Option{
+			_, err := fs.NewFile(fs.Option{
 				Path:             origin,
 				CreateIfNotExist: true,
 			})
+			assert.NoError(t, err)
 
-			os.Symlink(origin, symlink)
+			err = os.Symlink(origin, symlink)
+			assert.NoError(t, err)
 
-			f, err = fs.NewFile(fs.Option{
+			f, err := fs.NewFile(fs.Option{
 				Path: symlink,
 			})
 
@@ -469,7 +471,11 @@ func BenchmarkFileCopy(b *testing.B) {
 	assert.NoError(b, err)
 	tmpSrcFile.Close()
 
-	bufferSizes := []int{4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 64 * 1024, 128 * 1024, 256 * 1024, 512 * 1024, 1 * 1024 * 1024, 2 * 1024 * 1024, 4 * 1024 * 1024, 8 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024}
+	bufferSizes := []int{
+		4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 64 * 1024, 128 * 1024,
+		256 * 1024, 512 * 1024, 1 * 1024 * 1024, 2 * 1024 * 1024,
+		4 * 1024 * 1024, 8 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024,
+	}
 
 	for _, bufferSize := range bufferSizes {
 		b.Run("BufferSize="+fmt.Sprint(bufferSize/1024), func(b *testing.B) {
