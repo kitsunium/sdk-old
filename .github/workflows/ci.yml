@@ -57,6 +57,15 @@ jobs:
             --combined_report=lcov \
             --instrumentation_filter="//pkg[/:]" \
             --test_output=errors
+          
+          # Ensure coverage report exists and is readable
+          if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
+            echo "✅ Coverage report generated at bazel-out/_coverage/_coverage_report.dat"
+            echo "Coverage report size: $(wc -c < bazel-out/_coverage/_coverage_report.dat) bytes"
+          else
+            echo "❌ Coverage report not found!"
+            exit 1
+          fi
 
       - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
@@ -68,7 +77,6 @@ jobs:
           args: >
             -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
-            -Dsonar.lcov.reportPaths=bazel-out/_coverage/_coverage_report.dat
         continue-on-error: true
 
       - name: Security Scan
