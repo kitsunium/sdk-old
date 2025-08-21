@@ -53,11 +53,24 @@ jobs:
       - name: Coverage
         if: github.event_name == 'pull_request'
         run: |
-          # Generate coverage report using go test for SonarCloud
-          # SonarCloud requires Go native format, Bazel LCOV is not compatible
-          go test -v -race -coverprofile=coverage.out -covermode=atomic ./pkg/...
-          echo "✅ Coverage report generated at coverage.out"
-          echo "Coverage report size: $(wc -c < coverage.out) bytes"
+          # Generate LCOV coverage with Bazel
+          bazel coverage //pkg/... \
+            --combined_report=lcov \
+            --instrumentation_filter="//pkg[/:]" \
+            --test_output=errors
+          
+          # Verify LCOV report exists
+          if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
+            echo "✅ LCOV coverage report generated"
+            echo "Coverage report size: $(wc -c < bazel-out/_coverage/_coverage_report.dat) bytes"
+            
+            # Debug: Show first few lines to verify format
+            echo "First 10 lines of coverage report:"
+            head -10 bazel-out/_coverage/_coverage_report.dat
+          else
+            echo "❌ Coverage report not found!"
+            exit 1
+          fi
 
       - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
