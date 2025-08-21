@@ -1,27 +1,32 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+IFS=$'\n\t'
 
 # Git hook to prevent pushing commits with Claude-related mentions
 # This hook is called before a push to a remote repository
 
-# Colors for output
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Colors for output (only if stdout is a TTY)
+if [ -t 1 ]; then
+  RED='\033[0;31m'
+  YELLOW='\033[1;33m'
+  NC='\033[0m' # No Color
+else
+  RED=''; YELLOW=''; NC='';
+fi
 
-# Define patterns to check
+# Define patterns to check (case-insensitive)
 patterns=(
-    "[Cc]laude"
-    "Anthropic"
+    "claude"
     "anthropic"
-    "🤖.*[Cc]laude"
-    "Co-[Aa]uthored-[Bb]y:.*[Cc]laude"
-    "Co-[Aa]uthored-[Bb]y:.*noreply@anthropic"
-    "[Gg]enerated with.*[Cc]laude"
+    "🤖.*claude"
+    "^[[:space:]]*co-authored-by:.*(claude|anthropic)"
+    "generated with.*claude"
     "claude\.ai"
 )
 
 # Read the range of commits being pushed
-while read local_ref local_sha remote_ref remote_sha
+while read -r local_ref local_sha remote_ref remote_sha
 do
     # Check if we're deleting a branch
     if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
@@ -45,7 +50,7 @@ do
         
         # Check each pattern
         for pattern in "${patterns[@]}"; do
-            if echo "$commit_msg" | grep -qE "$pattern"; then
+            if echo "$commit_msg" | grep -qiE "$pattern"; then
                 echo -e "${RED}ERROR: Commit $commit contains forbidden reference to AI assistant.${NC}"
                 echo -e "${RED}Pattern matched: $pattern${NC}"
                 echo ""

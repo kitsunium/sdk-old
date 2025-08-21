@@ -2,10 +2,10 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kbuffer",
-    srcs = [
-        "buffer.go",
-        "pool.go",
-    ],
+    srcs = glob(
+        ["*.go"],
+        exclude = ["*_test.go"],
+    ),
     importpath = "github.com/kitsunium/sdk/pkg/kernel/kbuffer",
     visibility = ["//visibility:public"],
 )
