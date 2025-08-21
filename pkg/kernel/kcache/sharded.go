@@ -93,8 +93,7 @@ func newFastLRU[K comparable, V any](capacity int) *FastLRU[K, V] {
 	lru.head.next = lru.tail
 	lru.tail.prev = lru.head
 
-	stats := &Stats{}
-	lru.stats.Store(stats)
+	lru.stats.Store(NewStats())
 
 	return lru
 }
@@ -243,17 +242,19 @@ func (c *ShardedLRU[K, V]) Has(key K) bool {
 
 // Stats returns aggregated statistics from all shards.
 func (c *ShardedLRU[K, V]) Stats() Stats {
-	aggregated := Stats{}
+	// Create new Stats for aggregation
+	aggregated := NewStats()
 	for _, shard := range c.shards {
 		stats := shard.cache.stats.Load()
-		if stats != nil {
+		if stats != nil && stats.Hits != nil {
 			aggregated.Hits.Add(stats.Hits.Load())
 			aggregated.Misses.Add(stats.Misses.Load())
 			aggregated.Sets.Add(stats.Sets.Load())
 			aggregated.Evictions.Add(stats.Evictions.Load())
 		}
 	}
-	return aggregated
+	// Return the aggregated stats struct (contains pointers, not copies)
+	return *aggregated
 }
 
 // getShard returns the shard responsible for the given key.
@@ -286,7 +287,7 @@ func (c *FastLRU[K, V]) moveToFront(e *fastEntry[V]) {
 // incrementHits atomically increments the hit counter for a shard.
 func (c *ShardedLRU[K, V]) incrementHits(s *shard[K, V]) {
 	stats := s.cache.stats.Load()
-	if stats != nil {
+	if stats != nil && stats.Hits != nil {
 		stats.Hits.Add(1)
 	}
 }
@@ -294,7 +295,7 @@ func (c *ShardedLRU[K, V]) incrementHits(s *shard[K, V]) {
 // incrementMisses atomically increments the miss counter for a shard.
 func (c *ShardedLRU[K, V]) incrementMisses(s *shard[K, V]) {
 	stats := s.cache.stats.Load()
-	if stats != nil {
+	if stats != nil && stats.Misses != nil {
 		stats.Misses.Add(1)
 	}
 }
@@ -302,7 +303,7 @@ func (c *ShardedLRU[K, V]) incrementMisses(s *shard[K, V]) {
 // incrementSets atomically increments the set counter for a shard.
 func (c *ShardedLRU[K, V]) incrementSets(s *shard[K, V]) {
 	stats := s.cache.stats.Load()
-	if stats != nil {
+	if stats != nil && stats.Sets != nil {
 		stats.Sets.Add(1)
 	}
 }
@@ -310,7 +311,7 @@ func (c *ShardedLRU[K, V]) incrementSets(s *shard[K, V]) {
 // incrementEvictions atomically increments the eviction counter for a shard.
 func (c *ShardedLRU[K, V]) incrementEvictions(s *shard[K, V]) {
 	stats := s.cache.stats.Load()
-	if stats != nil {
+	if stats != nil && stats.Evictions != nil {
 		stats.Evictions.Add(1)
 	}
 }
