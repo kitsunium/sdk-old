@@ -47,7 +47,8 @@ func newPool() *BufferPool {
 			New: func(sz int) func() any {
 				return func() any {
 					p.stats.allocs.Add(1)
-					return make([]byte, sz)
+					buf := make([]byte, sz)
+					return &buf
 				}
 			}(size),
 		}
@@ -88,11 +89,11 @@ func (p *BufferPool) Get(size int) []byte {
 	}
 
 	// Get from pool
-	buf := p.pools[poolIdx].Get().([]byte)
+	bufPtr := p.pools[poolIdx].Get().(*[]byte)
 	p.stats.hits.Add(1)
 
 	// Return slice of requested size
-	return buf[:size]
+	return (*bufPtr)[:size]
 }
 
 // Put returns a buffer to the pool for reuse.
@@ -128,8 +129,7 @@ func (p *BufferPool) Put(buf []byte) {
 
 	// Reset to full capacity and return to pool
 	buf = buf[:capacity]
-	// SA6002: sync.Pool is optimized for []byte in Go 1.18+, this is intentional
-	p.pools[poolIdx].Put(buf) //nolint:staticcheck
+	p.pools[poolIdx].Put(&buf)
 }
 
 // GetBuffer retrieves a Buffer from the pool.
@@ -215,8 +215,8 @@ func (p *BufferPool) prewarm() {
 
 		// Return to pool
 		for _, buf := range bufs {
-			// SA6002: sync.Pool is optimized for []byte in Go 1.18+, this is intentional
-			p.pools[poolIdx].Put(buf) //nolint:staticcheck
+			bufCopy := buf
+			p.pools[poolIdx].Put(&bufCopy)
 		}
 	}
 }
