@@ -243,14 +243,14 @@ func (c *ShardedLRU[K, V]) Has(key K) bool {
 
 // Stats returns aggregated statistics from all shards.
 func (c *ShardedLRU[K, V]) Stats() Stats {
-	var aggregated Stats
+	aggregated := Stats{}
 	for _, shard := range c.shards {
 		stats := shard.cache.stats.Load()
 		if stats != nil {
-			aggregated.Hits += stats.Hits
-			aggregated.Misses += stats.Misses
-			aggregated.Sets += stats.Sets
-			aggregated.Evictions += stats.Evictions
+			aggregated.Hits.Add(stats.Hits.Load())
+			aggregated.Misses.Add(stats.Misses.Load())
+			aggregated.Sets.Add(stats.Sets.Load())
+			aggregated.Evictions.Add(stats.Evictions.Load())
 		}
 	}
 	return aggregated
@@ -287,7 +287,7 @@ func (c *FastLRU[K, V]) moveToFront(e *fastEntry[V]) {
 func (c *ShardedLRU[K, V]) incrementHits(s *shard[K, V]) {
 	stats := s.cache.stats.Load()
 	if stats != nil {
-		atomic.AddUint64(&stats.Hits, 1)
+		stats.Hits.Add(1)
 	}
 }
 
@@ -295,7 +295,7 @@ func (c *ShardedLRU[K, V]) incrementHits(s *shard[K, V]) {
 func (c *ShardedLRU[K, V]) incrementMisses(s *shard[K, V]) {
 	stats := s.cache.stats.Load()
 	if stats != nil {
-		atomic.AddUint64(&stats.Misses, 1)
+		stats.Misses.Add(1)
 	}
 }
 
@@ -303,7 +303,7 @@ func (c *ShardedLRU[K, V]) incrementMisses(s *shard[K, V]) {
 func (c *ShardedLRU[K, V]) incrementSets(s *shard[K, V]) {
 	stats := s.cache.stats.Load()
 	if stats != nil {
-		atomic.AddUint64(&stats.Sets, 1)
+		stats.Sets.Add(1)
 	}
 }
 
@@ -311,7 +311,7 @@ func (c *ShardedLRU[K, V]) incrementSets(s *shard[K, V]) {
 func (c *ShardedLRU[K, V]) incrementEvictions(s *shard[K, V]) {
 	stats := s.cache.stats.Load()
 	if stats != nil {
-		atomic.AddUint64(&stats.Evictions, 1)
+		stats.Evictions.Add(1)
 	}
 }
 

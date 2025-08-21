@@ -236,7 +236,7 @@ func (c *AtomicCache[K, V]) evictLRU(data *atomicMap[K, V]) {
 func (c *AtomicCache[K, V]) incrementHits() {
 	stats := c.stats.Load()
 	if stats != nil {
-		atomic.AddUint64(&stats.Hits, 1)
+		stats.Hits.Add(1)
 	}
 }
 
@@ -244,7 +244,7 @@ func (c *AtomicCache[K, V]) incrementHits() {
 func (c *AtomicCache[K, V]) incrementMisses() {
 	stats := c.stats.Load()
 	if stats != nil {
-		atomic.AddUint64(&stats.Misses, 1)
+		stats.Misses.Add(1)
 	}
 }
 
@@ -252,7 +252,7 @@ func (c *AtomicCache[K, V]) incrementMisses() {
 func (c *AtomicCache[K, V]) incrementSets() {
 	stats := c.stats.Load()
 	if stats != nil {
-		atomic.AddUint64(&stats.Sets, 1)
+		stats.Sets.Add(1)
 	}
 }
 
@@ -260,7 +260,7 @@ func (c *AtomicCache[K, V]) incrementSets() {
 func (c *AtomicCache[K, V]) incrementEvictions() {
 	stats := c.stats.Load()
 	if stats != nil {
-		atomic.AddUint64(&stats.Evictions, 1)
+		stats.Evictions.Add(1)
 	}
 }
 
