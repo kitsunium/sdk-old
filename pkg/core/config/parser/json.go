@@ -158,7 +158,7 @@ func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
 	decoder.UseNumber()
 	// DisallowUnknownFields for stricter validation if needed
 	// decoder.DisallowUnknownFields() // Uncomment for strict mode
-	
+
 	if err := decoder.Decode(&config); err != nil {
 		return nil, ErrJSONParse.Wrap(err).WithDetail("size", len(data))
 	}

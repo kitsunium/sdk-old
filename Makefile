@@ -131,6 +131,12 @@ quality/analyze: quality/lint quality/security
 .PHONY: quality/format
 quality/format:
 	@echo "$(YELLOW)▶ Formatting code...$(NC)"
+	@echo "  Formatting Go files..."
+	@gofmt -w -s $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./bazel-*/*")
+	@if command -v goimports >/dev/null 2>&1; then \
+		echo "  Running goimports..."; \
+		goimports -w $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./bazel-*/*"); \
+	fi
 	@if command -v $(PRETTIER) >/dev/null 2>&1; then \
 		$(PRETTIER) --write "**/*.{json,yaml,yml,md}" --ignore-path .prettierignore; \
 	else \
