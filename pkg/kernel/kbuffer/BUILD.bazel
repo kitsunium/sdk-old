@@ -4,7 +4,11 @@ go_library(
     name = "kbuffer",
     srcs = [
         "buffer.go",
+        "constants.go",
+        "doc.go",
+        "errors.go",
         "pool.go",
+        "types.go",
     ],
     importpath = "github.com/kitsunium/sdk/pkg/kernel/kbuffer",
     visibility = ["//visibility:public"],
@@ -12,11 +16,17 @@ go_library(
 
 go_test(
     name = "kbuffer_test",
-    size = "small",
     srcs = [
         "buffer_test.go",
-        "kbuffer_test.go",
+        "kbuffer_bench_test.go",
         "pool_test.go",
     ],
     embed = [":kbuffer"],
+)
+
+go_test(
+    name = "kbuffer_bench_test",
+    srcs = ["kbuffer_bench_test.go"],
+    embed = [":kbuffer"],
+    tags = ["bench"],
 )

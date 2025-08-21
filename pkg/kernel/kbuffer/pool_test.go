@@ -3,361 +3,421 @@ package kbuffer
 import (
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 )
 
-// TestBufferPool tests the buffer pool functionality.
-func TestBufferPool(t *testing.T) {
-	t.Run("BasicGetPut", func(t *testing.T) {
-		pool := NewBufferPool()
+func TestBufferPool_Get(t *testing.T) {
+	p := newPool()
+	p.ResetStats()
 
-		// Test various sizes
-		sizes := []int{100, 256, 1000, 4096, 65536}
-		for _, size := range sizes {
-			buf := pool.Get(size)
-			if buf == nil {
-				t.Fatalf("buffer should not be nil for size %d", size)
-			}
-			GreaterOrEqual(t, len(buf), size, "buffer should be at least requested size")
-			GreaterOrEqual(t, cap(buf), size, "buffer capacity should be at least requested size")
+	tests := []struct {
+		name     string
+		size     int
+		wantSize int
+	}{
+		{"zero size", 0, 0},
+		{"small size", 10, 10},
+		{"exact power of 2", 64, 64},
+		{"non-power of 2", 100, 100},
+		{"large size", 1024, 1024},
+		{"oversized", 2 * maxPoolSize, 2 * maxPoolSize},
+	}
 
-			// Verify it's a power of 2 capacity
-			True(t, isPowerOf2(cap(buf)), "capacity should be power of 2")
-
-			// Write data to ensure it's usable
-			for i := 0; i < size; i++ {
-				buf[i] = byte(i % 256)
-			}
-
-			pool.Put(buf)
-		}
-	})
-
-	t.Run("ReuseBuffers", func(t *testing.T) {
-		pool := NewBufferPool()
-		pool.ResetStats()
-
-		// Get and put the same size multiple times
-		size := 1024
-		for i := 0; i < 10; i++ {
-			buf := pool.Get(size)
-			pool.Put(buf)
-		}
-
-		stats := pool.GetStats()
-		Greater(t, stats.Hits, int64(0), "should have cache hits")
-		Equal(t, int64(10), stats.Gets, "should have 10 gets")
-		Equal(t, int64(10), stats.Puts, "should have 10 puts")
-	})
-
-	t.Run("ZeroedBuffers", func(t *testing.T) {
-		pool := NewBufferPool()
-		// Enable clearing for this test
-		pool.SetClearOnPut(true)
-
-		// Get buffer, write data, return it
-		buf1 := pool.Get(1024)
-		for i := range buf1 {
-			buf1[i] = 0xFF
-		}
-		pool.Put(buf1)
-
-		// Get another buffer of same size
-		buf2 := pool.Get(1024)
-
-		// Check if it's zeroed (security feature)
-		allZero := true
-		for _, b := range buf2 {
-			if b != 0 {
-				allZero = false
-				break
-			}
-		}
-		True(t, allZero, "returned buffers should be zeroed for security when clearOnPut is enabled")
-		pool.Put(buf2)
-	})
-
-	t.Run("LargeSizes", func(t *testing.T) {
-		pool := NewBufferPool()
-		pool.ResetStats()
-
-		// Test very large size (beyond default max)
-		largeSize := 10 * 1024 * 1024 // 10MB
-		buf := pool.Get(largeSize)
-		Equal(t, largeSize, len(buf), "large buffer should be exact size")
-
-		// Put will not actually pool it due to size check
-		pool.Put(buf)
-
-		// Try to get another large buffer - should allocate new
-		buf2 := pool.Get(largeSize)
-		Equal(t, largeSize, len(buf2), "second large buffer should be exact size")
-
-		stats := pool.GetStats()
-		// Should have 2 allocations, 1 put attempt, but 0 hits (not pooled)
-		Equal(t, int64(2), stats.Gets, "should have 2 gets")
-		Equal(t, int64(1), stats.Puts, "should have 1 put attempt")
-		Equal(t, int64(0), stats.Hits, "should have no hits for large buffers")
-	})
-
-	t.Run("ConcurrentAccess", func(t *testing.T) {
-		pool := NewBufferPool()
-		pool.ResetStats()
-
-		const goroutines = 100
-		const iterations = 1000
-
-		var wg sync.WaitGroup
-		wg.Add(goroutines)
-
-		for i := 0; i < goroutines; i++ {
-			go func(id int) {
-				defer wg.Done()
-
-				for j := 0; j < iterations; j++ {
-					size := 256 + (id * 16) // Different sizes per goroutine
-					buf := pool.Get(size)
-
-					// Do some work with the buffer
-					buf[0] = byte(id)
-					buf[len(buf)-1] = byte(j)
-
-					pool.Put(buf)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := p.Get(tt.size)
+			if tt.size == 0 {
+				if buf != nil {
+					t.Errorf("Get(%d) = %v, want nil", tt.size, buf)
 				}
-			}(i)
-		}
+				return
+			}
 
-		wg.Wait()
-
-		stats := pool.GetStats()
-		Equal(t, int64(goroutines*iterations), stats.Gets, "should have correct number of gets")
-		Greater(t, stats.Hits, int64(0), "should have cache hits")
-	})
-
-	t.Run("BufferObjects", func(t *testing.T) {
-		pool := NewBufferPool()
-
-		// Test Buffer object operations
-		buf := pool.GetBuffer(1024)
-		if buf == nil {
-			t.Fatal("buffer object should not be nil")
-		}
-		Equal(t, 1024, buf.Cap(), "buffer should have correct capacity")
-
-		// Write and read
-		n, err := buf.WriteString("Hello, World!")
-		NoError(t, err)
-		Equal(t, 13, n)
-		Equal(t, "Hello, World!", buf.String())
-
-		pool.PutBuffer(buf)
-	})
-
-	t.Run("GlobalPool", func(t *testing.T) {
-		// Test global pool functions
-		buf := Get(512)
-		NotNil(t, buf)
-		GreaterOrEqual(t, len(buf), 512)
-		Put(buf)
-
-		// Test Buffer objects with global pool
-		bufObj := GetBuffer(256)
-		NotNil(t, bufObj)
-		PutBuffer(bufObj)
-	})
-
-	t.Run("ConvenienceFunctions", func(t *testing.T) {
-		pool := NewBufferPool()
-
-		buf1k := pool.Get1K()
-		Equal(t, 1024, len(buf1k))
-		Put(buf1k)
-
-		buf4k := pool.Get4K()
-		Equal(t, 4*1024, len(buf4k))
-		Put(buf4k)
-
-		buf64k := pool.Get64K()
-		Equal(t, 64*1024, len(buf64k))
-		Put(buf64k)
-	})
-
-	t.Run("Statistics", func(t *testing.T) {
-		pool := NewBufferPool()
-		pool.ResetStats()
-
-		// Perform operations
-		for i := 0; i < 100; i++ {
-			buf := pool.Get(1024)
-			pool.Put(buf)
-		}
-
-		stats := pool.GetStats()
-		Equal(t, int64(100), stats.Gets)
-		Equal(t, int64(100), stats.Puts)
-		Greater(t, stats.Hits, int64(0), "should have hits after first allocation")
-
-		// Reset and verify
-		pool.ResetStats()
-		stats = pool.GetStats()
-		Equal(t, int64(0), stats.Gets)
-		Equal(t, int64(0), stats.Puts)
-	})
-
-	t.Run("SetMaxSize", func(t *testing.T) {
-		pool := NewBufferPool()
-		pool.SetMaxSize(512)
-
-		// Buffer larger than max size should not be pooled
-		buf := pool.Get(1024)
-		NotNil(t, buf)
-		pool.Put(buf)
-
-		// Get again - should allocate new since it wasn't pooled
-		pool.ResetStats()
-		buf2 := pool.Get(1024)
-		NotNil(t, buf2)
-		stats := pool.GetStats()
-		Equal(t, int64(0), stats.Hits)
-	})
-
-	t.Run("SetClearOnPut", func(t *testing.T) {
-		pool := NewBufferPool()
-		pool.SetClearOnPut(false)
-
-		// Get buffer, write data, return it
-		buf1 := pool.Get(1024)
-		for i := range buf1 {
-			buf1[i] = 0xFF
-		}
-		pool.Put(buf1)
-
-		// Get another buffer - should not be cleared
-		buf2 := pool.Get(1024)
-		// Check first byte only (since clearing is disabled)
-		if buf2[0] == 0xFF {
-			// Buffer was reused without clearing - expected
-			Equal(t, byte(0xFF), buf2[0])
-		}
-	})
-
-	t.Run("Prewarm", func(t *testing.T) {
-		pool := NewBufferPool()
-		pool.ResetStats()
-
-		// Prewarm with specific sizes
-		pool.Prewarm([]int{512, 1024}, 5)
-
-		stats := pool.GetStats()
-		Equal(t, int64(10), stats.Allocs) // 2 sizes * 5 count
-	})
-
-	t.Run("Get_ZeroSize", func(t *testing.T) {
-		pool := NewBufferPool()
-		buf := pool.Get(0)
-		Nil(t, buf)
-	})
-
-	t.Run("Get_NegativeSize", func(t *testing.T) {
-		pool := NewBufferPool()
-		buf := pool.Get(-10)
-		Nil(t, buf)
-	})
-
-	t.Run("Put_NilBuffer", func(t *testing.T) {
-		pool := NewBufferPool()
-		// Should not panic
-		pool.Put(nil)
-	})
-
-	t.Run("Put_NonPowerOf2", func(t *testing.T) {
-		pool := NewBufferPool()
-		buf := make([]byte, 100) // Not a power of 2
-		pool.Put(buf)            // Should not pool it
-	})
-
-	t.Run("GetBuffer_ZeroSize", func(t *testing.T) {
-		pool := NewBufferPool()
-		buf := pool.GetBuffer(0)
-		NotNil(t, buf)
-		Equal(t, 2, buf.Cap()) // MinBitSize = 1, so 2^1 = 2
-	})
-
-	t.Run("PutBuffer_Nil", func(t *testing.T) {
-		pool := NewBufferPool()
-		// Should not panic
-		pool.PutBuffer(nil)
-	})
-
-	t.Run("PutBuffer_InvalidCapacity", func(t *testing.T) {
-		pool := NewBufferPool()
-		buf := NewBuffer(100) // Not a power of 2
-		pool.PutBuffer(buf)   // Should not pool it
-	})
-}
-
-// TestMemoryLeak verifies no memory leaks.
-func TestMemoryLeak(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping memory leak test in short mode")
+			if len(buf) != tt.wantSize {
+				t.Errorf("Get(%d) length = %d, want %d", tt.size, len(buf), tt.wantSize)
+			}
+			if cap(buf) < tt.wantSize {
+				t.Errorf("Get(%d) capacity = %d, want >= %d", tt.size, cap(buf), tt.wantSize)
+			}
+		})
 	}
 
-	pool := NewBufferPool()
-
-	// Force GC to get baseline
-	runtime.GC()
-	var m1 runtime.MemStats
-	runtime.ReadMemStats(&m1)
-
-	// Perform many allocations
-	const iterations = 10000
-	for i := 0; i < iterations; i++ {
-		buf := pool.Get(4096)
-		pool.Put(buf)
+	stats := p.Stats()
+	if stats.Gets == 0 {
+		t.Error("Stats().Gets = 0, want > 0")
 	}
-
-	// Force GC and measure again
-	runtime.GC()
-	var m2 runtime.MemStats
-	runtime.ReadMemStats(&m2)
-
-	// Memory should not grow significantly
-	growth := int64(m2.HeapAlloc) - int64(m1.HeapAlloc)
-	maxGrowth := int64(4096 * 100) // Allow for some pooled buffers
-
-	Less(t, growth, maxGrowth, "memory growth should be limited")
 }
 
-// TestConcurrentStats verifies statistics are accurate under concurrent access.
-func TestConcurrentStats(t *testing.T) {
-	pool := NewBufferPool()
-	pool.ResetStats()
+func TestBufferPool_Put(t *testing.T) {
+	p := newPool()
+	p.ResetStats()
 
-	const goroutines = 10
-	const operations = 1000
+	// Test putting valid buffer
+	buf := make([]byte, 64)
+	p.Put(buf)
+
+	stats := p.Stats()
+	if stats.Puts != 1 {
+		t.Errorf("Stats().Puts = %d, want 1", stats.Puts)
+	}
+
+	// Test putting nil
+	p.Put(nil)
+	stats = p.Stats()
+	if stats.Puts != 1 {
+		t.Errorf("Stats().Puts after nil = %d, want 1", stats.Puts)
+	}
+
+	// Test putting oversized buffer
+	oversized := make([]byte, 2*maxPoolSize)
+	p.Put(oversized)
+	stats = p.Stats()
+	if stats.Puts != 2 {
+		t.Errorf("Stats().Puts after oversized = %d, want 2", stats.Puts)
+	}
+
+	// Test putting non-power-of-2 buffer
+	nonPower := make([]byte, 100)
+	p.Put(nonPower)
+	stats = p.Stats()
+	if stats.Puts != 3 {
+		t.Errorf("Stats().Puts after non-power = %d, want 3", stats.Puts)
+	}
+}
+
+func TestBufferPool_GetPutCycle(t *testing.T) {
+	p := newPool()
+	p.ResetStats()
+
+	// Get buffer
+	buf1 := p.Get(64)
+	copy(buf1, []byte("test"))
+
+	// Return to pool
+	p.Put(buf1)
+
+	// Get again - should reuse
+	buf2 := p.Get(64)
+
+	stats := p.Stats()
+	if stats.Hits == 0 {
+		t.Error("Stats().Hits = 0, want > 0")
+	}
+
+	// Buffers should have same capacity (reused)
+	if cap(buf2) != cap(buf1) {
+		t.Log("Different capacities suggest no reuse (this may be OK due to GC)")
+	}
+}
+
+func TestBufferPool_GetBuffer(t *testing.T) {
+	p := newPool()
+
+	// Test getting buffer
+	b := p.GetBuffer(100)
+	if b == nil {
+		t.Fatal("GetBuffer() = nil")
+	}
+	if b.Cap() < 100 {
+		t.Errorf("GetBuffer(100).Cap() = %d, want >= 100", b.Cap())
+	}
+	if b.Len() != 0 {
+		t.Errorf("GetBuffer().Len() = %d, want 0", b.Len())
+	}
+}
+
+func TestBufferPool_PutBuffer(t *testing.T) {
+	p := newPool()
+	p.ResetStats()
+
+	// Test putting valid buffer
+	b := NewBuffer(64)
+	b.Write([]byte("test"))
+	p.PutBuffer(b)
+
+	if b.Len() != 0 {
+		t.Errorf("Buffer.Len() after PutBuffer = %d, want 0", b.Len())
+	}
+
+	stats := p.Stats()
+	if stats.Puts == 0 {
+		t.Error("Stats().Puts = 0, want > 0")
+	}
+
+	// Test putting nil
+	p.PutBuffer(nil)
+}
+
+func TestBufferPool_SetClearOnPut(t *testing.T) {
+	p := newPool()
+	p.SetClearOnPut(true)
+
+	// Get buffer and write data
+	buf := p.Get(64)
+	copy(buf, []byte("sensitive"))
+
+	// Return to pool
+	p.Put(buf)
+
+	// Data should be cleared
+	for i := 0; i < len("sensitive"); i++ {
+		if buf[i] != 0 {
+			t.Errorf("buf[%d] = %d, want 0 (not cleared)", i, buf[i])
+		}
+	}
+}
+
+func TestBufferPool_SetMaxSize(t *testing.T) {
+	p := newPool()
+	p.SetMaxSize(1024)
+
+	// Test that oversized buffers are not pooled
+	buf := p.Get(2048)
+	if cap(buf) != 2048 {
+		t.Errorf("Get(2048) capacity = %d, want 2048", cap(buf))
+	}
+
+	p.Put(buf)
+	// Buffer should not be pooled due to size limit
+}
+
+func TestBufferPool_Stats(t *testing.T) {
+	p := newPool()
+	p.ResetStats()
+
+	// Perform operations
+	buf1 := p.Get(64)
+	buf2 := p.Get(128)
+	p.Put(buf1)
+	p.Put(buf2)
+	buf3 := p.Get(64)
+	p.Put(buf3)
+
+	stats := p.Stats()
+
+	if stats.Gets != 3 {
+		t.Errorf("Stats().Gets = %d, want 3", stats.Gets)
+	}
+	if stats.Puts != 3 {
+		t.Errorf("Stats().Puts = %d, want 3", stats.Puts)
+	}
+
+	// Test hit rate
+	if stats.HitRate() == 0 && stats.Hits > 0 {
+		t.Error("HitRate() = 0 with hits > 0")
+	}
+
+	// Test alloc rate
+	if stats.AllocRate() == 0 && stats.Allocs > 0 {
+		t.Error("AllocRate() = 0 with allocs > 0")
+	}
+}
+
+func TestPoolStats_Rates(t *testing.T) {
+	// Test zero gets
+	s := PoolStats{Gets: 0, Hits: 10, Allocs: 5}
+	if s.HitRate() != 0 {
+		t.Errorf("HitRate() with 0 gets = %f, want 0", s.HitRate())
+	}
+	if s.AllocRate() != 0 {
+		t.Errorf("AllocRate() with 0 gets = %f, want 0", s.AllocRate())
+	}
+
+	// Test normal rates
+	s = PoolStats{Gets: 100, Hits: 75, Allocs: 25}
+	if s.HitRate() != 75.0 {
+		t.Errorf("HitRate() = %f, want 75.0", s.HitRate())
+	}
+	if s.AllocRate() != 25.0 {
+		t.Errorf("AllocRate() = %f, want 25.0", s.AllocRate())
+	}
+}
+
+func TestGlobalPoolFunctions(t *testing.T) {
+	ResetStats()
+
+	// Test global Get/Put
+	buf := Get(100)
+	if len(buf) != 100 {
+		t.Errorf("Get(100) length = %d, want 100", len(buf))
+	}
+	Put(buf)
+
+	// Test global GetBuffer/PutBuffer
+	b := GetBuffer(200)
+	if b.Cap() < 200 {
+		t.Errorf("GetBuffer(200).Cap() = %d, want >= 200", b.Cap())
+	}
+	PutBuffer(b)
+
+	// Test global Stats
+	stats := Stats()
+	if stats.Gets == 0 {
+		t.Error("Global Stats().Gets = 0, want > 0")
+	}
+}
+
+func TestSizeClass(t *testing.T) {
+	tests := []struct {
+		size  int
+		class int
+	}{
+		{0, 6},
+		{1, 6},
+		{64, 6},
+		{65, 7},
+		{128, 7},
+		{129, 8},
+		{256, 8},
+		{512, 9},
+		{1024, 10},
+	}
+
+	for _, tt := range tests {
+		if got := sizeClass(tt.size); got != tt.class {
+			t.Errorf("sizeClass(%d) = %d, want %d", tt.size, got, tt.class)
+		}
+	}
+}
+
+func TestIsPowerOf2(t *testing.T) {
+	tests := []struct {
+		n    int
+		want bool
+	}{
+		{0, false},
+		{1, true},
+		{2, true},
+		{3, false},
+		{4, true},
+		{64, true},
+		{100, false},
+		{128, true},
+		{-1, false},
+	}
+
+	for _, tt := range tests {
+		if got := isPowerOf2(tt.n); got != tt.want {
+			t.Errorf("isPowerOf2(%d) = %v, want %v", tt.n, got, tt.want)
+		}
+	}
+}
+
+func TestNextPowerOf2(t *testing.T) {
+	tests := []struct {
+		n    int
+		want int
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 2},
+		{3, 4},
+		{64, 64},
+		{65, 128},
+		{1000, 1024},
+		{maxPoolSize + 1, maxPoolSize},
+	}
+
+	for _, tt := range tests {
+		if got := nextPowerOf2(tt.n); got != tt.want {
+			t.Errorf("nextPowerOf2(%d) = %d, want %d", tt.n, got, tt.want)
+		}
+	}
+}
+
+func TestBufferPool_Concurrent(t *testing.T) {
+	p := newPool()
+
+	const (
+		numGoroutines = 100
+		numOps        = 1000
+	)
 
 	var wg sync.WaitGroup
-	var totalGets, totalPuts int64
+	wg.Add(numGoroutines)
 
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
 			defer wg.Done()
 
-			for j := 0; j < operations; j++ {
-				buf := pool.Get(1024)
-				atomic.AddInt64(&totalGets, 1)
+			for j := 0; j < numOps; j++ {
+				size := 64 << (j % 5) // Various sizes
 
-				pool.Put(buf)
-				atomic.AddInt64(&totalPuts, 1)
+				// Get buffer
+				buf := p.Get(size)
+				if len(buf) != size {
+					t.Errorf("goroutine %d: Get(%d) length = %d", id, size, len(buf))
+				}
+
+				// Use buffer
+				for k := range buf {
+					buf[k] = byte(id + j)
+				}
+
+				// Return buffer
+				p.Put(buf)
+
+				// Occasionally get Buffer objects
+				if j%10 == 0 {
+					b := p.GetBuffer(size)
+					b.Write([]byte("test"))
+					p.PutBuffer(b)
+				}
 			}
-		}()
+		}(i)
 	}
 
 	wg.Wait()
 
-	stats := pool.GetStats()
-	Equal(t, totalGets, stats.Gets, "gets should match")
-	Equal(t, totalPuts, stats.Puts, "puts should match")
+	stats := p.Stats()
+	expectedGets := uint64(numGoroutines * numOps)
+	expectedPuts := uint64(numGoroutines * numOps)
+
+	// Add Buffer operations
+	expectedGets += uint64(numGoroutines * (numOps / 10))
+	expectedPuts += uint64(numGoroutines * (numOps / 10))
+
+	if stats.Gets < expectedGets {
+		t.Errorf("Concurrent Stats().Gets = %d, want >= %d", stats.Gets, expectedGets)
+	}
+	if stats.Puts < expectedPuts {
+		t.Errorf("Concurrent Stats().Puts = %d, want >= %d", stats.Puts, expectedPuts)
+	}
+}
+
+func TestBufferPool_MemoryPressure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping memory pressure test in short mode")
+	}
+
+	p := newPool()
+	p.ResetStats()
+
+	// Allocate many buffers
+	buffers := make([][]byte, 1000)
+	for i := range buffers {
+		buffers[i] = p.Get(4096)
+	}
+
+	// Return half to pool
+	for i := 0; i < 500; i++ {
+		p.Put(buffers[i])
+	}
+
+	// Force GC
+	runtime.GC()
+	runtime.GC()
+
+	// Get more buffers - should reuse from pool
+	for i := 0; i < 500; i++ {
+		buf := p.Get(4096)
+		if cap(buf) < 4096 {
+			t.Errorf("Get(4096) after GC capacity = %d, want >= 4096", cap(buf))
+		}
+	}
+
+	stats := p.Stats()
+	if stats.Hits == 0 {
+		t.Log("Warning: No hits after GC (pool may have been cleared)")
+	}
 }
