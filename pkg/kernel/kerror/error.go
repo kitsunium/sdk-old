@@ -110,7 +110,7 @@ func Define(config KConfig) KError {
 	// Lock for atomic operations on registry
 	defineMu.Lock()
 	defer defineMu.Unlock()
-	
+
 	// Get or create package cache
 	var pkgCache kcache.Cache[int, *KError]
 	if existing, ok := registryByPkgCode.Get(pkg); ok {
