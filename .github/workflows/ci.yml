@@ -57,7 +57,7 @@ jobs:
             --combined_report=lcov \
             --instrumentation_filter="//pkg[/:]" \
             --test_output=errors
-          
+
           # Ensure coverage report exists and is readable
           if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
             echo "✅ Coverage report generated at bazel-out/_coverage/_coverage_report.dat"
@@ -69,7 +69,7 @@ jobs:
 
       - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
-        uses: SonarSource/sonarcloud-github-action@v5
+        uses: SonarSource/sonarqube-scan-action@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
