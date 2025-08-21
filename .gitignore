@@ -53,3 +53,6 @@ coverage.html
 *.prof
 *.testpr-review-issues/
 process_reviews*.py
+
+# Benchmark results
+result_bench

@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "buffer.go",
         "constants.go",
-        "doc.go",
         "errors.go",
         "pool.go",
         "types.go",
@@ -28,5 +27,8 @@ go_test(
     name = "kbuffer_bench_test",
     srcs = ["kbuffer_bench_test.go"],
     embed = [":kbuffer"],
-    tags = ["bench"],
+    tags = [
+        "bench",
+        "manual",
+    ],
 )

@@ -11,16 +11,6 @@ import (
 const (
 	minPoolSize = 64      // Minimum pooled buffer size
 	maxPoolSize = 1 << 20 // Maximum pooled buffer size (1MB)
-
-	// Size classes for efficient pooling
-	class64B  = 64
-	class256B = 256
-	class1K   = 1024
-	class4K   = 4096
-	class16K  = 16384
-	class64K  = 65536
-	class256K = 262144
-	class1M   = 1048576
 )
 
 // BufferPool implements a lock-free, size-classed buffer pool.
@@ -138,6 +128,7 @@ func (p *BufferPool) Put(buf []byte) {
 
 	// Reset to full capacity and return to pool
 	buf = buf[:capacity]
+	//nolint:staticcheck // SA6002: sync.Pool is optimized for []byte in Go 1.18+
 	p.pools[poolIdx].Put(buf)
 }
 
@@ -207,7 +198,7 @@ func (p *BufferPool) SetMaxSize(size int64) {
 func (p *BufferPool) prewarm() {
 	// Pre-warm with common sizes based on CPU count
 	numCPU := runtime.NumCPU()
-	sizes := []int{class256B, class1K, class4K, class16K, class64K}
+	sizes := []int{256, 1024, 4096, 16384, 65536}
 
 	for _, size := range sizes {
 		class := sizeClass(size)
@@ -224,6 +215,7 @@ func (p *BufferPool) prewarm() {
 
 		// Return to pool
 		for _, buf := range bufs {
+			//nolint:staticcheck // SA6002: sync.Pool is optimized for []byte in Go 1.18+
 			p.pools[poolIdx].Put(buf)
 		}
 	}
@@ -246,20 +238,6 @@ func sizeClass(size int) int {
 //go:nosplit
 func isPowerOf2(n int) bool {
 	return n > 0 && (n&(n-1)) == 0
-}
-
-// nextPowerOf2 returns the next power of 2 >= n.
-//
-//go:inline
-//go:nosplit
-func nextPowerOf2(n int) int {
-	if n <= 1 {
-		return 1
-	}
-	if n > maxPoolSize {
-		return maxPoolSize
-	}
-	return 1 << bits.Len(uint(n-1))
 }
 
 // Global pool functions

@@ -115,11 +115,10 @@ test/coverage:
 .PHONY: bench
 bench:
 	@echo "$(YELLOW)▶ Running benchmarks...$(NC)"
-	@for dir in $$(find pkg -name Makefile -type f -exec dirname {} \;); do \
-		if grep -q "^bench:" $$dir/Makefile 2>/dev/null; then \
-			echo "$(CYAN)  Benchmarking $$dir...$(NC)"; \
-			(cd $$dir && make bench); \
-		fi \
+	@for target in $$($(BAZEL) query 'attr(tags, "bench", //...)' 2>/dev/null); do \
+		pkg_dir=$$(echo $$target | sed 's|//||' | sed 's|:.*||'); \
+		echo "$(CYAN)  Benchmarking $$pkg_dir...$(NC)"; \
+		$(BAZEL) run $$target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s -test.run=^$$ 2>&1 | grep -v "^exec " | grep -v "^Executing tests" | grep -v "^---" | tee $$pkg_dir/result_bench; \
 	done
 	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
 

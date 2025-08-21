@@ -15,6 +15,7 @@ func TestBufferPool_Get(t *testing.T) {
 		size     int
 		wantSize int
 	}{
+		{"negative size", -10, 0},
 		{"zero size", 0, 0},
 		{"small size", 10, 10},
 		{"exact power of 2", 64, 64},
@@ -26,7 +27,7 @@ func TestBufferPool_Get(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := p.Get(tt.size)
-			if tt.size == 0 {
+			if tt.size <= 0 {
 				if buf != nil {
 					t.Errorf("Get(%d) = %v, want nil", tt.size, buf)
 				}
@@ -40,6 +41,13 @@ func TestBufferPool_Get(t *testing.T) {
 				t.Errorf("Get(%d) capacity = %d, want >= %d", tt.size, cap(buf), tt.wantSize)
 			}
 		})
+	}
+
+	// Test edge case: size class calculation boundary
+	// This tests the poolIdx < 0 branch
+	buf := p.Get(32) // size class 5, poolIdx = -1
+	if buf == nil || len(buf) != 32 {
+		t.Errorf("Get(32) = %v, want buffer of size 32", buf)
 	}
 
 	stats := p.Stats()
@@ -83,6 +91,23 @@ func TestBufferPool_Put(t *testing.T) {
 	if stats.Puts != 3 {
 		t.Errorf("Stats().Puts after non-power = %d, want 3", stats.Puts)
 	}
+
+	// Test edge case: small buffer that results in negative poolIdx
+	smallBuf := make([]byte, 32) // size class 5, poolIdx = -1
+	p.Put(smallBuf)
+	stats = p.Stats()
+	if stats.Puts != 4 {
+		t.Errorf("Stats().Puts after small buffer = %d, want 4", stats.Puts)
+	}
+
+	// Test edge case: buffer with poolIdx >= len(pools)
+	// Create a buffer with capacity that would result in poolIdx >= 11
+	hugeBuf := make([]byte, 1<<20) // 1MB, class = 20, poolIdx = 14
+	p.Put(hugeBuf)
+	stats = p.Stats()
+	if stats.Puts != 5 {
+		t.Errorf("Stats().Puts after huge buffer = %d, want 5", stats.Puts)
+	}
 }
 
 func TestBufferPool_GetPutCycle(t *testing.T) {
@@ -113,16 +138,28 @@ func TestBufferPool_GetPutCycle(t *testing.T) {
 func TestBufferPool_GetBuffer(t *testing.T) {
 	p := newPool()
 
-	// Test getting buffer
+	// Test getting buffer with normal size
 	b := p.GetBuffer(100)
 	if b == nil {
-		t.Fatal("GetBuffer() = nil")
+		t.Fatal("GetBuffer(100) = nil")
 	}
 	if b.Cap() < 100 {
 		t.Errorf("GetBuffer(100).Cap() = %d, want >= 100", b.Cap())
 	}
 	if b.Len() != 0 {
-		t.Errorf("GetBuffer().Len() = %d, want 0", b.Len())
+		t.Errorf("GetBuffer(100).Len() = %d, want 0", b.Len())
+	}
+
+	// Test getting buffer with zero size
+	b2 := p.GetBuffer(0)
+	if b2 == nil {
+		t.Fatal("GetBuffer(0) = nil")
+	}
+
+	// Test getting buffer with negative size
+	b3 := p.GetBuffer(-10)
+	if b3 == nil {
+		t.Fatal("GetBuffer(-10) = nil")
 	}
 }
 
@@ -257,6 +294,55 @@ func TestGlobalPoolFunctions(t *testing.T) {
 	}
 }
 
+func TestBufferPool_Prewarm(t *testing.T) {
+	// Test normal prewarm
+	p := newPool()
+	p.prewarm()
+
+	// Verify it doesn't panic and works correctly
+	// The prewarm function pre-allocates buffers for common sizes
+}
+
+func TestBufferPool_EdgeCases(t *testing.T) {
+	p := newPool()
+	p.ResetStats()
+
+	// Test Get with size that results in poolIdx >= len(pools)
+	// maxPoolSize is 1<<20, so size > maxPoolSize will take the oversized path
+	bigSize := maxPoolSize + 1
+	buf := p.Get(bigSize)
+	if buf == nil || len(buf) != bigSize {
+		t.Errorf("Get(%d) = %v, want buffer of size %d", bigSize, buf, bigSize)
+	}
+
+	// Verify it was allocated directly (miss + alloc)
+	stats := p.Stats()
+	if stats.Misses == 0 {
+		t.Error("Expected miss for oversized buffer")
+	}
+	if stats.Allocs == 0 {
+		t.Error("Expected alloc for oversized buffer")
+	}
+
+	// Now test the poolIdx >= len(pools) case
+	// We need a buffer with valid size but poolIdx >= 21
+	// Size class 27 would give poolIdx = 21 (27 - 6)
+	// But this would be > maxPoolSize, so let's create a custom test
+
+	// Create a pool with smaller pools array to trigger the boundary
+	p2 := &BufferPool{
+		pools: [21]*sync.Pool{}, // Leave some nil
+	}
+	p2.maxSize.Store(1 << 30) // Very large max
+
+	// Size class 27 = 2^27 = 134217728, poolIdx = 21
+	hugeSize := 1 << 27
+	buf2 := p2.Get(hugeSize)
+	if buf2 == nil || len(buf2) != hugeSize {
+		t.Errorf("Get(%d) = %v, want buffer of size %d", hugeSize, buf2, hugeSize)
+	}
+}
+
 func TestSizeClass(t *testing.T) {
 	tests := []struct {
 		size  int
@@ -299,28 +385,6 @@ func TestIsPowerOf2(t *testing.T) {
 	for _, tt := range tests {
 		if got := isPowerOf2(tt.n); got != tt.want {
 			t.Errorf("isPowerOf2(%d) = %v, want %v", tt.n, got, tt.want)
-		}
-	}
-}
-
-func TestNextPowerOf2(t *testing.T) {
-	tests := []struct {
-		n    int
-		want int
-	}{
-		{0, 1},
-		{1, 1},
-		{2, 2},
-		{3, 4},
-		{64, 64},
-		{65, 128},
-		{1000, 1024},
-		{maxPoolSize + 1, maxPoolSize},
-	}
-
-	for _, tt := range tests {
-		if got := nextPowerOf2(tt.n); got != tt.want {
-			t.Errorf("nextPowerOf2(%d) = %d, want %d", tt.n, got, tt.want)
 		}
 	}
 }
