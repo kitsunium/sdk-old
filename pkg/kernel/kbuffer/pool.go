@@ -21,18 +21,6 @@ type BufferPool struct {
 	// Configuration
 	clearOnPut atomic.Bool  // Clear buffers on return
 	maxSize    atomic.Int64 // Maximum pooled size
-
-	// Statistics (optional, can be nil)
-	stats *poolStats // Atomic statistics (pointer to avoid overhead when disabled)
-}
-
-// poolStats tracks pool usage with atomic counters.
-type poolStats struct {
-	gets   atomic.Uint64
-	puts   atomic.Uint64
-	allocs atomic.Uint64
-	hits   atomic.Uint64
-	misses atomic.Uint64
 }
 
 // globalPool is the singleton pool instance.
@@ -41,24 +29,17 @@ var globalPool = newPool()
 func newPool() *BufferPool {
 	p := &BufferPool{}
 	p.maxSize.Store(maxPoolSize)
-	// Enable stats by default for tests
-	p.stats = &poolStats{}
 
 	// Initialize pools for each size class
 	for i := range p.pools {
 		size := 1 << (i + 6) // 2^6 to 2^20
-		poolIndex := i
 		p.pools[i] = &sync.Pool{
-			New: func(sz int, idx int) func() any {
+			New: func(sz int) func() any {
 				return func() any {
-					// Track allocations if stats enabled
-					if p.stats != nil {
-						p.stats.allocs.Add(1)
-					}
 					buf := make([]byte, sz)
 					return &buf
 				}
-			}(size, poolIndex),
+			}(size),
 		}
 	}
 
@@ -73,11 +54,6 @@ func newPool() *BufferPool {
 //
 //go:nosplit
 func (p *BufferPool) Get(size int) []byte {
-	// Track stats if enabled
-	if p.stats != nil {
-		p.stats.gets.Add(1)
-	}
-
 	if size <= 0 {
 		return nil
 	}
@@ -92,18 +68,11 @@ func (p *BufferPool) Get(size int) []byte {
 		} else {
 			bufPtr = p.pools[2].Get().(*[]byte)
 		}
-		if p.stats != nil {
-			p.stats.hits.Add(1)
-		}
 		return (*bufPtr)[:size]
 	}
 
 	// Direct allocation for oversized buffers
 	if size > int(p.maxSize.Load()) {
-		if p.stats != nil {
-			p.stats.misses.Add(1)
-			p.stats.allocs.Add(1)
-		}
 		return make([]byte, size)
 	}
 
@@ -112,18 +81,11 @@ func (p *BufferPool) Get(size int) []byte {
 	poolIdx := class - 6
 
 	if poolIdx < 0 || poolIdx >= len(p.pools) {
-		if p.stats != nil {
-			p.stats.misses.Add(1)
-			p.stats.allocs.Add(1)
-		}
 		return make([]byte, size)
 	}
 
 	// Get from pool
 	bufPtr := p.pools[poolIdx].Get().(*[]byte)
-	if p.stats != nil {
-		p.stats.hits.Add(1)
-	}
 	return (*bufPtr)[:size]
 }
 
@@ -134,11 +96,6 @@ func (p *BufferPool) Get(size int) []byte {
 func (p *BufferPool) Put(buf []byte) {
 	if buf == nil {
 		return
-	}
-
-	// Track stats if enabled
-	if p.stats != nil {
-		p.stats.puts.Add(1)
 	}
 
 	capacity := cap(buf)
@@ -226,42 +183,6 @@ func (p *BufferPool) PutBuffer(b *Buffer) {
 	p.Put(b.data)
 }
 
-// EnableStats enables statistics collection (disabled by default for performance).
-func (p *BufferPool) EnableStats() {
-	if p.stats == nil {
-		p.stats = &poolStats{}
-	}
-}
-
-// DisableStats disables statistics collection.
-func (p *BufferPool) DisableStats() {
-	p.stats = nil
-}
-
-// Stats returns current pool statistics.
-func (p *BufferPool) Stats() PoolStats {
-	if p.stats == nil {
-		return PoolStats{}
-	}
-	return PoolStats{
-		Gets:   p.stats.gets.Load(),
-		Puts:   p.stats.puts.Load(),
-		Allocs: p.stats.allocs.Load(),
-		Hits:   p.stats.hits.Load(),
-		Misses: p.stats.misses.Load(),
-	}
-}
-
-// ResetStats resets all statistics counters to zero.
-func (p *BufferPool) ResetStats() {
-	if p.stats != nil {
-		p.stats.gets.Store(0)
-		p.stats.puts.Store(0)
-		p.stats.allocs.Store(0)
-		p.stats.hits.Store(0)
-		p.stats.misses.Store(0)
-	}
-}
 
 // SetClearOnPut configures whether buffers are cleared when returned.
 //
@@ -353,16 +274,3 @@ func PutBuffer(b *Buffer) {
 	globalPool.PutBuffer(b)
 }
 
-// Stats returns global pool statistics.
-//
-//go:inline
-func Stats() PoolStats {
-	return globalPool.Stats()
-}
-
-// ResetStats resets global pool statistics.
-//
-//go:inline
-func ResetStats() {
-	globalPool.ResetStats()
-}
