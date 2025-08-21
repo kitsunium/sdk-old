@@ -112,21 +112,11 @@ func fastFloat64ToString(f float64) string {
 }
 
 // normalizeJSONNumber converts json.Number to string.
-// Tries to preserve exact representation for integers,
-// and converts scientific notation appropriately.
+// Preserves the exact textual representation to avoid precision loss.
 func normalizeJSONNumber(n json.Number) string {
-	// First try as int64 to preserve exact integers
-	if i, err := n.Int64(); err == nil {
-		return strconv.FormatInt(i, 10)
-	}
-
-	// Then try as float64
-	if f, err := n.Float64(); err == nil {
-		return fastFloat64ToString(f)
-	}
-
-	// Fallback to string representation
-	return string(n)
+	// Return the original string representation to preserve precision
+	// This avoids issues with large integers or precise decimals
+	return n.String()
 }
 
 // LoadBytes parses JSON from a byte slice.

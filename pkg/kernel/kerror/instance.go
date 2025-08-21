@@ -470,11 +470,13 @@ func (i *Instance) MapTags(fn func(string, string) (string, string)) *Instance {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
+	// Create new map to avoid mutation during iteration
 	newTags := make(map[string]string, len(i.tags))
 	for k, v := range i.tags {
 		newK, newV := fn(k, v)
 		newTags[newK] = newV
 	}
+	// Atomic replacement of the entire map
 	i.tags = newTags
 
 	return i

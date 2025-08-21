@@ -263,24 +263,56 @@ func processSlice(output map[string]string, slice []any, prefix []string, key st
 	}
 }
 
-// StringToBytes converts a string to a byte slice without allocation.
+// stringToBytes converts a string to a byte slice without allocation.
 // This function uses unsafe operations to directly access the underlying
 // string data.
 //
-// WARNING: The returned byte slice shares memory with the input string.
-// Modifying the byte slice may cause undefined behavior. Use this function
-// only when you need read-only access to the string bytes.
-func StringToBytes(s string) []byte {
+// DANGER: Zero-allocation conversion - shares memory with input.
+// DO NOT modify the returned byte slice - this will cause memory corruption.
+// DO NOT store or persist the returned value beyond the function scope.
+//
+// When to use:
+//   - Read-only access within a single function
+//   - Performance-critical hot paths
+//   - Temporary conversion for immediate use (e.g., writing to a buffer)
+//
+// Unacceptable uses:
+//   - Storing in structs or global variables
+//   - Passing to goroutines or channels
+//   - Any scenario where the slice might be modified
+func stringToBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-// BytesToString converts a byte slice to a string without allocation.
+// bytesToString converts a byte slice to a string without allocation.
 // This function uses unsafe operations to create a string header that
 // references the same underlying memory as the byte slice.
 //
-// WARNING: The returned string shares memory with the input byte slice.
-// The byte slice must not be modified after calling this function, as it
-// would violate Go's string immutability guarantee.
-func BytesToString(b []byte) string {
+// DANGER: Zero-allocation conversion - shares memory with input.
+// DO NOT modify the input byte slice after conversion - violates string immutability.
+// DO NOT use if the byte slice will be modified elsewhere.
+//
+// When to use:
+//   - Converting read-only byte data to string
+//   - Performance-critical hot paths
+//   - When you control the entire lifecycle of the byte slice
+//
+// Unacceptable uses:
+//   - Converting mutable buffers that may change
+//   - Data from external sources you don't control
+//   - Any scenario where the byte slice might be modified later
+func bytesToString(b []byte) string {
 	return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
+// StringToBytesSafe converts a string to a byte slice with allocation.
+// This is the safe version that creates a copy of the data.
+func StringToBytesSafe(s string) []byte {
+	return []byte(s)
+}
+
+// BytesToStringSafe converts a byte slice to a string with allocation.
+// This is the safe version that creates a copy of the data.
+func BytesToStringSafe(b []byte) string {
+	return string(b)
 }
