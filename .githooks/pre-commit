@@ -1,26 +1,46 @@
 #!/bin/bash
+# Hook pre-commit : exécuté automatiquement avant chaque commit
+# Objectif : vérifier que le code est formaté et que les tests passent
 
-# Pre-commit hook to run formatting and tests
+# Active le mode strict de bash :
+# -e : arrête le script si une commande échoue
 set -e
 
-# Check if task is installed
-if ! command -v task &> /dev/null; then
-    echo "❌ 'task' command not found. Please install it with:"
-    echo "   brew install go-task"
-    echo "   or see https://taskfile.dev/installation/"
+# Vérifie si la commande 'make' est installée sur le système
+# 'command -v' cherche l'emplacement d'une commande
+# '&> /dev/null' redirige toute sortie vers /dev/null (la supprime)
+# '!' inverse le test : si la commande n'est PAS trouvée
+if ! command -v make &> /dev/null; then
+    # Affiche un message d'erreur avec l'emoji ❌
+    echo "❌ 'make' command not found. Please install it with:"
+    echo "   - macOS: make is pre-installed"
+    echo "   - Linux: sudo apt-get install make"
+    echo "   - Windows: install via MinGW or WSL"
+    # Sort du script avec le code d'erreur 1 (échec)
     exit 1
 fi
 
+# Affiche un message indiquant le début du formatage
 echo "🔧 Running code formatting..."
-if ! task fmt; then
+# Exécute la tâche de formatage définie dans Makefile
+# Si 'make fmt' échoue, le 'if !' détecte l'échec
+if ! make fmt; then
     echo "❌ Code formatting failed. Please fix the issues and try again."
+    # Sort avec erreur, empêchant le commit
     exit 1
 fi
 
+# Affiche un message indiquant le début des tests
 echo "🧪 Running tests..."
-if ! task test; then
+# Exécute la tâche de test définie dans Makefile
+# Si 'make test' échoue, le 'if !' détecte l'échec
+if ! make test; then
     echo "❌ Tests failed. Please fix the issues and try again."
+    # Sort avec erreur, empêchant le commit
     exit 1
 fi
 
+# Si on arrive ici, tout s'est bien passé
 echo "✅ Pre-commit checks passed!"
+# Le script se termine avec succès (code 0 par défaut)
+# Git continuera avec le commit

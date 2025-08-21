@@ -202,16 +202,30 @@ func (c *AtomicCache[K, V]) Stats() Stats {
 	return *stats
 }
 
-// evictLRU removes the least recently used entry.
+// evictLRU removes the least recently used entry, prioritizing expired entries.
 func (c *AtomicCache[K, V]) evictLRU(data *atomicMap[K, V]) {
+	now := time.Now().UnixNano()
 	var oldestKey K
-	oldestTime := time.Now().UnixNano()
+	var foundExpired bool
+	oldestTime := now
 
+	// First pass: look for expired entries to evict
 	for k, v := range data.m {
-		accessTime := v.accessTime.Load()
-		if accessTime < oldestTime {
-			oldestTime = accessTime
+		if v.expiration > 0 && now > v.expiration {
 			oldestKey = k
+			foundExpired = true
+			break // Evict first expired entry found
+		}
+	}
+
+	// Second pass: if no expired entries, find LRU entry
+	if !foundExpired {
+		for k, v := range data.m {
+			accessTime := v.accessTime.Load()
+			if accessTime < oldestTime {
+				oldestTime = accessTime
+				oldestKey = k
+			}
 		}
 	}
 

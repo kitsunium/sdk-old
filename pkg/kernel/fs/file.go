@@ -161,8 +161,8 @@ func (f *file) Copy(dst string) error {
 		return fmt.Errorf("failed to stat source file: %w", err)
 	}
 
-	// Open destination file.
-	dstFD, err := unix.Open(dst, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, uint32(srcStat.Mode))
+	// Open destination file with permission bits only (mask out file type bits).
+	dstFD, err := unix.Open(dst, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, uint32(srcStat.Mode&0777))
 	if err != nil {
 		return fmt.Errorf("failed to open destination file: %w", err)
 	}

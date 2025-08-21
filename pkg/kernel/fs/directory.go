@@ -139,10 +139,28 @@ func (d *directory) Exists() bool {
 	return d.stats.Exists()
 }
 
-// Size calculates the total size of all files in the directory.
+// Size calculates the total size of all files in the directory (recursively).
 func (d *directory) Size() int64 {
-	_ = d.stats.Refresh() // Ignore refresh error for size calculation
-	return d.stats.meta.Size
+	var totalSize int64
+
+	// Walk through all files in the directory
+	err := filepath.Walk(d.path, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip files/dirs we can't access
+		}
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+
+	if err != nil {
+		// Fallback to directory's own size if walk fails
+		_ = d.stats.Refresh()
+		return d.stats.meta.Size
+	}
+
+	return totalSize
 }
 
 // List retrieves all files and subdirectories within the directory.
