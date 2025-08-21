@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,10 +12,10 @@ import (
 )
 
 const (
-	DefaultFilePerm uint32 = 0644 // Default permission for file creation
+	DefaultFilePerm uint32 = 0644 // Default permission for file creation.
 )
 
-// File interface defines operations for file management
+// File interface defines operations for file management.
 type File interface {
 	Path() string
 	Parent() (Directory, error)
@@ -29,20 +30,19 @@ type File interface {
 	IsDotFile() bool
 }
 
-// file struct represents a file with its path and metadata
+// file struct represents a file with its path and metadata.
 type file struct {
-	parent        string
-	path          string
-	chmod         *uint32
-	uid           *int
-	gid           *int
-	overwrite     bool
-	preserveTimes bool
-	stats         *stats
-	buffersize    *int
+	parent     string
+	path       string
+	chmod      *uint32
+	uid        *int
+	gid        *int
+	overwrite  bool
+	stats      *stats
+	buffersize *int
 }
 
-// NewFile creates a new File object based on the given options
+// NewFile creates a new File object based on the given options.
 func NewFile(option Option) (File, error) {
 	if !option.Validate() {
 		return nil, fmt.Errorf("invalid option: %v", option)
@@ -74,16 +74,16 @@ func NewFile(option Option) (File, error) {
 }
 
 func (f *file) Size() int64 {
-	f.stats.Refresh()
+	_ = f.stats.Refresh() // Ignore refresh error for size calculation
 	return f.stats.meta.Size
 }
 
-// Path returns the file's path
+// Path returns the file's path.
 func (f *file) Path() string {
 	return f.path
 }
 
-// Parent retrieves the parent directory of the file
+// Parent retrieves the parent directory of the file.
 func (f *file) Parent() (Directory, error) {
 	return &directory{
 		path:  f.parent,
@@ -91,14 +91,17 @@ func (f *file) Parent() (Directory, error) {
 	}, nil
 }
 
-// Remove deletes the file
+// Remove deletes the file.
 func (f *file) Remove() error {
-	return os.Remove(f.path)
+	if err := os.Remove(f.path); err != nil {
+		return fmt.Errorf("failed to remove file %s: %w", f.path, err)
+	}
+	return nil
 }
 
-// Exists checks if the file exists
+// Exists checks if the file exists.
 func (f *file) Exists() bool {
-	f.stats.Refresh()
+	_ = f.stats.Refresh() // Ignore refresh error for existence check
 	return f.stats.Exists()
 }
 
@@ -130,7 +133,7 @@ func (f *file) Create() (File, error) {
 	}
 	defer unix.Close(fd)
 
-	// Update permissions and ownership if specified
+	// Update permissions and ownership if specified.
 	if err := unix.Fchmod(fd, *f.chmod); err != nil {
 		return nil, fmt.Errorf("failed to set permissions: %w", err)
 	}
@@ -139,12 +142,12 @@ func (f *file) Create() (File, error) {
 		return nil, fmt.Errorf("failed to set ownership: %w", err)
 	}
 
-	// Refresh file stats
+	// Refresh file stats.
 	f.stats = NewStats(f.path)
 	return f, nil
 }
 
-// Copy copies the file to a new destination using unix.Read and unix.Write with parallel pipelines.
+// Copy copies the file to a new destination using unix.Read and unix.Write with parallel pipelines..
 func (f *file) Copy(dst string) error {
 	srcFD, err := unix.Open(f.path, unix.O_RDONLY, 0)
 	if err != nil {
@@ -152,20 +155,20 @@ func (f *file) Copy(dst string) error {
 	}
 	defer unix.Close(srcFD)
 
-	// Get source file stats for mode and size
+	// Get source file stats for mode and size.
 	srcStat := &unix.Stat_t{}
 	if err := unix.Fstat(srcFD, srcStat); err != nil {
 		return fmt.Errorf("failed to stat source file: %w", err)
 	}
 
-	// Open destination file
+	// Open destination file.
 	dstFD, err := unix.Open(dst, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, uint32(srcStat.Mode))
 	if err != nil {
 		return fmt.Errorf("failed to open destination file: %w", err)
 	}
 	defer unix.Close(dstFD)
 
-	// Channels for communication between reader and writer
+	// Channels for communication between reader and writer.
 	type chunk struct {
 		data []byte
 		n    int
@@ -174,7 +177,7 @@ func (f *file) Copy(dst string) error {
 	}
 	readChan := make(chan chunk, 2) // Buffered channel for pipelining
 
-	// Goroutine for reading
+	// Goroutine for reading.
 	go func() {
 		defer close(readChan)
 		buffer := make([]byte, *f.buffersize)
@@ -192,10 +195,10 @@ func (f *file) Copy(dst string) error {
 		}
 	}()
 
-	// Writing in the main goroutine
+	// Writing in the main goroutine.
 	for chunk := range readChan {
 		if chunk.err != nil {
-			if chunk.err == io.EOF {
+			if errors.Is(chunk.err, io.EOF) {
 				break // End of file
 			}
 			return fmt.Errorf("failed to read from source file: %w", chunk.err)
@@ -218,10 +221,10 @@ func (f *file) Copy(dst string) error {
 	return nil
 }
 
-// Move moves the file to a new destination
+// Move moves the file to a new destination.
 func (f *file) Move(dst string) error {
 	if err := os.Rename(f.path, dst); err != nil {
-		return err
+		return fmt.Errorf("failed to move file from %s to %s: %w", f.path, dst, err)
 	}
 
 	f.path = dst
@@ -229,17 +232,17 @@ func (f *file) Move(dst string) error {
 	return nil
 }
 
-// Write writes data to the file
+// Write writes data to the file.
 func (f *file) Write(data []byte) (int, error) {
 	fd, err := unix.Open(f.path, unix.O_CREAT|unix.O_WRONLY|unix.O_TRUNC, *f.chmod)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to open file %s for writing: %w", f.path, err)
 	}
 	defer unix.Close(fd)
 
 	n, err := unix.Write(fd, data)
 	if err != nil {
-		return n, err
+		return n, fmt.Errorf("failed to write data to file %s: %w", f.path, err)
 	}
 
 	return n, nil
@@ -252,33 +255,33 @@ func (f *file) Write(data []byte) (int, error) {
 // - []byte: The file content.
 // - error: Error if the operation fails.
 func (f *file) Read() ([]byte, error) {
-	// Open the file using a low-level Unix system call
+	// Open the file using a low-level Unix system call.
 	fd, err := unix.Open(f.path, unix.O_RDONLY, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer unix.Close(fd)
 
-	// Use a dynamically growing buffer for storing file content
+	// Use a dynamically growing buffer for storing file content.
 	var result []byte
-	var buffer []byte = make([]byte, *f.buffersize)
+	buffer := make([]byte, *f.buffersize)
 
 	for {
-		// Read a chunk of data
+		// Read a chunk of data.
 		n, err := unix.Read(fd, buffer)
 		if n > 0 {
 			result = append(result, buffer[:n]...)
 		}
 
-		// Handle errors
+		// Handle errors.
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break // End of file reached
 			}
 			return nil, fmt.Errorf("failed to read file: %w", err)
 		}
 
-		// Stop if no more data is available
+		// Stop if no more data is available.
 		if n == 0 {
 			break
 		}

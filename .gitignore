@@ -1,12 +1,55 @@
+# Go
 vendor
+*.out
+*.lcov
+
+# Bazel
+bazel-*
+.bazelrc.user
+.bazelversion.user
+MODULE.bazel.lock
+build_events.json
+
+# Build artifacts
 .build
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Terraform
 terraform*
 .terraform*
-token.env
-.DS_Store
-*.out
 tfplan
-*.db
+
+# Environment
+token.env
 config.yml
-*.lcov
+
+# Database
+*.db
 *.sqlite
+
+# OS
+.DS_Store
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage.out
+coverage-html/
+*.coverage
+coverage.html
+
+# Profiling
+*.prof
+*.testpr-review-issues/
+process_reviews*.py

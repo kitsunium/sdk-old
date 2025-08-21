@@ -1,0 +1,5 @@
+# Kernel packages - core SDK functionality
+package_group(
+    name = "kernel",
+    packages = ["//pkg/kernel/..."],
+)

@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kcache",
+    srcs = [
+        "atomic.go",
+        "cache.go",
+        "sharded.go",
+    ],
+    importpath = "github.com/kitsunium/sdk/pkg/kernel/kcache",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "kcache_test",
+    size = "small",
+    srcs = [
+        "atomic_test.go",
+        "cache_test.go",
+        "sharded_test.go",
+    ],
+    deps = [
+        ":kcache",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

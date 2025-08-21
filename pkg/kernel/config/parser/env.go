@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kistunium/sdk/pkg/kernel/config/normalize"
+	"github.com/kitsunium/sdk/pkg/kernel/config/normalize"
 )
 
 // ENV is a configuration parser for environment variables.

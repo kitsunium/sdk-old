@@ -27,7 +27,9 @@ func Map(input map[string]any) map[string]string {
 // - prefix: []string - The current prefix representing the path to the current map.
 func reduce(output map[string]string, input map[string]any, prefix []string) {
 	for key, value := range input {
-		fullKey := append(prefix, key)
+		fullKey := make([]string, len(prefix)+1)
+		copy(fullKey, prefix)
+		fullKey[len(prefix)] = key
 
 		switch v := value.(type) {
 		case map[string]any:

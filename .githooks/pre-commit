@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Pre-commit hook to run formatting and tests
+set -e
+
+# Check if task is installed
+if ! command -v task &> /dev/null; then
+    echo "❌ 'task' command not found. Please install it with:"
+    echo "   brew install go-task"
+    echo "   or see https://taskfile.dev/installation/"
+    exit 1
+fi
+
+echo "🔧 Running code formatting..."
+if ! task fmt; then
+    echo "❌ Code formatting failed. Please fix the issues and try again."
+    exit 1
+fi
+
+echo "🧪 Running tests..."
+if ! task test; then
+    echo "❌ Tests failed. Please fix the issues and try again."
+    exit 1
+fi
+
+echo "✅ Pre-commit checks passed!"

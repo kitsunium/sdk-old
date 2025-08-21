@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/kistunium/sdk/pkg/kernel/fs"
+	"github.com/kitsunium/sdk/pkg/kernel/fs"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -120,7 +120,8 @@ func TestArchive(t *testing.T) {
 			err := archive.AddDirectory(tmpDir)
 			assert.NoError(t, err, "Adding a directory should not return an error")
 			err = archive.AddDirectory(nestedDir)
-			assert.NoError(t, err, "Adding a nested directory that is already part of an added parent directory should not return an error")
+			assert.NoError(t, err,
+				"Adding a nested directory that is already part of an added parent directory should not return an error")
 		})
 
 		t.Run("duplicate directory", func(t *testing.T) {

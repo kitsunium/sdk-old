@@ -2,98 +2,100 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - '*'
+    branches: [main]
+    tags: ["*"]
   pull_request:
     types: [opened, synchronize, reopened]
-    
+
 permissions:
+  contents: read
   pull-requests: write
-  contents: write
-  packages: write
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  Tests:
-    name: Tests
-    runs-on: ubuntu-24.04
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Needed for SonarCloud
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
-          cache-dependency-path: go.sum
+          go-version: 1.24.6
+          cache: true
 
-      - name: Setup Task
-        uses: arduino/setup-task@v2
+      - uses: bazel-contrib/setup-bazel@0.15.0
         with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
 
-      - name: Setup dependencies
-        run: go install gotest.tools/gotestsum@latest
-
-      - name: Run all the tests
-        run: task tests
-
-      - name: Upload project to Artifacts
-        uses: actions/upload-artifact@v4
+      - uses: golangci/golangci-lint-action@v8
         with:
-          include-hidden-files: true
-          if-no-files-found: error
-          name: project
-          path: .
+          version: v2.4.0
+          skip-cache: true
 
-  Analyze:
-    name: Analyze
-    needs: Tests
-    runs-on: ubuntu-24.04
-    outputs:
-      version: ${{ steps.semver.outputs.next }}
-      prev_version: ${{ steps.semver.outputs.current }}
-    steps:
-      - name: Download project from Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: project
-          path: .
+      - name: Validate
+        run: |
+          go mod verify
+          go fmt ./...
+          git diff --exit-code || (echo "❌ Files need formatting" && exit 1)
 
-      - name: What is next version?
-        id: semver
-        uses: ietf-tools/semver-action@v1
-        with:
-          token: ${{ github.token }}
-          branch: main
-          skipInvalidTags: true
-          noVersionBumpBehavior: patch
-          noNewCommitBehavior: current
-          patchList: 'vendor, update, fix, bugfix, perf, refactor, test, tests, chore, ci, docs, improve, style, build, revert, improvement, enhancement, coverage, clean'
+      - name: Test
+        run: bazel test //pkg/... --test_output=errors
+
+      - name: Coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          # Generate LCOV coverage with Bazel
+          bazel coverage //pkg/... \
+            --combined_report=lcov \
+            --instrumentation_filter="//pkg[/:]" \
+            --test_output=errors
+          
+          # Verify LCOV report exists
+          if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
+            echo "✅ LCOV coverage report generated"
+            echo "Coverage report size: $(wc -c < bazel-out/_coverage/_coverage_report.dat) bytes"
+            
+            # Debug: Show first few lines to verify format
+            echo "First 10 lines of coverage report:"
+            head -10 bazel-out/_coverage/_coverage_report.dat
+          else
+            echo "❌ Coverage report not found!"
+            exit 1
+          fi
 
       - name: SonarCloud Scan
+        if: github.event_name == 'pull_request'
         uses: SonarSource/sonarqube-scan-action@v4
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          projectBaseDir: .
           args: >
-            -Dsonar.projectVersion=${{ steps.semver.outputs.next }}
             -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
-            -Dsonar.qualitygate.wait=true
-            -Dsonar.test.inclusions=**/*_test.go
-            -Dsonar.go.coverage.reportPaths=coverage.out
+        continue-on-error: true
 
-      - name: Enable auto-merge for pull requests
-        if: ${{ github.event_name == 'pull_request' && success() }}
-        uses: peter-evans/enable-pull-request-automerge@v2
+      - name: Security Scan
+        uses: aquasecurity/trivy-action@0.32.0
+        if: always()
         with:
-          pull-request-number: ${{ github.event.pull_request.number }} # Récupération du numéro de la PR
-          token: ${{ secrets.GITHUB_TOKEN }}
-          merge-method: squash
+          scan-type: fs
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+        continue-on-error: true
+
+      - name: Upload Security Results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('trivy.sarif') != ''
+        with:
+          sarif_file: trivy.sarif

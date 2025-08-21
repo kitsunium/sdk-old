@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	DefaultDirPerm uint32 = 0755 // Default permission for directory creation
+	DefaultDirPerm uint32 = 0755 // Default permission for directory creation.
 )
 
-// Directory interface defines operations for directory management
+// Directory interface defines operations for directory management.
 type Directory interface {
 	Path() string
 	Parent() (Directory, error)
@@ -25,18 +25,17 @@ type Directory interface {
 	List() ([]File, []Directory, error)
 }
 
-// directory struct represents a directory with its path and metadata
+// directory struct represents a directory with its path and metadata.
 type directory struct {
-	path          string
-	parentPath    string
-	chmod         *uint32
-	uid           *int
-	gid           *int
-	stats         *stats
-	preserveTimes bool
+	path       string
+	parentPath string
+	chmod      *uint32
+	uid        *int
+	gid        *int
+	stats      *stats
 }
 
-// NewDirectory creates a new Directory object based on the given options
+// NewDirectory creates a new Directory object based on the given options.
 func NewDirectory(option Option) (Directory, error) {
 	if !option.Validate() {
 		return nil, fmt.Errorf("invalid option: %v", option)
@@ -65,7 +64,7 @@ func NewDirectory(option Option) (Directory, error) {
 	return d, nil
 }
 
-// Path returns the directory's path
+// Path returns the directory's path.
 func (d *directory) Path() string {
 	return d.path
 }
@@ -75,23 +74,23 @@ func (d *directory) Has(s string) bool {
 	dirPath := d.path
 	sysPath := s
 
-	// Check if the directory path is a prefix of the system path
-	// and ensure it's a proper directory boundary using `filepath.Rel`
+	// Check if the directory path is a prefix of the system path.
+	// and ensure it's a proper directory boundary using `filepath.Rel`.
 	rel, err := filepath.Rel(dirPath, sysPath)
 	if err != nil {
 		return false
 	}
 
-	// `rel` will not contain ".." if sysPath is within dirPath
+	// `rel` will not contain ".." if sysPath is within dirPath.
 	return !strings.HasPrefix(rel, "..")
 }
 
-// Parent retrieves the parent directory of the current directory
+// Parent retrieves the parent directory of the current directory.
 func (d *directory) Parent() (Directory, error) {
-	// Utiliser filepath.Dir pour calculer le chemin du parent
+	// Utiliser filepath.Dir pour calculer le chemin du parent.
 	parentPath := filepath.Dir(d.path)
 
-	// Si le chemin du parent est identique au chemin courant, c'est la racine
+	// Si le chemin du parent est identique au chemin courant, c'est la racine.
 	if parentPath == d.path {
 		return nil, fmt.Errorf("no parent directory found for %s", d.path)
 	}
@@ -112,7 +111,7 @@ func (d *directory) Create() (Directory, error) {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Update permissions and ownership if specified
+	// Update permissions and ownership if specified.
 	if err := unix.Chmod(d.path, *d.chmod); err != nil {
 		return nil, fmt.Errorf("failed to set permissions: %w", err)
 	}
@@ -121,35 +120,38 @@ func (d *directory) Create() (Directory, error) {
 		return nil, fmt.Errorf("failed to set ownership: %w", err)
 	}
 
-	// Refresh directory stats
+	// Refresh directory stats.
 	d.stats = NewStats(d.path)
 	return d, nil
 }
 
-// Remove deletes the directory
+// Remove deletes the directory.
 func (d *directory) Remove() error {
-	return os.RemoveAll(d.path)
+	if err := os.RemoveAll(d.path); err != nil {
+		return fmt.Errorf("failed to remove directory %s: %w", d.path, err)
+	}
+	return nil
 }
 
-// Exists checks if the directory exists
+// Exists checks if the directory exists.
 func (d *directory) Exists() bool {
-	d.stats.Refresh()
+	_ = d.stats.Refresh() // Ignore refresh error for existence check
 	return d.stats.Exists()
 }
 
-// Size calculates the total size of all files in the directory
+// Size calculates the total size of all files in the directory.
 func (d *directory) Size() int64 {
-	d.stats.Refresh()
+	_ = d.stats.Refresh() // Ignore refresh error for size calculation
 	return d.stats.meta.Size
 }
 
-// List retrieves all files and subdirectories within the directory
+// List retrieves all files and subdirectories within the directory.
 //
 // Returns:
 // - []File: A slice of files in the directory.
 // - []Directory: A slice of subdirectories in the directory.
 // - error: Error if the operation fails.
-// List retrieves all files and subdirectories within the directory
+// List retrieves all files and subdirectories within the directory.
 func (d *directory) List() ([]File, []Directory, error) {
 	dirEntries, err := os.ReadDir(d.path)
 	if err != nil {

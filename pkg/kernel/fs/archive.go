@@ -2,7 +2,7 @@ package fs
 
 import "os"
 
-// ArchiveType defines the types of supported archives
+// ArchiveType defines the types of supported archives..
 type archiveType string
 type compressionType string
 
@@ -22,7 +22,7 @@ const (
 	ZST    compressionType = "zst"
 )
 
-// Archive interface defines operations for archive management
+// Archive interface defines operations for archive management..
 type Archive interface {
 	Path() string
 	AddFile(filePath string) error
@@ -42,7 +42,7 @@ type archive struct {
 	entries []System
 }
 
-// NewArchive creates a new Archive object based on the given options
+// NewArchive creates a new Archive object based on the given options..
 func NewArchive(path string, options ArchiveOptions) Archive {
 	return &archive{
 		options: options,
@@ -50,12 +50,12 @@ func NewArchive(path string, options ArchiveOptions) Archive {
 	}
 }
 
-// Path returns the path of the archive
+// Path returns the path of the archive..
 func (a *archive) Path() string {
 	return a.path
 }
 
-// AddFile adds a file to the archive
+// AddFile adds a file to the archive..
 func (a *archive) AddFile(filePath string) error {
 	f, err := NewFile(Option{
 		Path: filePath,
@@ -86,7 +86,7 @@ func (a *archive) AddFile(filePath string) error {
 	return nil
 }
 
-// AddDirectory adds a directory to the archive
+// AddDirectory adds a directory to the archive..
 func (a *archive) AddDirectory(dirPath string) error {
 	d, err := NewDirectory(Option{
 		Path: dirPath,
@@ -117,7 +117,7 @@ func (a *archive) AddDirectory(dirPath string) error {
 	return nil
 }
 
-// Compress compresses the archive
+// Compress compresses the archive..
 func (a *archive) Compress() error {
 	return nil
 }

@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -11,13 +12,11 @@ import (
 )
 
 var (
-	ownerCache = &sync.Map{} // Cache for user names by UID
-	groupCache = &sync.Map{} // Cache for group names by GID
-
-	currentUser, _ = user.Current()
+	ownerCache = &sync.Map{} // Cache for user names by UID.
+	groupCache = &sync.Map{} // Cache for group names by GID.
 )
 
-// Stats interface provides operations to manage and query file or directory metadata.
+// Stats interface provides operations to manage and query file or directory metadata..
 type Stats interface {
 	IsReadable() bool
 	IsWritable() bool
@@ -45,7 +44,7 @@ type stats struct {
 	other OtherInfo // Other users' information
 }
 
-// NewStats creates and initializes a stats object for a given path.
+// NewStats creates and initializes a stats object for a given path..
 //
 // Parameters:
 // - path: string - The path to the file or directory.
@@ -58,12 +57,12 @@ func NewStats(path string) *stats {
 		meta: &unix.Stat_t{},
 	}
 
-	s.Refresh()
+	_ = s.Refresh() // Ignore refresh error in constructor
 
 	return s
 }
 
-// UserInfo contains the owner information of a file or directory.
+// UserInfo contains the owner information of a file or directory..
 type UserInfo struct {
 	ID          uint32      // UID of the user
 	Permissions Permissions // Permissions: RWX bits (read, write, execute)
@@ -85,7 +84,7 @@ func (u UserInfo) Name() string {
 	return u.name
 }
 
-// GroupInfo contains the group information of a file or directory.
+// GroupInfo contains the group information of a file or directory..
 type GroupInfo struct {
 	ID          uint32      // GID of the group
 	Permissions Permissions // Permissions: RWX bits
@@ -107,13 +106,13 @@ func (u GroupInfo) Name() string {
 	return u.name
 }
 
-// OtherInfo contains the permissions for other users of a file or directory.
+// OtherInfo contains the permissions for other users of a file or directory..
 type OtherInfo struct {
 	Permissions Permissions // Permissions: RWX bits
 }
 
 type Permissions struct {
-	Read, Write, Exec bool // Boolean flags for read, write, and execute permissions
+	Read, Write, Exec bool // Boolean flags for read, write, and execute permissions.
 }
 
 // HasPermissions checks if the file or directory has specific permissions.
@@ -124,7 +123,7 @@ type Permissions struct {
 // Returns:
 // - bool: True if the file has the specified permissions, otherwise false.
 func (s *stats) HasPermissions(permissions os.FileMode) bool {
-	if permissions > os.ModePerm || permissions < 0 {
+	if permissions > os.ModePerm {
 		return false // Invalid permissions
 	}
 	return s.mode&uint32(permissions) == uint32(permissions)
@@ -237,7 +236,10 @@ func (s *stats) Other() OtherInfo {
 // Returns:
 // - error: Error if the operation fails, otherwise nil.
 func (s *stats) Chmod(permissions uint32) error {
-	return unix.Chmod(s.path, permissions)
+	if err := unix.Chmod(s.path, permissions); err != nil {
+		return fmt.Errorf("failed to chmod %s: %w", s.path, err)
+	}
+	return nil
 }
 
 // Chown changes the owner and group of the file or directory.
@@ -252,7 +254,10 @@ func (s *stats) Chown(uid, gid int) error {
 	if uid < 0 || gid < 0 || uid > 0x7FFFFFFF || gid > 0x7FFFFFFF {
 		return unix.EINVAL
 	}
-	return unix.Chown(s.path, uid, gid)
+	if err := unix.Chown(s.path, uid, gid); err != nil {
+		return fmt.Errorf("failed to chown %s: %w", s.path, err)
+	}
+	return nil
 }
 
 // Refresh reloads the file or directory metadata.
@@ -260,32 +265,41 @@ func (s *stats) Chown(uid, gid int) error {
 // Returns:
 // - error: Error if the operation fails, otherwise nil.
 func (s *stats) Refresh() error {
-	// Perform Lstat to retrieve basic metadata
+	// Perform Lstat to retrieve basic metadata.
 	err := unix.Lstat(s.path, s.meta)
 	if err != nil {
 		s.exists = false
-		return err
+		return fmt.Errorf("failed to stat file %s: %w", s.path, err)
 	}
 
-	// Check if the file is a symbolic link
+	// Check if the file is a symbolic link.
 	if s.meta.Mode&unix.S_IFMT == unix.S_IFLNK {
-		// Resolve symbolic links only if necessary
+		// Resolve symbolic links only if necessary.
 		resolvedPath, err := filepath.EvalSymlinks(s.path)
+		if err != nil {
+			return fmt.Errorf("failed to resolve symlink %s: %w", s.path, err)
+		}
+		s.path = resolvedPath
+		// Re-stat the resolved target
+		targetInfo, err := os.Stat(resolvedPath)
 		if err != nil {
 			return err
 		}
-		s.path = resolvedPath
+		s.mode = uint32(targetInfo.Mode())
+		if stat, ok := targetInfo.Sys().(*unix.Stat_t); ok {
+			s.meta = stat
+		}
 	}
 
-	// Mark the file as existing
+	// Mark the file as existing.
 	s.exists = true
 
-	// Set direct permissions to avoid repeated calls
+	// Set direct permissions to avoid repeated calls.
 	s.mode = uint32(s.meta.Mode)
 	s.group.ID = s.meta.Gid
 	s.user.ID = s.meta.Uid
 
-	// Calculate permissions inline
+	// Calculate permissions inline.
 	s.user.Permissions = s.calculatePermissions(unix.S_IRUSR, unix.S_IWUSR, unix.S_IXUSR)
 	s.group.Permissions = s.calculatePermissions(unix.S_IRGRP, unix.S_IWGRP, unix.S_IXGRP)
 	s.other.Permissions = s.calculatePermissions(unix.S_IROTH, unix.S_IWOTH, unix.S_IXOTH)

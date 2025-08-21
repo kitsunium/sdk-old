@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json.schemastore.org/prettierrc",
+
+  "printWidth": 120,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": false,
+  "singleQuote": true,
+  "quoteProps": "as-needed",
+  "jsxSingleQuote": false,
+  "trailingComma": "es5",
+  "bracketSpacing": true,
+  "bracketSameLine": false,
+  "arrowParens": "always",
+  "requirePragma": false,
+  "insertPragma": false,
+  "proseWrap": "preserve",
+  "htmlWhitespaceSensitivity": "css",
+  "vueIndentScriptAndStyle": false,
+  "endOfLine": "lf",
+  "embeddedLanguageFormatting": "auto",
+  "singleAttributePerLine": false,
+
+  "overrides": [
+    {
+      "files": "*.md",
+      "options": {
+        "proseWrap": "always",
+        "printWidth": 80,
+        "tabWidth": 2
+      }
+    },
+    {
+      "files": ["*.yml", "*.yaml"],
+      "options": {
+        "tabWidth": 2,
+        "singleQuote": false
+      }
+    },
+    {
+      "files": ["*.json", "*.jsonc"],
+      "options": {
+        "tabWidth": 2,
+        "singleQuote": false,
+        "trailingComma": "none"
+      }
+    },
+    {
+      "files": [".prettierrc", ".eslintrc"],
+      "options": {
+        "parser": "json"
+      }
+    }
+  ]
+}
