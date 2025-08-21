@@ -323,7 +323,6 @@ func BenchmarkWorkload_PoolChurn(b *testing.B) {
 
 func BenchmarkPoolEfficiency(b *testing.B) {
 	p := newPool()
-	p.ResetStats()
 
 	// Run workload
 	var wg sync.WaitGroup
@@ -343,10 +342,4 @@ func BenchmarkPoolEfficiency(b *testing.B) {
 	}
 
 	wg.Wait()
-
-	stats := p.Stats()
-	b.ReportMetric(stats.HitRate(), "hit_rate_%")
-	b.ReportMetric(stats.AllocRate(), "alloc_rate_%")
-	b.ReportMetric(float64(stats.Gets), "total_gets")
-	b.ReportMetric(float64(stats.Puts), "total_puts")
 }
