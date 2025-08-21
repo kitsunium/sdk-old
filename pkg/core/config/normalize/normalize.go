@@ -215,20 +215,6 @@ func processSlice(output map[string]string, slice []any, prefix []string, key st
 	}
 }
 
-// stringToBytes converts string to []byte without allocation.
-// WARNING: The returned slice shares memory with the input string.
-// Do not modify the returned slice.
-func stringToBytes(s string) []byte {
-	return unsafe.Slice(unsafe.StringData(s), len(s))
-}
-
-// bytesToString converts []byte to string without allocation.
-// WARNING: The returned string shares memory with the input slice.
-// Do not modify the input slice after conversion.
-func bytesToString(b []byte) string {
-	return unsafe.String(unsafe.SliceData(b), len(b))
-}
-
 // StringToBytesSafe converts string to []byte with allocation (safe copy).
 func StringToBytesSafe(s string) []byte {
 	return []byte(s)

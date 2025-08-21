@@ -25,12 +25,12 @@ commit_msg=$(cat "$commit_msg_file")
 # ÉTAPE 1 : Exécuter le formatage automatique
 # ============================================
 
-# Vérifie si la commande 'task' est installée
-if command -v task &> /dev/null; then
+# Vérifie si la commande 'make' est installée
+if command -v make &> /dev/null; then
     echo "🔧 Running code formatting before commit..."
     # Exécute le formatage
     # Si des fichiers sont modifiés, ils seront automatiquement ajoutés au commit
-    if task fmt; then
+    if make fmt; then
         # Si des fichiers ont été formatés, les ajouter au staging
         # git diff --name-only : liste les fichiers modifiés
         # xargs : passe la liste à git add
@@ -40,7 +40,7 @@ if command -v task &> /dev/null; then
         echo "⚠️  Code formatting had issues but continuing..."
     fi
 else
-    echo "⚠️  'task' command not found, skipping formatting"
+    echo "⚠️  'make' command not found, skipping formatting"
 fi
 
 # ============================================
