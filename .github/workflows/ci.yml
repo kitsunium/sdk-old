@@ -54,6 +54,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           # Generate coverage report using go test for SonarCloud
+          # SonarCloud requires Go native format, Bazel LCOV is not compatible
           go test -v -race -coverprofile=coverage.out -covermode=atomic ./pkg/...
           echo "✅ Coverage report generated at coverage.out"
           echo "Coverage report size: $(wc -c < coverage.out) bytes"
