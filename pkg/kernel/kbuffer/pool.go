@@ -17,11 +17,13 @@ const (
 // Uses sync.Pool internally with power-of-2 size classes for efficiency.
 type BufferPool struct {
 	pools [21]*sync.Pool // Power-of-2 pools from 2^6 to 2^20
-	stats poolStats      // Atomic statistics
 
 	// Configuration
 	clearOnPut atomic.Bool  // Clear buffers on return
 	maxSize    atomic.Int64 // Maximum pooled size
+
+	// Statistics (optional, can be nil)
+	stats *poolStats // Atomic statistics (pointer to avoid overhead when disabled)
 }
 
 // poolStats tracks pool usage with atomic counters.
@@ -39,18 +41,24 @@ var globalPool = newPool()
 func newPool() *BufferPool {
 	p := &BufferPool{}
 	p.maxSize.Store(maxPoolSize)
+	// Enable stats by default for tests
+	p.stats = &poolStats{}
 
 	// Initialize pools for each size class
 	for i := range p.pools {
 		size := 1 << (i + 6) // 2^6 to 2^20
+		poolIndex := i
 		p.pools[i] = &sync.Pool{
-			New: func(sz int) func() any {
+			New: func(sz int, idx int) func() any {
 				return func() any {
-					p.stats.allocs.Add(1)
+					// Track allocations if stats enabled
+					if p.stats != nil {
+						p.stats.allocs.Add(1)
+					}
 					buf := make([]byte, sz)
 					return &buf
 				}
-			}(size),
+			}(size, poolIndex),
 		}
 	}
 
@@ -65,16 +73,37 @@ func newPool() *BufferPool {
 //
 //go:nosplit
 func (p *BufferPool) Get(size int) []byte {
-	p.stats.gets.Add(1)
+	// Track stats if enabled
+	if p.stats != nil {
+		p.stats.gets.Add(1)
+	}
 
 	if size <= 0 {
 		return nil
 	}
 
+	// Fast path for common sizes
+	if size <= 256 {
+		var bufPtr *[]byte
+		if size <= 64 {
+			bufPtr = p.pools[0].Get().(*[]byte)
+		} else if size <= 128 {
+			bufPtr = p.pools[1].Get().(*[]byte)
+		} else {
+			bufPtr = p.pools[2].Get().(*[]byte)
+		}
+		if p.stats != nil {
+			p.stats.hits.Add(1)
+		}
+		return (*bufPtr)[:size]
+	}
+
 	// Direct allocation for oversized buffers
 	if size > int(p.maxSize.Load()) {
-		p.stats.misses.Add(1)
-		p.stats.allocs.Add(1)
+		if p.stats != nil {
+			p.stats.misses.Add(1)
+			p.stats.allocs.Add(1)
+		}
 		return make([]byte, size)
 	}
 
@@ -83,16 +112,18 @@ func (p *BufferPool) Get(size int) []byte {
 	poolIdx := class - 6
 
 	if poolIdx < 0 || poolIdx >= len(p.pools) {
-		p.stats.misses.Add(1)
-		p.stats.allocs.Add(1)
+		if p.stats != nil {
+			p.stats.misses.Add(1)
+			p.stats.allocs.Add(1)
+		}
 		return make([]byte, size)
 	}
 
 	// Get from pool
 	bufPtr := p.pools[poolIdx].Get().(*[]byte)
-	p.stats.hits.Add(1)
-
-	// Return slice of requested size
+	if p.stats != nil {
+		p.stats.hits.Add(1)
+	}
 	return (*bufPtr)[:size]
 }
 
@@ -105,26 +136,61 @@ func (p *BufferPool) Put(buf []byte) {
 		return
 	}
 
-	p.stats.puts.Add(1)
+	// Track stats if enabled
+	if p.stats != nil {
+		p.stats.puts.Add(1)
+	}
 
 	capacity := cap(buf)
+
+	// Clear if configured (for security) - do this before fast path
+	if p.clearOnPut.Load() {
+		clear(buf[:cap(buf)])
+	}
+
+	// Fast path for common sizes
+	switch capacity {
+	case 64:
+		buf = buf[:64]
+		p.pools[0].Put(&buf)
+		return
+	case 128:
+		buf = buf[:128]
+		p.pools[1].Put(&buf)
+		return
+	case 256:
+		buf = buf[:256]
+		p.pools[2].Put(&buf)
+		return
+	case 512:
+		buf = buf[:512]
+		p.pools[3].Put(&buf)
+		return
+	case 1024:
+		buf = buf[:1024]
+		p.pools[4].Put(&buf)
+		return
+	case 2048:
+		buf = buf[:2048]
+		p.pools[5].Put(&buf)
+		return
+	case 4096:
+		buf = buf[:4096]
+		p.pools[6].Put(&buf)
+		return
+	}
 
 	// Don't pool oversized or non-power-of-2 buffers
 	if capacity > int(p.maxSize.Load()) || !isPowerOf2(capacity) {
 		return
 	}
 
-	// Calculate pool index
+	// Calculate pool index for larger sizes
 	class := bits.Len(uint(capacity)) - 1
 	poolIdx := class - 6
 
 	if poolIdx < 0 || poolIdx >= len(p.pools) {
 		return
-	}
-
-	// Clear if configured (for security)
-	if p.clearOnPut.Load() {
-		clear(buf)
 	}
 
 	// Reset to full capacity and return to pool
@@ -160,8 +226,23 @@ func (p *BufferPool) PutBuffer(b *Buffer) {
 	p.Put(b.data)
 }
 
+// EnableStats enables statistics collection (disabled by default for performance).
+func (p *BufferPool) EnableStats() {
+	if p.stats == nil {
+		p.stats = &poolStats{}
+	}
+}
+
+// DisableStats disables statistics collection.
+func (p *BufferPool) DisableStats() {
+	p.stats = nil
+}
+
 // Stats returns current pool statistics.
 func (p *BufferPool) Stats() PoolStats {
+	if p.stats == nil {
+		return PoolStats{}
+	}
 	return PoolStats{
 		Gets:   p.stats.gets.Load(),
 		Puts:   p.stats.puts.Load(),
@@ -173,11 +254,13 @@ func (p *BufferPool) Stats() PoolStats {
 
 // ResetStats resets all statistics counters to zero.
 func (p *BufferPool) ResetStats() {
-	p.stats.gets.Store(0)
-	p.stats.puts.Store(0)
-	p.stats.allocs.Store(0)
-	p.stats.hits.Store(0)
-	p.stats.misses.Store(0)
+	if p.stats != nil {
+		p.stats.gets.Store(0)
+		p.stats.puts.Store(0)
+		p.stats.allocs.Store(0)
+		p.stats.hits.Store(0)
+		p.stats.misses.Store(0)
+	}
 }
 
 // SetClearOnPut configures whether buffers are cleared when returned.

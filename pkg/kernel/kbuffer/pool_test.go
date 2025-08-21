@@ -196,10 +196,13 @@ func TestBufferPool_SetClearOnPut(t *testing.T) {
 	// Return to pool
 	p.Put(buf)
 
+	// Get the same buffer again (since it's in the pool)
+	buf2 := p.Get(64)
+
 	// Data should be cleared
 	for i := 0; i < len("sensitive"); i++ {
-		if buf[i] != 0 {
-			t.Errorf("buf[%d] = %d, want 0 (not cleared)", i, buf[i])
+		if buf2[i] != 0 {
+			t.Errorf("buf[%d] = %d, want 0 (not cleared)", i, buf2[i])
 		}
 	}
 }
