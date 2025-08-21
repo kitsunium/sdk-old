@@ -117,7 +117,10 @@ func (x *XML) LoadReader(r io.Reader) (map[string]string, error) {
 // Uses a stack-based approach to handle nested elements.
 func (x *XML) LoadBytes(data []byte) (map[string]string, error) {
 	// Pre-size based on typical XML structure
-	estimatedSize := max(len(data)/50, 32)
+	estimatedSize := len(data) / 50
+	if estimatedSize < 32 {
+		estimatedSize = 32
+	}
 	config := make(map[string]string, estimatedSize)
 
 	// Use bytes.Reader to avoid string conversion
@@ -167,7 +170,12 @@ func (x *XML) LoadBytes(data []byte) (map[string]string, error) {
 		case xml.CharData:
 			text := strings.TrimSpace(string(t))
 			if text != "" && current != root {
-				current.value = normalize.Value(text)
+				// Accumulate text fragments (XML can split text across multiple CharData tokens)
+				if current.value != "" {
+					current.value += " " + normalize.Value(text)
+				} else {
+					current.value = normalize.Value(text)
+				}
 			}
 		}
 	}

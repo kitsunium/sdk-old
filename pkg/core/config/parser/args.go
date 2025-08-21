@@ -3,6 +3,7 @@ package parser
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/kitsunium/sdk/pkg/core/config/normalize"
@@ -119,6 +120,16 @@ func (a *ARGS) ParseArgs(args []string) (map[string]string, error) {
 	return config, nil
 }
 
+// isNegativeNumber checks if a string represents a negative number.
+func isNegativeNumber(s string) bool {
+	if len(s) < 2 || s[0] != '-' {
+		return false
+	}
+	// Try to parse as float (covers both int and float)
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
+}
+
 // ParseArgsStrict parses arguments with strict validation.
 // All arguments must start with - or -- prefix.
 //
@@ -152,7 +163,11 @@ func (a *ARGS) ParseArgsStrict(args []string) (map[string]string, error) {
 			value := arg[eqIdx+1:]
 			config[normalize.Key(key)] = normalize.Value(value)
 		} else if i+1 < len(args) {
-			if strings.HasPrefix(args[i+1], "-") {
+			// Check if next arg is a negative number (treat as value)
+			if isNegativeNumber(args[i+1]) {
+				config[normalize.Key(arg)] = normalize.Value(args[i+1])
+				i++
+			} else if strings.HasPrefix(args[i+1], "-") {
 				config[normalize.Key(arg)] = "true"
 			} else {
 				config[normalize.Key(arg)] = normalize.Value(args[i+1])
