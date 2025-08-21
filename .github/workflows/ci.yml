@@ -58,7 +58,7 @@ jobs:
             --combined_report=lcov \
             --instrumentation_filter="//pkg[/:]" \
             --test_output=errors
-          
+
           # Verify LCOV report exists
           if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
             echo "✅ LCOV coverage report generated"
