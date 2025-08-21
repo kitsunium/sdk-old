@@ -1,7 +1,7 @@
 #!/bin/bash
 # Hook commit-msg : exécuté après la saisie du message de commit
 # Reçoit en paramètre $1 : le chemin vers le fichier contenant le message
-# Objectif : vérifier que le message suit les conventions (conventional commits)
+# Objectif : formater le code et vérifier que le message suit les conventions
 
 # Active les modes stricts de bash :
 # -e : arrête le script si une commande échoue
@@ -20,6 +20,32 @@ commit_msg_file="$1"
 # Lit le contenu du fichier de message dans une variable
 # $(cat ...) exécute cat et capture sa sortie
 commit_msg=$(cat "$commit_msg_file")
+
+# ============================================
+# ÉTAPE 1 : Exécuter le formatage automatique
+# ============================================
+
+# Vérifie si la commande 'task' est installée
+if command -v task &> /dev/null; then
+    echo "🔧 Running code formatting before commit..."
+    # Exécute le formatage
+    # Si des fichiers sont modifiés, ils seront automatiquement ajoutés au commit
+    if task fmt; then
+        # Si des fichiers ont été formatés, les ajouter au staging
+        # git diff --name-only : liste les fichiers modifiés
+        # xargs : passe la liste à git add
+        git diff --name-only | xargs -r git add 2>/dev/null || true
+        echo "✅ Code formatting completed"
+    else
+        echo "⚠️  Code formatting had issues but continuing..."
+    fi
+else
+    echo "⚠️  'task' command not found, skipping formatting"
+fi
+
+# ============================================
+# ÉTAPE 2 : Valider le format du message
+# ============================================
 
 # Définit les préfixes valides pour les conventional commits
 # Ce sont les types de commits acceptés selon la convention
@@ -74,6 +100,10 @@ if ! echo "$commit_msg" | grep -qiE "$regex_pattern"; then
     # Sort avec code d'erreur 1, empêchant le commit
     exit 1
 fi
+
+# ============================================
+# ÉTAPE 3 : Vérifications supplémentaires
+# ============================================
 
 # Vérifie la longueur de la première ligne (résumé)
 # head -n 1 : prend seulement la première ligne
