@@ -59,14 +59,17 @@ jobs:
             --instrumentation_filter="//pkg[/:]" \
             --test_output=errors
 
-          # Verify LCOV report exists
+          # Verify LCOV report exists and copy to root
           if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
             echo "✅ LCOV coverage report generated"
             echo "Coverage report size: $(wc -c < bazel-out/_coverage/_coverage_report.dat) bytes"
             
+            # Copy coverage report to root for SonarCloud
+            cp bazel-out/_coverage/_coverage_report.dat coverage.lcov
+            
             # Debug: Show first few lines to verify format
             echo "First 10 lines of coverage report:"
-            head -10 bazel-out/_coverage/_coverage_report.dat
+            head -10 coverage.lcov
           else
             echo "❌ Coverage report not found!"
             exit 1
