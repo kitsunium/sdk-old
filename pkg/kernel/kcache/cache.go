@@ -94,7 +94,7 @@ type LRU[K comparable, V any] struct {
 	head     *entry[V]
 	tail     *entry[V]
 	mu       sync.RWMutex
-	stats    Stats
+	stats    *Stats
 	pool     *sync.Pool
 }
 
@@ -118,7 +118,7 @@ func NewLRU[K comparable, V any](capacity int) *LRU[K, V] {
 	lru := &LRU[K, V]{
 		capacity: capacity,
 		items:    make(map[K]*entry[V], capacity),
-		stats:    *NewStats(),
+		stats:    NewStats(),
 		pool: &sync.Pool{
 			New: func() any {
 				return &entry[V]{}
@@ -352,12 +352,10 @@ func (c *LRU[K, V]) Has(key K) bool {
 //	stats := cache.Stats()
 //	hitRate := float64(stats.Hits.Load()) / float64(stats.Hits.Load() + stats.Misses.Load())
 //	fmt.Printf("Cache hit rate: %.2f%%\n", hitRate * 100)
-func (c *LRU[K, V]) Stats() Stats {
-	// Return copy of stats struct (pointers are shared, values are not copied)
-	// Ensure all pointers are valid
-	if c.stats.Hits == nil || c.stats.Misses == nil || c.stats.Sets == nil || c.stats.Evictions == nil {
-		// Return a properly initialized Stats if any pointer is nil
-		return *NewStats()
+func (c *LRU[K, V]) Stats() *Stats {
+	// Return pointer to stats to avoid copying atomic values
+	if c.stats == nil {
+		return NewStats()
 	}
 	return c.stats
 }

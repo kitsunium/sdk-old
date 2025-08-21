@@ -156,8 +156,6 @@ func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
 	// Use bytes.Reader for better performance and to avoid string allocation
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
-	// DisallowUnknownFields for stricter validation if needed
-	// decoder.DisallowUnknownFields() // Uncomment for strict mode
 
 	if err := decoder.Decode(&config); err != nil {
 		return nil, ErrJSONParse.Wrap(err).WithDetail("size", len(data))

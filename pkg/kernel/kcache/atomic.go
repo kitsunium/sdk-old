@@ -193,18 +193,13 @@ func (c *AtomicCache[K, V]) Has(key K) bool {
 }
 
 // Stats returns cache statistics.
-func (c *AtomicCache[K, V]) Stats() Stats {
+func (c *AtomicCache[K, V]) Stats() *Stats {
 	stats := c.stats.Load()
 	if stats == nil {
-		return *NewStats()
+		return NewStats()
 	}
-	// Create new Stats and copy values to avoid copying atomic types
-	result := NewStats()
-	result.Hits.Store(stats.Hits.Load())
-	result.Misses.Store(stats.Misses.Load())
-	result.Sets.Store(stats.Sets.Load())
-	result.Evictions.Store(stats.Evictions.Load())
-	return *result
+	// Return pointer to avoid copying atomic values
+	return stats
 }
 
 // evictLRU removes the least recently used entry, prioritizing expired entries.
