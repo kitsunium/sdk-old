@@ -62,10 +62,6 @@ jobs:
           if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
             echo "✅ Coverage report generated at bazel-out/_coverage/_coverage_report.dat"
             echo "Coverage report size: $(wc -c < bazel-out/_coverage/_coverage_report.dat) bytes"
-            
-            # Convert LCOV format to Go coverage format for SonarCloud
-            python3 tools/lcov_to_go.py bazel-out/_coverage/_coverage_report.dat coverage.out
-            echo "✅ Converted to Go coverage format at coverage.out"
           else
             echo "❌ Coverage report not found!"
             exit 1
