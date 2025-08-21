@@ -175,9 +175,9 @@ func TestAtomicCache_Stats(t *testing.T) {
 	c.Get("miss") // miss
 
 	stats := c.Stats()
-	assert.Equal(t, uint64(2), stats.Hits)
-	assert.Equal(t, uint64(1), stats.Misses)
-	assert.Equal(t, uint64(2), stats.Sets)
+	assert.Equal(t, uint64(2), stats.Hits.Load())
+	assert.Equal(t, uint64(1), stats.Misses.Load())
+	assert.Equal(t, uint64(2), stats.Sets.Load())
 }
 
 func TestAtomicCache_FastGet(t *testing.T) {

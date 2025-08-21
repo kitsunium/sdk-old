@@ -2,6 +2,7 @@
 package parser
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,13 @@ import (
 	"strings"
 
 	"github.com/kitsunium/sdk/pkg/core/config/normalize"
+)
+
+const (
+	// MaxJSONSize defines the maximum size of JSON input (10MB)
+	MaxJSONSize = 10 * 1024 * 1024
+	// MaxJSONDepth defines maximum nesting depth to prevent stack overflow
+	MaxJSONDepth = 100
 )
 
 // JSON is a JSON configuration parser that flattens nested
@@ -122,10 +130,11 @@ func normalizeJSONNumber(n json.Number) string {
 // LoadBytes parses JSON from a byte slice.
 //
 // This method:
-//  1. Unmarshals JSON into a map structure
-//  2. Flattens nested structures using a stack-based approach
-//  3. Normalizes all keys to lowercase with dots instead of underscores
-//  4. Converts all values to strings
+//  1. Validates JSON size to prevent DoS attacks
+//  2. Unmarshals JSON into a map structure
+//  3. Flattens nested structures using a stack-based approach
+//  4. Normalizes all keys to lowercase with dots instead of underscores
+//  5. Converts all values to strings
 //
 // Example:
 //
@@ -133,14 +142,30 @@ func normalizeJSONNumber(n json.Number) string {
 //	config, err := parser.LoadBytes(data)
 //	// config["db.host"] == "localhost"
 func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
+	// Validate JSON size to prevent DoS attacks
+	if len(data) > MaxJSONSize {
+		return nil, ErrJSONParse.Newf("JSON size exceeds maximum allowed: %d > %d bytes", len(data), MaxJSONSize)
+	}
+
+	if len(data) == 0 {
+		return nil, ErrJSONParse.Newf("empty JSON input")
+	}
+
 	var config map[string]any
 
-	// Always use decoder with UseNumber to preserve large integers
-	// This ensures consistent behavior for all numeric values
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	// Use bytes.Reader for better performance and to avoid string allocation
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
+	// DisallowUnknownFields for stricter validation if needed
+	// decoder.DisallowUnknownFields() // Uncomment for strict mode
+	
 	if err := decoder.Decode(&config); err != nil {
 		return nil, ErrJSONParse.Wrap(err).WithDetail("size", len(data))
+	}
+
+	// Check for trailing data
+	if decoder.More() {
+		return nil, ErrJSONParse.Newf("trailing data after JSON object")
 	}
 
 	return j.processConfig(config, len(data))
@@ -160,11 +185,12 @@ func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]st
 	type stackItem struct {
 		data   map[string]any
 		prefix string
+		depth  int
 	}
 
 	// Pre-size stack based on typical nesting depth
 	stack := make([]stackItem, 1, 8)
-	stack[0] = stackItem{data: config, prefix: ""}
+	stack[0] = stackItem{data: config, prefix: "", depth: 0}
 
 	for len(stack) > 0 {
 		// Pop from stack
@@ -188,7 +214,11 @@ func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]st
 			case string:
 				result[normalize.Key(fullKey)] = normalize.Value(v)
 			case map[string]any:
-				stack = append(stack, stackItem{data: v, prefix: fullKey})
+				// Check depth to prevent stack overflow
+				if current.depth >= MaxJSONDepth {
+					return nil, ErrJSONParse.Newf("JSON nesting depth exceeds maximum: %d", MaxJSONDepth)
+				}
+				stack = append(stack, stackItem{data: v, prefix: fullKey, depth: current.depth + 1})
 			case []any:
 				for i, item := range v {
 					// Optimized array key construction
@@ -200,7 +230,11 @@ func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]st
 					itemKey := arrayKeyBuilder.String()
 
 					if subMap, ok := item.(map[string]any); ok {
-						stack = append(stack, stackItem{data: subMap, prefix: itemKey})
+						// Check depth for arrays containing objects
+						if current.depth >= MaxJSONDepth {
+							return nil, ErrJSONParse.Newf("JSON nesting depth exceeds maximum: %d", MaxJSONDepth)
+						}
+						stack = append(stack, stackItem{data: subMap, prefix: itemKey, depth: current.depth + 1})
 					} else {
 						result[normalize.Key(itemKey)] = normalizeAnyValue(item)
 					}

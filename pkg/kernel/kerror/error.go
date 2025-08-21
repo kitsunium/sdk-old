@@ -37,6 +37,13 @@ var (
 	defineMu     sync.Mutex // Mutex for atomic Define operations
 )
 
+const (
+	// MaxErrorsPerPackage limits the number of errors per package
+	MaxErrorsPerPackage = 1000
+	// MaxTotalErrors limits the total number of errors in the system
+	MaxTotalErrors = 10000
+)
+
 // getCallerPackage returns the package name of the caller with caching.
 func getCallerPackage() string {
 	// Skip 2 frames: getCallerPackage and Define
@@ -88,6 +95,12 @@ func Define(config KConfig) KError {
 	// Initialize caches once at the beginning
 	initCaches()
 
+	// Check global limit before proceeding
+	currentCount := atomic.LoadUint32(&errorCounter)
+	if currentCount >= MaxTotalErrors {
+		panic(fmt.Sprintf("kerror: maximum total error definitions exceeded (%d)", MaxTotalErrors))
+	}
+
 	// Auto-detect package if not provided
 	pkg := config.Package
 	if pkg == "" {
@@ -97,12 +110,18 @@ func Define(config KConfig) KError {
 	// Lock for atomic operations on registry
 	defineMu.Lock()
 	defer defineMu.Unlock()
+	
 	// Get or create package cache
 	var pkgCache kcache.Cache[int, *KError]
 	if existing, ok := registryByPkgCode.Get(pkg); ok {
 		pkgCache = existing
+		// Check package-specific limit
+		if pkgCache.Size() >= MaxErrorsPerPackage {
+			panic(fmt.Sprintf("kerror: maximum error definitions for package %s exceeded (%d)", pkg, MaxErrorsPerPackage))
+		}
 	} else {
-		pkgCache = kcache.NewAtomicCache[int, *KError](100)
+		// Create new cache with reasonable initial size
+		pkgCache = kcache.NewAtomicCache[int, *KError](min(100, MaxErrorsPerPackage))
 		registryByPkgCode.Set(pkg, pkgCache)
 	}
 

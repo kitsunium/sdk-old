@@ -4,6 +4,7 @@ package kcache
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -43,13 +44,13 @@ type Cache[K comparable, V any] interface {
 // Stats holds cache statistics for monitoring.
 type Stats struct {
 	// Hits is the number of successful cache retrievals.
-	Hits uint64
+	Hits atomic.Uint64
 	// Misses is the number of failed cache retrievals.
-	Misses uint64
+	Misses atomic.Uint64
 	// Sets is the number of cache insertions.
-	Sets uint64
+	Sets atomic.Uint64
 	// Evictions is the number of entries removed due to capacity limits.
-	Evictions uint64
+	Evictions atomic.Uint64
 }
 
 type entry[V any] struct {
@@ -139,7 +140,7 @@ func (c *LRU[K, V]) Get(key K) (V, bool) {
 
 	e, exists := c.items[key]
 	if !exists {
-		c.stats.Misses++
+		c.stats.Misses.Add(1)
 		var zero V
 		return zero, false
 	}
@@ -148,13 +149,13 @@ func (c *LRU[K, V]) Get(key K) (V, bool) {
 		c.removeEntry(e)
 		delete(c.items, key)
 		c.size--
-		c.stats.Misses++
+		c.stats.Misses.Add(1)
 		var zero V
 		return zero, false
 	}
 
 	c.moveToFront(e)
-	c.stats.Hits++
+	c.stats.Hits.Add(1)
 	return e.value, true
 }
 
@@ -189,7 +190,7 @@ func (c *LRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.stats.Sets++
+	c.stats.Sets.Add(1)
 
 	var expiration int64
 	if ttl > 0 {
@@ -219,7 +220,7 @@ func (c *LRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 		c.removeEntry(oldest)
 		delete(c.items, oldest.key.(K))
 		c.size--
-		c.stats.Evictions++
+		c.stats.Evictions.Add(1)
 
 		oldest.value = *new(V)
 		oldest.expiration = 0
@@ -327,10 +328,15 @@ func (c *LRU[K, V]) Has(key K) bool {
 // Example:
 //
 //	stats := cache.Stats()
-//	hitRate := float64(stats.Hits) / float64(stats.Hits + stats.Misses)
+//	hitRate := float64(stats.Hits.Load()) / float64(stats.Hits.Load() + stats.Misses.Load())
 //	fmt.Printf("Cache hit rate: %.2f%%\n", hitRate * 100)
 func (c *LRU[K, V]) Stats() Stats {
-	return c.stats
+	return Stats{
+		Hits:      c.stats.Hits,
+		Misses:    c.stats.Misses,
+		Sets:      c.stats.Sets,
+		Evictions: c.stats.Evictions,
+	}
 }
 
 func (c *LRU[K, V]) addToFront(e *entry[V]) {

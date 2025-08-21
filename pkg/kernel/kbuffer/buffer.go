@@ -128,9 +128,13 @@ func (b *Buffer) Bytes() []byte {
 // Returns:
 // - string: The current contents of the buffer as a string.
 func (b *Buffer) String() string {
-	if b.pos == 0 {
+	if b == nil || b.pos == 0 || b.b == nil {
 		return ""
 	}
+	if b.pos > len(b.b) {
+		panic("kbuffer: corrupted state - position exceeds buffer length")
+	}
+	// Use unsafe.String for performance in hot path, with proper validation
 	return unsafe.String(unsafe.SliceData(b.b[:b.pos]), b.pos)
 }
 
