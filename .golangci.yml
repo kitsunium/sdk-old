@@ -50,11 +50,3 @@ issues:
   # New issues configuration for CI
   new: false # Don't show only new issues
   fix: false # Don't auto-fix issues
-
-  # Exclude specific issues
-  exclude-rules:
-    # SA6002: sync.Pool is optimized for []byte in Go 1.18+
-    - path: pkg/kernel/kbuffer/pool\.go
-      linters:
-        - staticcheck
-      text: "SA6002"
