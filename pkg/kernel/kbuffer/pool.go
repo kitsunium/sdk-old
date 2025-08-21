@@ -4,7 +4,6 @@ import (
 	"math/bits"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 const (
@@ -20,8 +19,8 @@ const (
 type BufferPool struct {
 	pools      sync.Map // Use sync.Map for lock-free reads
 	stats      PoolStats
-	maxSize    int
-	clearOnPut bool // Whether to clear buffers on return
+	maxSize    int64 // Use int64 for atomic operations
+	clearOnPut bool  // Whether to clear buffers on return
 }
 
 // PoolStats tracks pool usage statistics.
@@ -79,7 +78,7 @@ func (p *BufferPool) Get(size int) []byte {
 	}
 
 	// For very large sizes, allocate directly without pooling
-	if size > p.maxSize {
+	if int64(size) > atomic.LoadInt64(&p.maxSize) {
 		atomic.AddInt64(&p.stats.Allocs, 1)
 		atomic.AddInt64(&p.stats.Misses, 1)
 		return make([]byte, size)
@@ -154,7 +153,7 @@ func (p *BufferPool) Put(buf []byte) {
 	capacity := cap(buf)
 
 	// Don't pool very large buffers
-	if capacity > p.maxSize {
+	if int64(capacity) > atomic.LoadInt64(&p.maxSize) {
 		return
 	}
 
@@ -224,7 +223,7 @@ func (p *BufferPool) ResetStats() {
 
 // SetMaxSize sets the maximum buffer size that will be pooled.
 func (p *BufferPool) SetMaxSize(size int) {
-	atomic.StoreInt64((*int64)(unsafe.Pointer(&p.maxSize)), int64(size))
+	atomic.StoreInt64(&p.maxSize, int64(size))
 }
 
 // SetClearOnPut sets whether buffers should be cleared when returned to pool.

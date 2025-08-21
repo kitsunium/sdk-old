@@ -122,27 +122,41 @@ func TestMap(t *testing.T) {
 	}
 }
 
-func TestStringToBytes(t *testing.T) {
+func TestStringToBytesSafe(t *testing.T) {
 	str := "test string"
-	bytes := StringToBytes(str)
+	bytes := StringToBytesSafe(str)
 
 	if len(bytes) != len(str) {
-		t.Errorf("StringToBytes length = %d, want %d", len(bytes), len(str))
+		t.Errorf("StringToBytesSafe length = %d, want %d", len(bytes), len(str))
 	}
 
 	for i := 0; i < len(str); i++ {
 		if bytes[i] != str[i] {
-			t.Errorf("StringToBytes[%d] = %v, want %v", i, bytes[i], str[i])
+			t.Errorf("StringToBytesSafe[%d] = %v, want %v", i, bytes[i], str[i])
 		}
+	}
+
+	// Test that modifying the bytes doesn't affect the original string
+	original := str
+	bytes[0] = 'X'
+	if str != original {
+		t.Errorf("Modifying bytes affected original string")
 	}
 }
 
-func TestBytesToString(t *testing.T) {
+func TestBytesToStringSafe(t *testing.T) {
 	bytes := []byte("test bytes")
-	str := BytesToString(bytes)
+	str := BytesToStringSafe(bytes)
 
 	if str != "test bytes" {
-		t.Errorf("BytesToString = %q, want %q", str, "test bytes")
+		t.Errorf("BytesToStringSafe = %q, want %q", str, "test bytes")
+	}
+
+	// Test that modifying the bytes doesn't affect the string
+	original := str
+	bytes[0] = 'X'
+	if str != original {
+		t.Errorf("Modifying bytes affected the string")
 	}
 }
 

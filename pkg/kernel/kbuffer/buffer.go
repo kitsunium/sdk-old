@@ -221,10 +221,11 @@ func (b *Buffer) Extend(n int) error {
 	if n < 0 {
 		return ErrBufferOverflow
 	}
-	newPos := b.pos + n
-	if newPos > b.c {
+	// Check for integer overflow before performing the addition
+	if n > b.c-b.pos {
 		return ErrBufferOverflow
 	}
+	newPos := b.pos + n
 	b.pos = newPos
 	return nil
 }

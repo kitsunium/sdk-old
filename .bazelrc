@@ -11,7 +11,7 @@ build --guard_against_concurrent_changes
 
 # Go-specific settings
 build --@rules_go//go/config:pure
-build --@rules_go//go/config:race=false
+# race disabled by default if not specified
 
 # Test configuration
 test --test_output=errors
@@ -22,7 +22,7 @@ test --test_size_filters=small,medium
 
 # Coverage configuration
 coverage --combined_report=lcov
-coverage --instrumentation_filter="^//pkg[/:]"
+coverage --instrumentation_filter="^//(pkg|cmd|internal)[/:]"
 
 # CI configuration
 build:ci --build_event_json_file=build_events.json
@@ -33,7 +33,7 @@ test:ci --nocache_test_results
 # Debug configuration
 build:debug --strip=never
 build:debug --copt=-g
-build:debug --@rules_go//go/config:race=true
+build:debug --@rules_go//go/config:race
 
 # Release configuration
 build:release --compilation_mode=opt

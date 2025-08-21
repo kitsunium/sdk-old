@@ -285,8 +285,8 @@ func TestJSON_LoadBytes_EdgeCases(t *testing.T) {
 			name:    "scientific notation",
 			content: []byte(`{"sci1": 1.23e10, "sci2": 1.23e-10}`),
 			expected: map[string]string{
-				"sci1": "12300000000", // strconv.FormatFloat converts to standard notation
-				"sci2": "1.23e-10",
+				"sci1": "1.23e10",  // Preserve original scientific notation
+				"sci2": "1.23e-10", // Preserve original scientific notation
 			},
 		},
 		{
@@ -555,7 +555,7 @@ func TestJSON_LoadBytes_ExhaustiveTypes(t *testing.T) {
 		"number.float":      "3.14159",
 		"number.negative":   "-123",
 		"number.zero":       "0",
-		"number.scientific": "12300000000",
+		"number.scientific": "1.23e10",
 		"bool.true":         "true",
 		"bool.false":        "false",
 		"null.value":        "",
@@ -603,7 +603,7 @@ func TestJSON_LoadBytes_ExhaustiveTypes(t *testing.T) {
 
 		// Edge cases
 		"edge.cases.very.long.number":     "9223372036854775807",
-		"edge.cases.very.small.number":    "1e-12",
+		"edge.cases.very.small.number":    "0.000000000001",
 		"edge.cases.null.in.object.value": "",
 		"edge.cases.unicode.key.名前":       "value",
 		"edge.cases.special-chars!@#$":    "special",

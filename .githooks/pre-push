@@ -1,77 +1,140 @@
 #!/bin/bash
+# Hook pre-push : exécuté avant l'envoi des commits vers le serveur distant
+# Reçoit sur stdin : <local ref> <local sha> <remote ref> <remote sha>
+# Objectif : bloquer le push si des mentions d'IA sont détectées dans les commits
 
-# Git hook to prevent pushing commits with Claude-related mentions
-# This hook is called before a push to a remote repository
+# Active les modes stricts de bash :
+# -E : les fonctions héritent des traps ERR
+# -e : arrête le script si une commande échoue
+# -u : arrête si une variable non définie est utilisée
+# -o pipefail : arrête si une commande dans un pipe échoue
+set -Eeuo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Définit le séparateur de champs interne
+IFS=$'\n\t'
 
-# Define patterns to check
+# Détecte si on est dans un terminal interactif pour les couleurs
+# -t 1 : teste si le descripteur de fichier 1 (stdout) est un terminal
+if [ -t 1 ]; then
+    # Définit les codes couleur ANSI
+    RED='\033[0;31m'    # Rouge pour les erreurs
+    YELLOW='\033[0;33m' # Jaune pour les avertissements
+    NC='\033[0m'        # No Color (réinitialise la couleur)
+else
+    # Pas de terminal, pas de couleurs
+    RED=''
+    YELLOW=''
+    NC=''
+fi
+
+# Définit les patterns à rechercher dans les messages/auteurs de commits
+# Ces patterns identifient les mentions d'IA à bloquer
 patterns=(
-    "[Cc]laude"
-    "Anthropic"
-    "anthropic"
-    "🤖.*[Cc]laude"
-    "Co-[Aa]uthored-[Bb]y:.*[Cc]laude"
-    "Co-[Aa]uthored-[Bb]y:.*noreply@anthropic"
-    "[Gg]enerated with.*[Cc]laude"
-    "claude\.ai"
+    "claude"                                          # Mention directe de Claude
+    "anthropic"                                       # Mention d'Anthropic
+    "🤖.*claude"                                      # Robot emoji suivi de claude
+    "^[[:space:]]*co-authored-by:.*(claude|anthropic)" # Co-auteur IA
+    "generated with.*claude"                          # Généré avec Claude
+    "claude\.ai"                                      # Domaine claude.ai
 )
 
-# Read the range of commits being pushed
-while read local_ref local_sha remote_ref remote_sha
+# Git envoie les informations sur stdin, une ligne par référence
+# Format : <local ref> <local sha> <remote ref> <remote sha>
+while read -r local_ref local_sha remote_ref remote_sha
 do
-    # Check if we're deleting a branch
+    # Skip si l'entrée est vide (correction du bug)
+    # -z teste si la chaîne est vide
+    if [ -z "$local_ref" ] || [ -z "$local_sha" ]; then
+        continue
+    fi
+    
+    # Vérifie si on supprime une branche
+    # 40 zéros = SHA spécial indiquant une suppression
     if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
         continue
     fi
     
-    # Get the range of commits
+    # Détermine la plage de commits à vérifier
     if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
-        # New branch, check all commits
-        range="$local_sha"
+        # Nouvelle branche : vérifie tous les commits de la branche
+        # git merge-base trouve l'ancêtre commun avec main/master
+        if git rev-parse --verify main >/dev/null 2>&1; then
+            base_branch="main"
+        elif git rev-parse --verify master >/dev/null 2>&1; then
+            base_branch="master"  
+        else
+            base_branch="HEAD"
+        fi
+        # Trouve le commit de base commun
+        base_commit=$(git merge-base "$local_sha" "$base_branch" 2>/dev/null || echo "$remote_sha")
+        # Range : du commit de base au nouveau SHA
+        range="$base_commit..$local_sha"
     else
-        # Existing branch, check new commits only
+        # Branche existante : vérifie seulement les nouveaux commits
+        # Range : de l'ancien SHA distant au nouveau SHA local
         range="$remote_sha..$local_sha"
     fi
     
-    # Check each commit message
-    commits=$(git rev-list "$range" 2>/dev/null)
+    # Récupère la liste des commits dans la plage
+    # git rev-list : liste les SHAs des commits
+    commits=$(git rev-list "$range" 2>/dev/null || echo "")
     
-    for commit in $commits; do
-        commit_msg=$(git log --format=%B -n 1 "$commit")
+    # Skip si pas de commits à vérifier
+    if [ -z "$commits" ]; then
+        continue
+    fi
+    
+    # Vérifie si ALLOW_AI_MENTIONS est défini (permet de contourner le blocage)
+    # ${VAR:-default} : utilise VAR ou 'default' si VAR n'est pas définie
+    if [ -n "${ALLOW_AI_MENTIONS:-}" ]; then
+        echo -e "${YELLOW}⚠️  AI mention checks bypassed via ALLOW_AI_MENTIONS${NC}"
+        continue
+    fi
+    
+    # Parcourt chaque commit à vérifier
+    while IFS= read -r commit; do
+        # Récupère le message complet du commit
+        # --format=%B : affiche le message complet (sujet + corps)
+        commit_msg=$(git log -1 --format=%B "$commit")
         
-        # Check each pattern
+        # Récupère l'auteur du commit
+        # --format=%an : affiche le nom de l'auteur
+        commit_author=$(git log -1 --format=%an "$commit")
+        
+        # Vérifie chaque pattern dans le message et l'auteur
         for pattern in "${patterns[@]}"; do
-            if echo "$commit_msg" | grep -qE "$pattern"; then
-                echo -e "${RED}ERROR: Commit $commit contains forbidden reference to AI assistant.${NC}"
-                echo -e "${RED}Pattern matched: $pattern${NC}"
+            # Combine message et auteur pour une vérification unique
+            combined="${commit_msg}"$'\n'"${commit_author}"
+            
+            # Test avec grep
+            # -E : expression régulière étendue
+            # -i : insensible à la casse
+            # -q : mode silencieux (pas de sortie)
+            if echo "$combined" | grep -Eiq "$pattern"; then
+                # Pattern trouvé ! Affiche l'erreur
+                echo -e "${RED}❌ Error: AI-related content detected in commit $commit${NC}"
+                echo ""
+                echo "Pattern matched: '$pattern'"
                 echo ""
                 echo "Commit message:"
-                echo "---"
-                git log --format='%h %s' -n 1 "$commit"
-                echo "---"
+                # Affiche le message en jaune avec indentation
+                echo "$commit_msg" | sed 's/^/  /'
                 echo ""
-                echo "Please amend the commit to remove references to:"
-                echo "  - Claude or Anthropic"
-                echo "  - AI assistant mentions"
-                echo "  - Co-authored-by with AI"
-                echo "  - Generated with AI tools"
+                echo -e "${YELLOW}To bypass this check (not recommended), use:${NC}"
+                echo "  ALLOW_AI_MENTIONS=1 git push"
                 echo ""
-                echo "Use: git commit --amend to fix the last commit"
-                echo "Or: git rebase -i to fix older commits"
+                echo -e "${YELLOW}To fix this, you can:${NC}"
+                echo "  1. Amend the commit: git commit --amend"
+                echo "  2. Interactive rebase: git rebase -i HEAD~n"
+                echo "  3. Reset and recommit: git reset --soft HEAD~1"
+                
+                # Sort avec erreur, bloque le push
                 exit 1
             fi
         done
-        
-        # Warning for robot emoji
-        if echo "$commit_msg" | grep -q "🤖"; then
-            echo -e "${YELLOW}WARNING: Commit $commit contains robot emoji (🤖).${NC}"
-            echo "This might indicate AI-generated content."
-        fi
-    done
+    done <<< "$commits"  # Redirige la liste des commits vers la boucle while
 done
 
-exit 0
+# Si on arrive ici, aucune mention d'IA trouvée
+echo "✅ Pre-push validation passed - no AI mentions detected"
+# Sort avec succès, le push continue
