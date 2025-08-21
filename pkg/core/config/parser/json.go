@@ -145,18 +145,8 @@ func normalizeJSONNumber(n json.Number) string {
 func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
 	var config map[string]any
 
-	// Try standard unmarshal first (faster path)
-	if err := json.Unmarshal(data, &config); err == nil {
-		// Fast path succeeded, process the result
-		result, processErr := j.processConfig(config, len(data))
-		if processErr == nil {
-			return result, nil
-		}
-		// If processing fails due to precision issues, fall back to UseNumber
-	}
-
-	// Fallback: Use decoder with UseNumber to preserve large integers
-	config = nil // Reset config
+	// Always use decoder with UseNumber to preserve large integers
+	// This ensures consistent behavior for all numeric values
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.UseNumber()
 	if err := decoder.Decode(&config); err != nil {
