@@ -35,10 +35,12 @@ engines:
     config:
       languages:
         - go
-        - javascript
         - shell
       min_tokens: 40
       min_lines: 5
+      exclude_paths:
+        - "**/*_test.go"
+        - "*_test.go"
   metrics:
     enabled: true
   coverage:
@@ -48,9 +50,12 @@ engines:
 exclude_paths:
   # Test files - no need to analyze
   - "**/*_test.go"
+  - "*_test.go"
   - "**/testdata/**"
   - "**/*_bench_test.go"
   - "**/*_benchmark_test.go"
+  - "**/test/**"
+  - "**/tests/**"
 
   # Vendor and dependencies
   - "**/vendor/**"
@@ -67,6 +72,7 @@ exclude_paths:
   - "**/BUILD.bazel"
   - "**/*.bazel"
   - "MODULE.bazel"
+  - "WORKSPACE"
   - ".bazelrc"
   - ".bazelversion"
   - "bazel-*/**"
@@ -79,28 +85,62 @@ exclude_paths:
   - "go.mod"
   - "go.sum"
 
+  # Configuration files
+  - ".codacy.yml"
+  - ".codacy.yaml"
+  - "codacy.yml"
+  - "codacy.yaml"
+  - ".golangci.yml"
+  - ".golangci.yaml"
+  - ".prettierrc*"
+  - ".prettierignore"
+  - "*.config.js"
+  - "*.config.json"
+  - "*.config.yaml"
+  - "*.config.yml"
+
   # Git and CI
   - ".git/**"
   - "**/.git/**"
   - ".github/**"
   - ".githooks/**"
+  - ".gitignore"
+  - ".gitattributes"
 
-  # Node modules
+  # Node/JS files (not relevant for Go project)
   - "node_modules/**"
   - "**/node_modules/**"
+  - "package.json"
+  - "package-lock.json"
+  - "yarn.lock"
+  - "*.js"
+  - "*.jsx"
+  - "*.ts"
+  - "*.tsx"
 
-  # Codacy specific
-  - ".codacy/**"
-  - ".codacy.yml"
+  # Documentation
+  - "**/*.md"
+  - "docs/**"
+  - "LICENSE*"
+  - "README*"
+  - "CHANGELOG*"
+  - "CONTRIBUTING*"
 
-# Languages to analyze
+  # IDE files
+  - ".vscode/**"
+  - ".idea/**"
+  - "*.iml"
+  - ".claude/**"
+
+  # Makefiles and scripts
+  - "Makefile"
+  - "makefile"
+  - "*.mk"
+  - "scripts/**"
+
+# Languages to analyze (focus on Go only)
 languages:
   - go
-  - shell
-  - yaml
-  - json
-  - markdown
-  - javascript
 
 # Tools configuration
 tools:
@@ -135,8 +175,4 @@ tools:
 
   # PMD for additional code analysis
   - pattern: pmd
-    enabled: true
-
-  # ESLint for JavaScript
-  - pattern: eslint
     enabled: true
