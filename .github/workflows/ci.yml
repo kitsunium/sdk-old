@@ -66,7 +66,7 @@ jobs:
             # Convert absolute paths to relative for SonarCloud
             sed -i.bak 's|SF:.*/sdk/|SF:|g' coverage.lcov
             
-            echo "📈 Coverage report ready for SonarCloud"
+            echo "📈 Coverage report ready, but disabled in sonar-project.properties"
           else
             echo "⚠️ No coverage report generated, creating empty file..."
             touch coverage.lcov
