@@ -1,8 +1,10 @@
+---
+# Codacy Configuration - used both locally and remotely
+# This is the main configuration file for Codacy analysis
+
+# Analysis engines for Go
 engines:
-  aligncheck:
-    enabled: true
-  deadcode:
-    enabled: true
+  # Go static analysis tools
   gosec:
     enabled: true
   revive:
@@ -21,41 +23,189 @@ engines:
     enabled: true
   varcheck:
     enabled: true
+  aligncheck:
+    enabled: true
+  deadcode:
+    enabled: true
+
+# Files to exclude from analysis
 exclude_paths:
+  # Vendor and dependencies
   - "**/vendor/**"
-  - "**/testdata/**"
+  - "vendor/**"
+  
+  # Generated files
   - "**/*.pb.go"
+  - "**/*_gen.go"
+  - "**/*_generated.go"
+  - "**/mocks/**"
+  - "**/mock_*.go"
+  
+  # Build system
   - "**/BUILD.bazel"
   - "**/*.bazel"
-  - bazel-*/**
-  - ./bazel-*/**
-  - bazel-sdk/**
-  - bazel-bin/**
-  - bazel-out/**
-  - bazel-testlogs/**
-  - "**/go.mod"
-  - "**/go.sum"
-  - "**/*_gen.go"
-  - "**/mocks/**"
-  - .github/**
-  - .git/**
+  - "MODULE.bazel"
+  - ".bazelrc"
+  - ".bazelversion"
+  - "bazel-*/**"
+  - "bazel-bin/**"
+  - "bazel-out/**"
+  - "bazel-testlogs/**"
+  - "bazel-sdk/**"
+  
+  # Go modules (analyzed separately)
+  - "go.mod"
+  - "go.sum"
+  
+  # Git and CI
+  - ".git/**"
   - "**/.git/**"
+  - ".github/**"
+  
+  # Node modules (if any)
+  - "node_modules/**"
+  - "**/node_modules/**"
+
+# Include patterns - analyze all Go code including tests
+include_paths:
+  - "**/*.go"
+  - "**/*_test.go"
+  - "**/*.sh"
+  - "**/*.bash"
+  - "**/*.yml"
+  - "**/*.yaml"
+  - "**/*.json"
+  - "**/*.md"
+  - "Makefile"
+  - ".githooks/**"
+
+# Runtime environments
 runtimes:
   - go@1.24.6
   - python@3.11.11
+  - node@20.11.0
+
+# External tools configuration
 tools:
-  - lizard@1.17.31
-  - semgrep@1.78.0
-  - trivy@0.65.0
-  - eslint@8.57.0
-  - shellcheck@0.10.0
-  - markdownlint@0.34.0
-  - pmd@6.55.0
+  # Code complexity and maintainability
+  - lizard@1.17.31:
+      enabled: true
+      config_file: tools-configs/lizard.yaml
+  
+  # Security scanning
+  - semgrep@1.78.0:
+      enabled: true
+      config_file: tools-configs/semgrep.yaml
+  
+  # Vulnerability scanning
+  - trivy@0.65.0:
+      enabled: true
+      config_file: tools-configs/trivy.yaml
+  
+  # JavaScript/TypeScript linting
+  - eslint@8.57.0:
+      enabled: true
+      config_file: tools-configs/eslint.config.mjs
+  
+  # Shell script analysis
+  - shellcheck@0.10.0:
+      enabled: true
+  
+  # Markdown linting
+  - markdownlint@0.34.0:
+      enabled: true
+  
+  # PMD for additional code analysis
+  - pmd@6.55.0:
+      enabled: true
+      config_file: tools-configs/ruleset.xml
+
+# Language-specific settings
 languages:
   - go
   - shell
   - yaml
   - json
   - markdown
+  - javascript
+
+# Coverage settings
 coverage:
   enabled: true
+  config:
+    languages:
+      - go
+    report_paths:
+      - "coverage.lcov"
+      - "coverage.out"
+      - "bazel-out/_coverage/_coverage_report.dat"
+
+# Duplication detection
+duplication:
+  enabled: true
+  config:
+    languages:
+      - go
+      - shell
+      - javascript
+    min_tokens: 40
+    min_lines: 5
+    min_clones: 2
+
+# Metrics thresholds
+metrics:
+  enabled: true
+  config:
+    cyclomatic_complexity:
+      threshold: 10
+      languages: [go, javascript]
+    file_complexity:
+      threshold: 50
+      languages: [go, javascript]
+    method_complexity:
+      threshold: 8
+      languages: [go, javascript]
+    method_lines:
+      threshold: 50
+      languages: [go, javascript]
+    file_lines:
+      threshold: 500
+      languages: [go, javascript, shell]
+    duplicate_lines:
+      threshold: 50
+      languages: [go, javascript]
+
+# Issue patterns configuration
+patterns:
+  enabled: true
+  categories:
+    - Security
+    - Error Prone
+    - Code Style
+    - Best Practice
+    - Compatibility
+    - Performance
+    - Complexity
+    - Documentation
+    - Duplication
+    - Unused Code
+
+# Analysis settings
+analysis:
+  # Analyze test files
+  include_test_files: true
+  
+  # Follow symlinks
+  follow_symlinks: false
+  
+  # Maximum file size to analyze (in bytes)
+  max_file_size: 5000000
+  
+  # Timeout for tool execution (in seconds)
+  tool_timeout: 900
+  
+  # Parallel analysis
+  parallel: true
+  
+  # Number of parallel jobs
+  max_parallel_tools: 4
