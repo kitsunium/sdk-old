@@ -1,0 +1,210 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch: # Manual trigger only, no inputs for security
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  GO_VERSION: 1.24.6
+  BAZEL_VERSION: 7.0.0
+  BENCHMARK_TIME: "10s" # Default benchmark duration
+  BENCHMARK_FILTER: "." # Default filter pattern (all benchmarks)
+
+jobs:
+  benchmark:
+    name: ⚡ Performance Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout current branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: 🏗️ Setup Bazel
+        uses: bazel-contrib/setup-bazel@4fd964a13a440a8aeb0be47350db2fc640f19ca8 # v0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: 📦 Download dependencies
+        run: |
+          echo "📦 Downloading Go modules..."
+          go mod download
+          go mod verify
+
+      - name: ⚡ Run current benchmarks
+        id: bench-current
+        env:
+          BENCH_TIME: ${{ env.BENCHMARK_TIME }}
+          BENCH_FILTER: ${{ env.BENCHMARK_FILTER }}
+        run: |
+          echo "⚡ Running benchmarks on current branch..."
+          echo "Benchmark time: ${BENCH_TIME}"
+          echo "Filter pattern: ${BENCH_FILTER}"
+
+          # Create results directory
+          mkdir -p benchmark-results
+
+          # Run benchmarks with Bazel
+          bazel test //... \
+            --test_arg=-test.bench="${BENCH_FILTER}" \
+            --test_arg=-test.benchmem \
+            --test_arg=-test.benchtime="${BENCH_TIME}" \
+            --test_arg=-test.run=^$ \
+            --test_output=streamed \
+            --test_size_filters=small,medium,large \
+            --nocache_test_results 2>&1 | tee benchmark-results/current.txt || true
+
+          # Extract benchmark results
+          echo "" >> benchmark-results/current.txt
+          echo "=== Benchmark Summary ===" >> benchmark-results/current.txt
+          grep -E "^Benchmark|^goos:|^goarch:|ns/op|B/op|allocs/op" benchmark-results/current.txt > benchmark-results/current-summary.txt || true
+
+          if [ -s benchmark-results/current-summary.txt ]; then
+            cat benchmark-results/current-summary.txt >> benchmark-results/current.txt
+            echo "✅ Benchmarks completed successfully"
+          else
+            echo "⚠️ No benchmark results found"
+          fi
+
+      - name: 🔄 Run comparison benchmarks (main branch)
+        if: github.ref != 'refs/heads/main'
+        env:
+          BENCH_TIME: ${{ env.BENCHMARK_TIME }}
+          BENCH_FILTER: ${{ env.BENCHMARK_FILTER }}
+        run: |
+          echo "🔄 Checking out comparison branch: main"
+
+          # Save current results
+          cp benchmark-results/current.txt benchmark-results/current-saved.txt
+
+          # Checkout main branch for comparison
+          git checkout main
+
+          echo "⚡ Running benchmarks on main branch..."
+
+          # Run benchmarks on comparison branch
+          bazel test //... \
+            --test_arg=-test.bench="${BENCH_FILTER}" \
+            --test_arg=-test.benchmem \
+            --test_arg=-test.benchtime="${BENCH_TIME}" \
+            --test_arg=-test.run=^$ \
+            --test_output=streamed \
+            --test_size_filters=small,medium,large \
+            --nocache_test_results 2>&1 | tee benchmark-results/comparison.txt || true
+
+          # Extract comparison results
+          grep -E "^Benchmark|ns/op|B/op|allocs/op" benchmark-results/comparison.txt > benchmark-results/comparison-summary.txt || true
+
+          # Return to original branch
+          git checkout -
+
+          # Restore current results
+          mv benchmark-results/current-saved.txt benchmark-results/current.txt
+
+      - name: 📊 Generate benchmark report
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          BENCH_TIME: ${{ env.BENCHMARK_TIME }}
+          BENCH_FILTER: ${{ env.BENCHMARK_FILTER }}
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          echo "# ⚡ Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${BRANCH_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${COMMIT_SHA}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Duration:** ${BENCH_TIME}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Filter:** \`${BENCH_FILTER}\`" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "- **Comparison Branch:** main" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f benchmark-results/current-summary.txt ] && [ -s benchmark-results/current-summary.txt ]; then
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            head -50 benchmark-results/current-summary.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            
+            # Count total benchmarks
+            BENCH_COUNT=$(grep -c "^Benchmark" benchmark-results/current-summary.txt || echo "0")
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Total benchmarks run:** $BENCH_COUNT" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No benchmark results found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Add comparison if available
+          if [ -f benchmark-results/comparison-summary.txt ] && [ -s benchmark-results/comparison-summary.txt ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## Comparison with main branch" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            head -50 benchmark-results/comparison-summary.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: 📤 Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_number }}
+          path: benchmark-results/
+          retention-days: 30
+
+      - name: 💬 Comment on PR (if applicable)
+        if: github.event.pull_request.number != ''
+        uses: actions/github-script@v7
+        env:
+          BENCH_TIME: ${{ env.BENCHMARK_TIME }}
+          BENCH_FILTER: ${{ env.BENCHMARK_FILTER }}
+          ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const results = fs.readFileSync('benchmark-results/current-summary.txt', 'utf8');
+
+            const actor = process.env.ACTOR;
+            const benchTime = process.env.BENCH_TIME;
+            const benchFilter = process.env.BENCH_FILTER;
+            const repo = process.env.REPO;
+            const runId = process.env.RUN_ID;
+
+            const body = `## ⚡ Benchmark Results
+
+            **Triggered by:** @${actor}
+            **Duration:** ${benchTime}
+            **Filter:** \`${benchFilter}\`
+
+            \`\`\`
+            ${results.substring(0, 3000)}
+            \`\`\`
+
+            [Full results](https://github.com/${repo}/actions/runs/${runId})`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

@@ -140,19 +140,6 @@ deps:
 quality/analyze: quality/lint quality/security
 	@echo "$(GREEN)✓ Code analysis complete$(NC)"
 
-## quality/codacy: run Codacy analysis locally using .codacy.yml
-.PHONY: quality/codacy
-quality/codacy:
-	@echo "$(YELLOW)▶ Running Codacy analysis...$(NC)"
-	@if command -v codacy-analysis-cli >/dev/null 2>&1; then \
-		codacy-analysis-cli analyze --config .codacy.yml --verbose; \
-	elif command -v docker >/dev/null 2>&1; then \
-		echo "$(CYAN)Using Docker to run Codacy analysis...$(NC)"; \
-		docker run --rm -v $(PWD):/code codacy/codacy-analysis-cli analyze --config /code/.codacy.yml; \
-	else \
-		echo "$(YELLOW)⚠ Codacy CLI not installed. Install with:$(NC)"; \
-		echo "  curl -Ls https://github.com/codacy/codacy-analysis-cli/releases/latest/download/codacy-analysis-cli.sh | bash"; \
-	fi
 
 ## quality/format: format all code (Go, YAML, JSON, MD)
 .PHONY: quality/format
