@@ -118,7 +118,8 @@ bench:
 	@for target in $$($(BAZEL) query 'attr(tags, "bench", //...)' 2>/dev/null); do \
 		pkg_dir=$$(echo $$target | sed 's|//||' | sed 's|:.*||'); \
 		echo "$(CYAN)  Benchmarking $$pkg_dir...$(NC)"; \
-		$(BAZEL) run $$target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s -test.run=^$$ 2>&1 | grep -v "^exec " | grep -v "^Executing tests" | grep -v "^---" | tee $$pkg_dir/result_bench; \
+		set -o pipefail; \
+		$(BAZEL) run $$target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s -test.run=^$$ 2>&1 | grep -v "^exec " | grep -v "^Executing tests" | grep -v "^---" | tee $$pkg_dir/result_bench || exit $$?; \
 	done
 	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
 

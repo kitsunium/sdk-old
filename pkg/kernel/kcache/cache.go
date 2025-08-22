@@ -152,9 +152,7 @@ func (c *LRU[K, V]) Get(key K) (V, bool) {
 
 	e, exists := c.items[key]
 	if !exists {
-		if c.stats.Misses != nil {
-			c.stats.Misses.Add(1)
-		}
+		c.Stats().Misses.Add(1)
 		var zero V
 		return zero, false
 	}
@@ -163,17 +161,13 @@ func (c *LRU[K, V]) Get(key K) (V, bool) {
 		c.removeEntry(e)
 		delete(c.items, key)
 		c.size--
-		if c.stats.Misses != nil {
-			c.stats.Misses.Add(1)
-		}
+		c.Stats().Misses.Add(1)
 		var zero V
 		return zero, false
 	}
 
 	c.moveToFront(e)
-	if c.stats.Hits != nil {
-		c.stats.Hits.Add(1)
-	}
+	c.Stats().Hits.Add(1)
 	return e.value, true
 }
 
@@ -208,9 +202,7 @@ func (c *LRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.stats.Sets != nil {
-		c.stats.Sets.Add(1)
-	}
+	c.Stats().Sets.Add(1)
 
 	var expiration int64
 	if ttl > 0 {
@@ -240,9 +232,7 @@ func (c *LRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 		c.removeEntry(oldest)
 		delete(c.items, oldest.key.(K))
 		c.size--
-		if c.stats.Evictions != nil {
-			c.stats.Evictions.Add(1)
-		}
+		c.Stats().Evictions.Add(1)
 
 		oldest.value = *new(V)
 		oldest.expiration = 0
@@ -353,10 +343,8 @@ func (c *LRU[K, V]) Has(key K) bool {
 //	hitRate := float64(stats.Hits.Load()) / float64(stats.Hits.Load() + stats.Misses.Load())
 //	fmt.Printf("Cache hit rate: %.2f%%\n", hitRate * 100)
 func (c *LRU[K, V]) Stats() *Stats {
-	// Return pointer to stats to avoid copying atomic values
-	if c.stats == nil {
-		return NewStats()
-	}
+	// Stats are initialized in NewLRU, so we can just return them
+	// No need for locking since Stats fields are atomic
 	return c.stats
 }
 
