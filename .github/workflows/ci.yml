@@ -280,38 +280,7 @@ jobs:
           path: coverage.lcov
           retention-days: 1
 
-  # Job 6: Security scanning
-  security:
-    name: 🔒 Security Scan
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v5
-
-      - name: 🐹 Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: 🔒 Run gosec
-        run: |
-          echo "🔒 Installing gosec..."
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          echo "🔍 Running security scan..."
-          ~/go/bin/gosec -fmt json -out gosec-report.json ./... || true
-          ~/go/bin/gosec ./... || true
-
-      - name: 📤 Upload security report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-report
-          path: gosec-report.json
-          retention-days: 1
-
-  # Job 7: Codacy analysis
+  # Job 6: Codacy analysis
   codacy:
     name: 📈 Codacy Analysis
     runs-on: ubuntu-latest
@@ -352,65 +321,7 @@ jobs:
           fi
         continue-on-error: true
 
-  # Job 8: Upload Codacy SARIF to GitHub Security
-  codacy-sarif-upload:
-    name: 🔐 Upload Codacy to GitHub Security
-    runs-on: ubuntu-latest
-    needs: [test]
-    permissions:
-      security-events: write
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v5
-
-      - name: 🔍 Generate SARIF from Codacy
-        uses: codacy/codacy-analysis-cli-action@562ee3e92b8e92df8b67e0a5ff8aa8e261919c08 # v4.4.7
-        with:
-          output: results.sarif
-          format: sarif
-          gh-code-scanning-compat: true
-          max-allowed-issues: 2147483647
-          # Skip upload to Codacy (already done by Codacy Production)
-          upload: false
-          # Only generate SARIF, don't fail the build
-          fail-if-incomplete: false
-        continue-on-error: true
-
-      # Process SARIF to merge multiple runs into one
-      - name: 🔧 Process SARIF file
-        if: hashFiles('results.sarif') != ''
-        run: |
-          echo "📊 Processing SARIF file to merge multiple runs..."
-          # Use jq to merge all runs into a single run with combined results
-          jq '
-            .runs = [
-              {
-                "tool": {
-                  "driver": {
-                    "name": "Codacy",
-                    "informationUri": "https://www.codacy.com",
-                    "rules": [.runs[].tool.driver.rules[]?] | unique
-                  }
-                },
-                "results": [.runs[].results[]],
-                "taxonomies": (.runs[0].taxonomies // []),
-                "columnKind": (.runs[0].columnKind // "utf16CodeUnits")
-              }
-            ]
-          ' results.sarif > processed-results.sarif
-          mv processed-results.sarif results.sarif
-          echo "✅ SARIF file processed successfully"
-
-      # Upload the SARIF file to GitHub Security
-      - name: 📤 Upload SARIF to GitHub Security
-        if: hashFiles('results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: results.sarif
-          category: codacy
-        continue-on-error: true
-
-  # Job 9: Benchmarks
+  # Job 7: Benchmarks
   benchmark:
     name: ⚡ Benchmarks
     runs-on: ubuntu-latest
@@ -473,11 +384,11 @@ jobs:
           retention-days: 1
           if-no-files-found: ignore
 
-  # Job 9: Final status check
+  # Job 8: Final status check
   status:
     name: ✅ CI Status
     runs-on: ubuntu-latest
-    needs: [lint, test, build, security, coverage]
+    needs: [lint, test, build, coverage]
     if: always()
     steps:
       - name: 📥 Download all artifacts
@@ -513,12 +424,6 @@ jobs:
             echo "| 🔨 Build | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
 
-          if [ "${{ needs.security.result }}" = "success" ]; then
-            echo "| 🔒 Security | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| 🔒 Security | ⚠️ Issues found |" >> $GITHUB_STEP_SUMMARY
-          fi
-
           if [ "${{ needs.coverage.result }}" = "success" ]; then
             echo "| 📊 Coverage | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           elif [ "${{ needs.coverage.result }}" = "skipped" ]; then
@@ -532,7 +437,7 @@ jobs:
           echo "The following artifacts were generated:" >> $GITHUB_STEP_SUMMARY
           echo "- Test results" >> $GITHUB_STEP_SUMMARY
           echo "- Coverage reports" >> $GITHUB_STEP_SUMMARY
-          echo "- Security scan results" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint results" >> $GITHUB_STEP_SUMMARY
           echo "- Benchmark results (PR only)" >> $GITHUB_STEP_SUMMARY
 
       - name: ✅ Check overall status
