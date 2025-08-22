@@ -1,0 +1,145 @@
+---
+# Codacy Analysis Configuration
+# This file configures how Codacy analyzes the repository
+
+# Code patterns and issues detection
+engines:
+  # Go specific engines
+  gosec:
+    enabled: true
+  revive:
+    enabled: true
+  staticcheck:
+    enabled: true
+  gofmt:
+    enabled: true
+  govet:
+    enabled: true
+  
+# Files and paths to exclude from analysis
+exclude_paths:
+  # Dependencies and vendor
+  - "**/vendor/**"
+  - "vendor/**"
+  
+  # Generated files
+  - "**/*.pb.go"
+  - "**/*_gen.go"
+  - "**/mocks/**"
+  - "**/*.generated.go"
+  
+  # Build system files
+  - "**/BUILD.bazel"
+  - "**/*.bazel"
+  - "MODULE.bazel"
+  - ".bazelrc"
+  - ".bazelversion"
+  - "bazel-*/**"
+  - "bazel-bin/**"
+  - "bazel-out/**"
+  - "bazel-testlogs/**"
+  - "bazel-sdk/**"
+  
+  # Go module files (these are analyzed differently)
+  - "go.mod"
+  - "go.sum"
+  
+  # CI/CD and config
+  - ".github/**"
+  - ".git/**"
+  - ".gitignore"
+  - ".githooks/**"
+  
+  # Documentation (if you want to exclude)
+  # - "**/*.md"
+  # - "docs/**"
+
+# Include test files in analysis
+include_paths:
+  - "**/*.go"
+  - "**/*_test.go"
+  - "**/*.sh"
+  - "**/*.yml"
+  - "**/*.yaml"
+  - "**/*.json"
+  - "**/*.md"
+  - "Makefile"
+
+# Tools configuration
+tools:
+  # Complexity and maintainability
+  - lizard:
+      enabled: true
+      patterns:
+        - nloc-medium
+        - ccn-medium
+        - file-nloc-medium
+  
+  # Security scanning
+  - semgrep:
+      enabled: true
+  
+  # Vulnerability detection
+  - trivy:
+      enabled: true
+  
+  # Shell script analysis
+  - shellcheck:
+      enabled: true
+  
+  # Markdown linting
+  - markdownlint:
+      enabled: true
+  
+  # YAML linting
+  - yamllint:
+      enabled: true
+
+# Language settings
+languages:
+  go:
+    extensions:
+      - ".go"
+  shell:
+    extensions:
+      - ".sh"
+      - ".bash"
+  yaml:
+    extensions:
+      - ".yml"
+      - ".yaml"
+  json:
+    extensions:
+      - ".json"
+  markdown:
+    extensions:
+      - ".md"
+
+# Coverage settings
+coverage:
+  enabled: true
+  
+# Duplication detection
+duplication:
+  enabled: true
+  config:
+    languages:
+      - go
+      - shell
+    min_tokens: 40
+    min_lines: 5
+
+# Metrics configuration
+metrics:
+  enabled: true
+  config:
+    cyclomatic_complexity:
+      threshold: 10
+    file_complexity:
+      threshold: 50
+    method_complexity:
+      threshold: 8
+    method_lines:
+      threshold: 50
+    file_lines:
+      threshold: 500

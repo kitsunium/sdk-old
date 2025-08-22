@@ -9,9 +9,20 @@ engines:
     enabled: true
   staticcheck:
     enabled: true
+  golint:
+    enabled: true
+  gofmt:
+    enabled: true
+  govet:
+    enabled: true
+  ineffassign:
+    enabled: true
+  structcheck:
+    enabled: true
+  varcheck:
+    enabled: true
 exclude_paths:
   - "**/vendor/**"
-  - "**/*_test.go"
   - "**/testdata/**"
   - "**/*.pb.go"
   - "**/BUILD.bazel"
@@ -26,8 +37,9 @@ exclude_paths:
   - "**/go.sum"
   - "**/*_gen.go"
   - "**/mocks/**"
-  - "**/*_bench*.go"
   - .github/**
+  - .git/**
+  - "**/.git/**"
 runtimes:
   - go@1.24.6
   - python@3.11.11
@@ -35,3 +47,15 @@ tools:
   - lizard@1.17.31
   - semgrep@1.78.0
   - trivy@0.65.0
+  - eslint@8.57.0
+  - shellcheck@0.10.0
+  - markdownlint@0.34.0
+  - pmd@6.55.0
+languages:
+  - go
+  - shell
+  - yaml
+  - json
+  - markdown
+coverage:
+  enabled: true
