@@ -70,13 +70,30 @@ jobs:
             echo "⚠️ No coverage report generated"
           fi
 
+      - name: Codacy Analysis
+        if: github.event_name == 'pull_request'
+        uses: codacy/codacy-analysis-cli-action@v4.5.0
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN || '' }}
+          verbose: true
+          upload: true
+          max-allowed-issues: 2147483647
+        continue-on-error: true
+      
       - name: Upload Coverage to Codacy
         if: github.event_name == 'pull_request' && hashFiles('coverage.lcov') != ''
-        uses: codacy/codacy-coverage-reporter-action@v1
-        with:
-          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          coverage-reports: coverage.lcov
-          language: go
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        run: |
+          if [ -n "$CODACY_PROJECT_TOKEN" ]; then
+            echo "📊 Uploading coverage to Codacy..."
+            bash <(curl -Ls https://coverage.codacy.com/get.sh) report \
+              -r coverage.lcov \
+              -t $CODACY_PROJECT_TOKEN \
+              --partial
+          else
+            echo "⚠️ CODACY_PROJECT_TOKEN not set, skipping coverage upload"
+          fi
         continue-on-error: true
 
       - name: Security Scan

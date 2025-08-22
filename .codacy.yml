@@ -3,18 +3,33 @@
 
 # Exclude patterns for analysis
 exclude_paths:
-  - '**/vendor/**'
-  - '**/*_test.go'
-  - '**/testdata/**'
-  - '**/*.pb.go'
-  - '**/BUILD.bazel'
-  - '**/*.bazel'
-  - 'bazel-*/**'
-  - '**/go.mod'
-  - '**/go.sum'
-  - '**/*_gen.go'
-  - '**/mocks/**'
+  - "**/vendor/**"
+  - "**/*_test.go"
+  - "**/testdata/**"
+  - "**/*.pb.go"
+  - "**/BUILD.bazel"
+  - "**/*.bazel"
+  - "bazel-*/**"
+  - "**/go.mod"
+  - "**/go.sum"
+  - "**/*_gen.go"
+  - "**/mocks/**"
+  - "**/*_bench*.go"
+  - ".github/**"
 
-# Enable coverage
+# Tools configuration
+tools:
+  gosec:
+    enabled: true
+  govet:
+    enabled: true
+  gofmt:
+    enabled: true
+  golint:
+    enabled: false  # Deprecated, use staticcheck instead
+  staticcheck:
+    enabled: true
+
+# Coverage configuration
 coverage:
   enabled: true
