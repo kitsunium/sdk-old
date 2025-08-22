@@ -33,14 +33,14 @@ exclude_paths:
   # Vendor and dependencies
   - "**/vendor/**"
   - "vendor/**"
-  
+
   # Generated files
   - "**/*.pb.go"
   - "**/*_gen.go"
   - "**/*_generated.go"
   - "**/mocks/**"
   - "**/mock_*.go"
-  
+
   # Build system
   - "**/BUILD.bazel"
   - "**/*.bazel"
@@ -52,16 +52,16 @@ exclude_paths:
   - "bazel-out/**"
   - "bazel-testlogs/**"
   - "bazel-sdk/**"
-  
+
   # Go modules (analyzed separately)
   - "go.mod"
   - "go.sum"
-  
+
   # Git and CI
   - ".git/**"
   - "**/.git/**"
   - ".github/**"
-  
+
   # Node modules (if any)
   - "node_modules/**"
   - "**/node_modules/**"
@@ -91,30 +91,30 @@ tools:
   - lizard@1.17.31:
       enabled: true
       config_file: tools-configs/lizard.yaml
-  
+
   # Security scanning
   - semgrep@1.78.0:
       enabled: true
       config_file: tools-configs/semgrep.yaml
-  
+
   # Vulnerability scanning
   - trivy@0.65.0:
       enabled: true
       config_file: tools-configs/trivy.yaml
-  
+
   # JavaScript/TypeScript linting
   - eslint@8.57.0:
       enabled: true
       config_file: tools-configs/eslint.config.mjs
-  
+
   # Shell script analysis
   - shellcheck@0.10.0:
       enabled: true
-  
+
   # Markdown linting
   - markdownlint@0.34.0:
       enabled: true
-  
+
   # PMD for additional code analysis
   - pmd@6.55.0:
       enabled: true
@@ -194,18 +194,18 @@ patterns:
 analysis:
   # Analyze test files
   include_test_files: true
-  
+
   # Follow symlinks
   follow_symlinks: false
-  
+
   # Maximum file size to analyze (in bytes)
   max_file_size: 5000000
-  
+
   # Timeout for tool execution (in seconds)
   tool_timeout: 900
-  
+
   # Parallel analysis
   parallel: true
-  
+
   # Number of parallel jobs
   max_parallel_tools: 4
