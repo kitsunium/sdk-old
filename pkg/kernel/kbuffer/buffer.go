@@ -45,7 +45,7 @@ func (b *Buffer) Write(p []byte) (int, error) {
 	}
 
 	// Use unsafe for zero-copy operation
-	dst := unsafe.Slice(&b.data[b.pos], available)
+	dst := unsafe.Slice(&b.data[b.pos], available) // nosemgrep: go.lang.security.audit.unsafe-use.unsafe-use
 	copy(dst, p)
 	b.pos += int32(n)
 	return n, nil
@@ -67,8 +67,8 @@ func (b *Buffer) WriteString(s string) (int, error) {
 	}
 
 	// Zero-allocation string write using unsafe
-	src := unsafe.Slice(unsafe.StringData(s), n)
-	dst := unsafe.Slice(&b.data[b.pos], available)
+	src := unsafe.Slice(unsafe.StringData(s), n)   // nosemgrep: go.lang.security.audit.unsafe-use.unsafe-use
+	dst := unsafe.Slice(&b.data[b.pos], available) // nosemgrep: go.lang.security.audit.unsafe-use.unsafe-use
 	copy(dst, src)
 	b.pos += int32(n)
 	return n, nil
@@ -138,7 +138,7 @@ func (b *Buffer) String() string {
 	if b.pos == 0 {
 		return ""
 	}
-	return unsafe.String(&b.data[0], int(b.pos))
+	return unsafe.String(&b.data[0], int(b.pos)) // nosemgrep: go.lang.security.audit.unsafe-use.unsafe-use
 }
 
 // Len returns the number of bytes written.

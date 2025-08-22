@@ -28,7 +28,6 @@ tfplan
 # Environment
 token.env
 config.yml
-.env.codacy
 .env*
 *.env
 
@@ -62,4 +61,4 @@ result_bench
 
 
 #Ignore vscode AI rules
-.github/instructions/codacy.instructions.md
+.github/instructions/
