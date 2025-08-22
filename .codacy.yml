@@ -1,0 +1,142 @@
+---
+# Codacy Configuration File
+# This configuration is used by:
+# - Codacy cloud platform (automatically detected)
+# - GitHub Actions workflow (CI/CD)
+# - Local analysis via Makefile
+
+# Analysis engines for Go
+engines:
+  # Go static analysis tools
+  gosec:
+    enabled: true
+  revive:
+    enabled: true
+  staticcheck:
+    enabled: true
+  golint:
+    enabled: true
+  gofmt:
+    enabled: true
+  govet:
+    enabled: true
+  ineffassign:
+    enabled: true
+  structcheck:
+    enabled: true
+  varcheck:
+    enabled: true
+  aligncheck:
+    enabled: true
+  deadcode:
+    enabled: true
+  duplication:
+    enabled: true
+    config:
+      languages:
+        - go
+        - javascript
+        - shell
+      min_tokens: 40
+      min_lines: 5
+  metrics:
+    enabled: true
+  coverage:
+    enabled: true
+
+# Files to exclude from analysis
+exclude_paths:
+  # Test files - no need to analyze
+  - "**/*_test.go"
+  - "**/testdata/**"
+  - "**/*_bench_test.go"
+  - "**/*_benchmark_test.go"
+
+  # Vendor and dependencies
+  - "**/vendor/**"
+  - "vendor/**"
+
+  # Generated files
+  - "**/*.pb.go"
+  - "**/*_gen.go"
+  - "**/*_generated.go"
+  - "**/mocks/**"
+  - "**/mock_*.go"
+
+  # Build system
+  - "**/BUILD.bazel"
+  - "**/*.bazel"
+  - "MODULE.bazel"
+  - ".bazelrc"
+  - ".bazelversion"
+  - "bazel-*/**"
+  - "bazel-bin/**"
+  - "bazel-out/**"
+  - "bazel-testlogs/**"
+  - "bazel-sdk/**"
+
+  # Go modules (analyzed separately)
+  - "go.mod"
+  - "go.sum"
+
+  # Git and CI
+  - ".git/**"
+  - "**/.git/**"
+  - ".github/**"
+  - ".githooks/**"
+
+  # Node modules
+  - "node_modules/**"
+  - "**/node_modules/**"
+
+  # Codacy specific
+  - ".codacy/**"
+  - ".codacy.yml"
+
+# Languages to analyze
+languages:
+  - go
+  - shell
+  - yaml
+  - json
+  - markdown
+  - javascript
+
+# Tools configuration
+tools:
+  # Code complexity and maintainability
+  - pattern: lizard
+    enabled: true
+    parameters:
+      nloc_threshold: 50
+      ccn_threshold: 10
+      file_nloc_threshold: 500
+
+  # Security scanning
+  - pattern: semgrep
+    enabled: true
+    parameters:
+      config: auto
+
+  # Vulnerability scanning
+  - pattern: trivy
+    enabled: true
+    parameters:
+      scan_type: fs
+      severity: CRITICAL,HIGH,MEDIUM
+
+  # Shell script analysis
+  - pattern: shellcheck
+    enabled: true
+
+  # Markdown linting
+  - pattern: markdownlint
+    enabled: true
+
+  # PMD for additional code analysis
+  - pattern: pmd
+    enabled: true
+
+  # ESLint for JavaScript
+  - pattern: eslint
+    enabled: true
