@@ -140,6 +140,12 @@ deps:
 quality/analyze: quality/lint quality/security
 	@echo "$(GREEN)✓ Code analysis complete$(NC)"
 
+## quality/codacy: run Codacy analysis with all tools
+.PHONY: quality/codacy
+quality/codacy:
+	@echo "$(YELLOW)▶ Running Codacy analysis...$(NC)"
+	@PYTHONWARNINGS=ignore codacy-cli analyze 2>&1 | grep -v "pkg_resources is deprecated"
+
 ## quality/format: format all code (Go, YAML, JSON, MD)
 .PHONY: quality/format
 quality/format:

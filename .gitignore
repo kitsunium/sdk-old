@@ -28,6 +28,9 @@ tfplan
 # Environment
 token.env
 config.yml
+.env.codacy
+.env*
+*.env
 
 # Database
 *.db

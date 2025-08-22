@@ -1,6 +1,6 @@
 module github.com/kitsunium/sdk
 
-go 1.24
+go 1.24.6
 
 require (
 	github.com/pelletier/go-toml/v2 v2.2.4
