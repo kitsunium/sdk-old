@@ -26,7 +26,7 @@ tools:
   gofmt:
     enabled: true
   golint:
-    enabled: false  # Deprecated, use staticcheck instead
+    enabled: false # Deprecated, use staticcheck instead
   staticcheck:
     enabled: true
 
