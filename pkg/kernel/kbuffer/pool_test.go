@@ -66,7 +66,7 @@ func TestBufferPool_Put(t *testing.T) {
 
 	// Test non-power-of-2 buffer
 	oddBuf := make([]byte, 100) // Not a power of 2
-	p.Put(oddBuf) // Should not panic
+	p.Put(oddBuf)               // Should not panic
 
 	// Test small buffer that goes to pool
 	smallBuf := make([]byte, 64)
@@ -75,7 +75,7 @@ func TestBufferPool_Put(t *testing.T) {
 	// Test buffer with poolIdx >= len(pools)
 	// This tests the boundary condition
 	hugeBuf := make([]byte, 1<<27) // Very large power of 2
-	p.Put(hugeBuf) // Should not panic
+	p.Put(hugeBuf)                 // Should not panic
 }
 
 func TestBufferPool_GetPutCycle(t *testing.T) {

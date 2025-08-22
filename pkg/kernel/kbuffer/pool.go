@@ -183,7 +183,6 @@ func (p *BufferPool) PutBuffer(b *Buffer) {
 	p.Put(b.data)
 }
 
-
 // SetClearOnPut configures whether buffers are cleared when returned.
 //
 //go:inline
@@ -273,4 +272,3 @@ func GetBuffer(size int) *Buffer {
 func PutBuffer(b *Buffer) {
 	globalPool.PutBuffer(b)
 }
-
