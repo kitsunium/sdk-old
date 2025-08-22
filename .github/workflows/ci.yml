@@ -56,7 +56,7 @@ jobs:
           echo "📊 Generating coverage with Bazel..."
           # Generate coverage with Bazel
           bazel coverage --combined_report=lcov //pkg/... || true
-          
+
           # Find and convert the coverage report
           if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
             echo "✅ Coverage report found, converting for SonarCloud..."
