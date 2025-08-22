@@ -53,10 +53,24 @@ jobs:
       - name: Coverage
         if: github.event_name == 'pull_request'
         run: |
-          # Skip coverage generation - SonarCloud cannot parse Bazel LCOV format
-          echo "⚠️ Coverage skipped - Bazel LCOV incompatible with SonarCloud"
-          echo "Creating placeholder to prevent errors..."
-          touch coverage.lcov
+          echo "📊 Generating coverage with Bazel..."
+          # Generate coverage with Bazel
+          bazel coverage --combined_report=lcov //pkg/... || true
+          
+          # Find and convert the coverage report
+          if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
+            echo "✅ Coverage report found, converting for SonarCloud..."
+            # Copy the LCOV file to the expected location
+            cp bazel-out/_coverage/_coverage_report.dat coverage.lcov
+            
+            # Convert absolute paths to relative for SonarCloud
+            sed -i.bak 's|SF:.*/sdk/|SF:|g' coverage.lcov
+            
+            echo "📈 Coverage report ready for SonarCloud"
+          else
+            echo "⚠️ No coverage report generated, creating empty file..."
+            touch coverage.lcov
+          fi
 
       - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
