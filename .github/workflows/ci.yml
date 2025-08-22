@@ -13,8 +13,10 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Pour les PRs: groupe par PR number, pour les pushs: groupe par branch/tag
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Annule les workflows en cours sauf sur main et les tags
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   GO_VERSION: 1.24.6
