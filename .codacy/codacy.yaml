@@ -30,6 +30,12 @@ engines:
 
 # Files to exclude from analysis
 exclude_paths:
+  # Test files - no need to analyze
+  - "**/*_test.go"
+  - "**/testdata/**"
+  - "**/*_bench_test.go"
+  - "**/*_benchmark_test.go"
+
   # Vendor and dependencies
   - "**/vendor/**"
   - "vendor/**"
@@ -66,10 +72,9 @@ exclude_paths:
   - "node_modules/**"
   - "**/node_modules/**"
 
-# Include patterns - analyze all Go code including tests
+# Include patterns - analyze Go code (excluding tests)
 include_paths:
   - "**/*.go"
-  - "**/*_test.go"
   - "**/*.sh"
   - "**/*.bash"
   - "**/*.yml"
@@ -193,7 +198,7 @@ patterns:
 # Analysis settings
 analysis:
   # Analyze test files
-  include_test_files: true
+  include_test_files: false
 
   # Follow symlinks
   follow_symlinks: false
