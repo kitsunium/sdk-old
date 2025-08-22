@@ -57,34 +57,26 @@ jobs:
           # Generate coverage with Bazel
           bazel coverage --combined_report=lcov //pkg/... || true
 
-          # Find and convert the coverage report
+          # Copy coverage report if it exists
           if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
-            echo "✅ Coverage report found, converting for SonarCloud..."
-            # Copy the LCOV file to the expected location
+            echo "✅ Coverage report found, preparing for Codacy..."
             cp bazel-out/_coverage/_coverage_report.dat coverage.lcov
             
-            # Convert absolute paths to relative for SonarCloud
+            # Convert absolute paths to relative for better compatibility
             sed -i.bak 's|SF:.*/sdk/|SF:|g' coverage.lcov
             
-            echo "📈 Coverage report ready, but disabled in sonar-project.properties"
+            echo "📈 Coverage report ready (LCOV format)"
           else
-            echo "⚠️ No coverage report generated, creating empty file..."
-            touch coverage.lcov
+            echo "⚠️ No coverage report generated"
           fi
 
-      - name: SonarCloud Scan
-        if: github.event_name == 'pull_request'
-        uses: SonarSource/sonarqube-scan-action@v4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Upload Coverage to Codacy
+        if: github.event_name == 'pull_request' && hashFiles('coverage.lcov') != ''
+        uses: codacy/codacy-coverage-reporter-action@v1
         with:
-          args: >
-            -Dsonar.organization=${{ secrets.ORGANIZATION_NAME }}
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
-            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
-            -Dsonar.pullrequest.branch=${{ github.head_ref }}
-            -Dsonar.pullrequest.base=${{ github.base_ref }}
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: coverage.lcov
+          language: go
         continue-on-error: true
 
       - name: Security Scan

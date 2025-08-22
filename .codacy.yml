@@ -1,0 +1,20 @@
+---
+# Codacy configuration file
+
+# Exclude patterns for analysis
+exclude_paths:
+  - '**/vendor/**'
+  - '**/*_test.go'
+  - '**/testdata/**'
+  - '**/*.pb.go'
+  - '**/BUILD.bazel'
+  - '**/*.bazel'
+  - 'bazel-*/**'
+  - '**/go.mod'
+  - '**/go.sum'
+  - '**/*_gen.go'
+  - '**/mocks/**'
+
+# Enable coverage
+coverage:
+  enabled: true
