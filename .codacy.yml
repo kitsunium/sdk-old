@@ -1,0 +1,7 @@
+---
+# Codacy configuration pointer
+# This file points to the actual configuration in .codacy/
+# Codacy looks for both .codacy.yml and .codacy.yaml at the root
+
+# Use the configuration from .codacy directory
+extends: .codacy/codacy.yaml
