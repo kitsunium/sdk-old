@@ -196,9 +196,14 @@ func (c *AtomicCache[K, V]) Has(key K) bool {
 func (c *AtomicCache[K, V]) Stats() *Stats {
 	stats := c.stats.Load()
 	if stats == nil {
-		return NewStats()
+		// Lazy initialization with CAS to ensure we always return the live stats
+		newStats := NewStats()
+		if c.stats.CompareAndSwap(nil, newStats) {
+			return newStats
+		}
+		// Another goroutine initialized it, load again
+		stats = c.stats.Load()
 	}
-	// Return pointer to avoid copying atomic values
 	return stats
 }
 
@@ -234,34 +239,30 @@ func (c *AtomicCache[K, V]) evictLRU(data *atomicMap[K, V]) {
 
 // incrementHits atomically increments the hit counter.
 func (c *AtomicCache[K, V]) incrementHits() {
-	stats := c.stats.Load()
-	if stats != nil {
-		stats.Hits.Add(1)
-	}
+	// Ensure stats are initialized
+	stats := c.Stats()
+	stats.Hits.Add(1)
 }
 
 // incrementMisses atomically increments the miss counter.
 func (c *AtomicCache[K, V]) incrementMisses() {
-	stats := c.stats.Load()
-	if stats != nil {
-		stats.Misses.Add(1)
-	}
+	// Ensure stats are initialized
+	stats := c.Stats()
+	stats.Misses.Add(1)
 }
 
 // incrementSets atomically increments the set counter.
 func (c *AtomicCache[K, V]) incrementSets() {
-	stats := c.stats.Load()
-	if stats != nil {
-		stats.Sets.Add(1)
-	}
+	// Ensure stats are initialized
+	stats := c.Stats()
+	stats.Sets.Add(1)
 }
 
 // incrementEvictions atomically increments the eviction counter.
 func (c *AtomicCache[K, V]) incrementEvictions() {
-	stats := c.stats.Load()
-	if stats != nil {
-		stats.Evictions.Add(1)
-	}
+	// Ensure stats are initialized
+	stats := c.Stats()
+	stats.Evictions.Add(1)
 }
 
 // Keys returns all keys in the cache.

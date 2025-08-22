@@ -95,12 +95,6 @@ func Define(config KConfig) KError {
 	// Initialize caches once at the beginning
 	initCaches()
 
-	// Check global limit before proceeding
-	currentCount := atomic.LoadUint32(&errorCounter)
-	if currentCount >= MaxTotalErrors {
-		panic(fmt.Sprintf("kerror: maximum total error definitions exceeded (%d)", MaxTotalErrors))
-	}
-
 	// Auto-detect package if not provided
 	pkg := config.Package
 	if pkg == "" {
@@ -110,6 +104,11 @@ func Define(config KConfig) KError {
 	// Lock for atomic operations on registry
 	defineMu.Lock()
 	defer defineMu.Unlock()
+
+	// Check global limit under lock to avoid TOCTOU
+	if atomic.LoadUint32(&errorCounter) >= MaxTotalErrors {
+		panic(fmt.Sprintf("kerror: maximum total error definitions exceeded (%d)", MaxTotalErrors))
+	}
 
 	// Get or create package cache
 	var pkgCache kcache.Cache[int, *KError]

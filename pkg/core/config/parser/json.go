@@ -161,9 +161,10 @@ func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
 		return nil, ErrJSONParse.Wrap(err).WithDetail("size", len(data))
 	}
 
-	// Check for trailing data
-	if decoder.More() {
-		return nil, ErrJSONParse.Newf("trailing data after JSON object")
+	// Check for trailing data by attempting to decode another value
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, ErrJSONParse.Newf("trailing data after JSON value")
 	}
 
 	return j.processConfig(config, len(data))
