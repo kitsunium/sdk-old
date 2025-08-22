@@ -105,7 +105,7 @@ jobs:
           path: |
             *.log
             lint-report.txt
-          retention-days: 7
+          retention-days: 1
           if-no-files-found: ignore
 
   # Job 3: Tests (run first to catch regressions early)
@@ -167,7 +167,7 @@ jobs:
             bazel-testlogs/**/*.xml
             test-report.txt
             test-targets.txt
-          retention-days: 7
+          retention-days: 1
           if-no-files-found: ignore
 
   # Job 4: Build (only after tests pass)
@@ -274,7 +274,7 @@ jobs:
         with:
           name: coverage-report
           path: coverage.lcov
-          retention-days: 7
+          retention-days: 1
 
   # Job 6: Security scanning
   security:
@@ -305,7 +305,7 @@ jobs:
         with:
           name: security-report
           path: gosec-report.json
-          retention-days: 30
+          retention-days: 1
 
   # Job 7: Codacy analysis
   codacy:
@@ -411,7 +411,7 @@ jobs:
         with:
           name: benchmark-results
           path: benchmark-results.txt
-          retention-days: 30
+          retention-days: 1
           if-no-files-found: ignore
 
   # Job 9: Final status check
