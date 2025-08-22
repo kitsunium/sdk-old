@@ -1,6 +1,7 @@
 package kcache
 
 import (
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -105,9 +106,7 @@ func (c *AtomicCache[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 	}
 
 	// Copy existing entries
-	for k, v := range oldData.m {
-		newData.m[k] = v
-	}
+	maps.Copy(newData.m, oldData.m)
 
 	// Add/update entry
 	entry := &atomicEntry[V]{
@@ -349,9 +348,7 @@ func (c *AtomicCache[K, V]) BatchSet(items map[K]V) {
 	}
 
 	// Copy existing entries
-	for k, v := range oldData.m {
-		newData.m[k] = v
-	}
+	maps.Copy(newData.m, oldData.m)
 
 	now := time.Now().UnixNano()
 
