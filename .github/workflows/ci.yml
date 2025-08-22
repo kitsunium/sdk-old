@@ -108,69 +108,11 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Job 3: Build
-  build:
-    name: 🔨 Build
-    runs-on: ubuntu-latest
-    needs: setup
-    strategy:
-      matrix:
-        target: [
-          "//pkg/core/...",
-          "//pkg/kernel/...",
-          "//pkg/lib/..."
-        ]
-    steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v5
-
-      - name: 🐹 Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-
-      - name: 📥 Download Go modules
-        uses: actions/download-artifact@v4
-        with:
-          name: go-modules
-          path: ~/go/pkg/mod
-
-      - name: 🏗️ Setup Bazel
-        uses: bazel-contrib/setup-bazel@4fd964a13a440a8aeb0be47350db2fc640f19ca8 # v0.15.0
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
-
-      - name: 🔨 Build target ${{ matrix.target }}
-        run: |
-          echo "🔨 Building ${{ matrix.target }}..."
-          bazel build ${{ matrix.target }}
-          echo "✅ Build successful"
-
-      - name: 📤 Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts-${{ strategy.job-index }}
-          path: |
-            bazel-bin/**/*.a
-            bazel-bin/**/*.so
-          retention-days: 1
-          if-no-files-found: ignore
-
-  # Job 4: Tests
+  # Job 3: Tests (run first to catch regressions early)
   test:
     name: 🧪 Test
     runs-on: ubuntu-latest
-    needs: [lint, build]
-    strategy:
-      matrix:
-        package: [
-          "config",
-          "kernel",
-          "lib"
-        ]
+    needs: lint
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v5
@@ -194,32 +136,84 @@ jobs:
           disk-cache: ${{ github.workflow }}
           repository-cache: true
 
-      - name: 🧪 Run tests for ${{ matrix.package }}
+      - name: 🧪 Run all tests
         run: |
-          echo "🧪 Testing pkg/${{ matrix.package }}..."
-          if [ "${{ matrix.package }}" = "config" ]; then
-            bazel test //pkg/core/config/... //pkg/kernel/config/... --test_output=errors
-          else
-            bazel test //pkg/${{ matrix.package }}/... --test_output=errors
-          fi
-          echo "✅ Tests passed"
+          echo "🧪 Running all unit tests..."
+          # Run all tests with coverage
+          bazel test //... \
+            --test_output=errors \
+            --test_size_filters=small,medium \
+            --nocache_test_results
+          echo "✅ All tests passed"
 
       - name: 📊 Generate test report
         if: always()
         run: |
-          echo "📊 Generating test report..."
-          bazel query "tests(//pkg/${{ matrix.package }}/...)" 2>/dev/null | head -20 > test-report-${{ matrix.package }}.txt || true
+          echo "📊 Extracting test results..."
+          # Bazel already generates XML test results
+          find bazel-testlogs -name "test.xml" -type f > test-files.txt || true
+          # Count test results
+          echo "Test Summary:" > test-report.txt
+          echo "=============" >> test-report.txt
+          echo "Total test files: $(wc -l < test-files.txt)" >> test-report.txt
 
       - name: 📤 Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.package }}
+          name: test-results
           path: |
             bazel-testlogs/**/*.log
             bazel-testlogs/**/*.xml
-            test-report-${{ matrix.package }}.txt
+            test-report.txt
+            test-targets.txt
           retention-days: 7
+          if-no-files-found: ignore
+
+  # Job 4: Build (only after tests pass)
+  build:
+    name: 🔨 Build
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: 📥 Download Go modules
+        uses: actions/download-artifact@v4
+        with:
+          name: go-modules
+          path: ~/go/pkg/mod
+
+      - name: 🏗️ Setup Bazel
+        uses: bazel-contrib/setup-bazel@4fd964a13a440a8aeb0be47350db2fc640f19ca8 # v0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: 🔨 Build all targets
+        run: |
+          echo "🔨 Building all targets..."
+          # Build everything in the repository
+          bazel build //...
+          echo "✅ Build successful"
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            bazel-bin/**/*.a
+            bazel-bin/**/*.so
+            bazel-bin/**/*.tar
+          retention-days: 1
           if-no-files-found: ignore
 
   # Job 5: Coverage
@@ -253,17 +247,26 @@ jobs:
 
       - name: 📊 Generate coverage report
         run: |
-          echo "📊 Generating coverage with Bazel..."
-          bazel coverage --combined_report=lcov //pkg/... || true
-          
-          if [ -f bazel-out/_coverage/_coverage_report.dat ]; then
-            echo "✅ Coverage report found"
-            cp bazel-out/_coverage/_coverage_report.dat coverage.lcov
+          echo "📊 Generating LCOV coverage with Bazel..."
+          # Generate coverage with LCOV format for Codacy
+          bazel coverage //... \
+            --combined_report=lcov \
+            --coverage_report_generator=@bazel_tools//tools/test:lcov_merger \
+            --test_size_filters=small,medium \
+            --instrumentation_filter="//pkg[/:],//cmd[/:]" || true
+
+          # Bazel puts the LCOV report in a specific location
+          COVERAGE_FILE="bazel-out/_coverage/_coverage_report.dat"
+          if [ -f "$COVERAGE_FILE" ]; then
+            echo "✅ Coverage report found at $COVERAGE_FILE"
+            cp "$COVERAGE_FILE" coverage.lcov
+            # Fix paths for Codacy
             sed -i.bak 's|SF:.*/sdk/|SF:|g' coverage.lcov
-            echo "📈 Coverage report ready"
+            echo "📈 LCOV coverage report ready for Codacy"
+            echo "Coverage lines: $(wc -l < coverage.lcov)"
           else
             echo "⚠️ No coverage report generated"
-            echo "" > coverage.lcov
+            touch coverage.lcov
           fi
 
       - name: 📤 Upload coverage artifact
@@ -277,7 +280,7 @@ jobs:
   security:
     name: 🔒 Security Scan
     runs-on: ubuntu-latest
-    needs: build
+    needs: test
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v5
@@ -379,10 +382,27 @@ jobs:
       - name: ⚡ Run benchmarks
         run: |
           echo "⚡ Running benchmarks..."
-          for target in $(bazel query 'attr(tags, "bench", //pkg/...)' 2>/dev/null | head -5); do
-            echo "Running benchmark: $target"
-            bazel run $target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s 2>&1 | tee -a benchmark-results.txt || true
-          done
+          # Run all tests with benchmark flag
+          # Tests tagged with 'bench' or containing Benchmark functions
+          bazel test //... \
+            --test_arg=-test.bench=. \
+            --test_arg=-test.benchmem \
+            --test_arg=-test.benchtime=2s \
+            --test_arg=-test.run=^$ \
+            --test_output=streamed \
+            --test_size_filters=small,medium,large \
+            --nocache_test_results 2>&1 | tee benchmark-results.txt || true
+
+          # Extract benchmark results
+          echo "" >> benchmark-results.txt
+          echo "=== Benchmark Summary ===" >> benchmark-results.txt
+          grep -E "^Benchmark|^goos:|^goarch:|ns/op|B/op|allocs/op" benchmark-results.txt > benchmark-summary.txt || true
+
+          if [ -s benchmark-summary.txt ]; then
+            cat benchmark-summary.txt >> benchmark-results.txt
+          else
+            echo "No benchmark results found" >> benchmark-results.txt
+          fi
 
       - name: 📤 Upload benchmark results
         if: always()
@@ -397,7 +417,7 @@ jobs:
   status:
     name: ✅ CI Status
     runs-on: ubuntu-latest
-    needs: [lint, test, security]
+    needs: [lint, test, build, security]
     if: always()
     steps:
       - name: 📥 Download all artifacts
@@ -409,30 +429,36 @@ jobs:
         run: |
           echo "# 📊 CI Pipeline Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Check job statuses
           echo "## Job Results" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ needs.lint.result }}" = "success" ]; then
             echo "| 🎨 Lint | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| 🎨 Lint | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [ "${{ needs.test.result }}" = "success" ]; then
             echo "| 🧪 Test | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| 🧪 Test | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
+          if [ "${{ needs.build.result }}" = "success" ]; then
+            echo "| 🔨 Build | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🔨 Build | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
           if [ "${{ needs.security.result }}" = "success" ]; then
             echo "| 🔒 Security | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| 🔒 Security | ⚠️ Issues found |" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "The following artifacts were generated:" >> $GITHUB_STEP_SUMMARY
