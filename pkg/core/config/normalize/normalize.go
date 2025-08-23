@@ -184,21 +184,32 @@ func flattenRecursive(output map[string]string, input map[string]any,
 	for key, value := range input {
 		keyBuilder.Reset()
 		buildKey(keyBuilder, prefix, key)
-
-		switch v := value.(type) {
-		case map[string]any:
-			newPrefix := append(prefix, key)
-			flattenRecursive(output, v, newPrefix, keyBuilder)
-		case []any:
-			processSlice(output, v, prefix, key, keyBuilder)
-		case string:
-			output[Key(keyBuilder.String())] = Value(v)
-		case nil:
-			output[Key(keyBuilder.String())] = emptyString
-		default:
-			output[Key(keyBuilder.String())] = Value(fmt.Sprintf("%v", value))
-		}
+		processValue(output, value, prefix, key, keyBuilder)
 	}
+}
+
+// processValue handles different value types during flattening
+func processValue(output map[string]string, value any, prefix []string,
+	key string, keyBuilder *strings.Builder) {
+	switch v := value.(type) {
+	case map[string]any:
+		processMap(output, v, prefix, key, keyBuilder)
+	case []any:
+		processSlice(output, v, prefix, key, keyBuilder)
+	case string:
+		output[Key(keyBuilder.String())] = Value(v)
+	case nil:
+		output[Key(keyBuilder.String())] = emptyString
+	default:
+		output[Key(keyBuilder.String())] = Value(fmt.Sprintf("%v", value))
+	}
+}
+
+// processMap handles nested map values during flattening
+func processMap(output map[string]string, m map[string]any, prefix []string,
+	key string, keyBuilder *strings.Builder) {
+	newPrefix := append(prefix, key)
+	flattenRecursive(output, m, newPrefix, keyBuilder)
 }
 
 // buildKey constructs a dot-separated key from prefix and key
