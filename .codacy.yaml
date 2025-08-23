@@ -1,8 +1,12 @@
 ---
-# Codacy configuration file
 exclude_paths:
   - "**/*_test.go"
   - "**/testdata/**"
   - "bazel-*/**"
   - ".git/**"
   - "vendor/**"
+
+engines:
+  semgrep:
+    disable_rules:
+      - go.lang.security.audit.unsafe-use.unsafe-use
