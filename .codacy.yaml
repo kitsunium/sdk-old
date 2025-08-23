@@ -5,8 +5,3 @@ exclude_paths:
   - "bazel-*/**"
   - ".git/**"
   - "vendor/**"
-
-engines:
-  semgrep:
-    disable_rules:
-      - go.lang.security.audit.unsafe-use.unsafe-use
