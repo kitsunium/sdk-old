@@ -164,10 +164,14 @@ func TestLRU_Stats(t *testing.T) {
 	c.Set("c", 3)
 
 	stats := c.Stats()
-	assert.Equal(t, uint64(1), stats.Hits)
-	assert.Equal(t, uint64(1), stats.Misses)
-	assert.Equal(t, uint64(3), stats.Sets)
-	assert.Equal(t, uint64(1), stats.Evictions)
+	assert.NotNil(t, stats.Hits, "Stats.Hits should not be nil")
+	assert.NotNil(t, stats.Misses, "Stats.Misses should not be nil")
+	assert.NotNil(t, stats.Sets, "Stats.Sets should not be nil")
+	assert.NotNil(t, stats.Evictions, "Stats.Evictions should not be nil")
+	assert.Equal(t, uint64(1), stats.Hits.Load())
+	assert.Equal(t, uint64(1), stats.Misses.Load())
+	assert.Equal(t, uint64(3), stats.Sets.Load())
+	assert.Equal(t, uint64(1), stats.Evictions.Load())
 }
 
 func TestLRU_ConcurrentAccess(t *testing.T) {

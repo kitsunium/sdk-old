@@ -176,9 +176,13 @@ func TestShardedLRU_Stats(t *testing.T) {
 	c.Get("miss") // miss
 
 	stats := c.Stats()
-	assert.Equal(t, uint64(2), stats.Hits)
-	assert.Equal(t, uint64(1), stats.Misses)
-	assert.Equal(t, uint64(2), stats.Sets)
+	assert.NotNil(t, stats.Hits, "Stats.Hits should not be nil")
+	assert.NotNil(t, stats.Misses, "Stats.Misses should not be nil")
+	assert.NotNil(t, stats.Sets, "Stats.Sets should not be nil")
+	assert.NotNil(t, stats.Evictions, "Stats.Evictions should not be nil")
+	assert.Equal(t, uint64(2), stats.Hits.Load())
+	assert.Equal(t, uint64(1), stats.Misses.Load())
+	assert.Equal(t, uint64(2), stats.Sets.Load())
 }
 
 func TestShardedLRU_ConcurrentAccess(t *testing.T) {
