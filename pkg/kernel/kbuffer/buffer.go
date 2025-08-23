@@ -79,8 +79,8 @@ func (b *Buffer) WriteString(s string) (int, error) {
 
 	// Zero-allocation string write using unsafe
 	// SAFETY: String length n and buffer available space checked above
-	src := unsafe.Slice(unsafe.StringData(s), n)   // codacy-disable-line
-	dst := unsafe.Slice(&b.data[b.pos], available) // codacy-disable-line
+	src := unsafe.Slice(unsafe.StringData(s), n)   // codacy-ignore
+	dst := unsafe.Slice(&b.data[b.pos], available) // codacy-ignore
 	copy(dst, src)
 	b.pos += int32(n)
 	return n, nil
