@@ -1,6 +1,7 @@
 package kcache
 
 import (
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,8 +51,7 @@ func NewAtomicCache[K comparable, V any](capacity int) *AtomicCache[K, V] {
 	}
 	c.data.Store(initial)
 
-	stats := &Stats{}
-	c.stats.Store(stats)
+	c.stats.Store(NewStats())
 
 	return c
 }
@@ -106,9 +106,7 @@ func (c *AtomicCache[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 	}
 
 	// Copy existing entries
-	for k, v := range oldData.m {
-		newData.m[k] = v
-	}
+	maps.Copy(newData.m, oldData.m)
 
 	// Add/update entry
 	entry := &atomicEntry[V]{
@@ -194,12 +192,18 @@ func (c *AtomicCache[K, V]) Has(key K) bool {
 }
 
 // Stats returns cache statistics.
-func (c *AtomicCache[K, V]) Stats() Stats {
+func (c *AtomicCache[K, V]) Stats() *Stats {
 	stats := c.stats.Load()
 	if stats == nil {
-		return Stats{}
+		// Lazy initialization with CAS to ensure we always return the live stats
+		newStats := NewStats()
+		if c.stats.CompareAndSwap(nil, newStats) {
+			return newStats
+		}
+		// Another goroutine initialized it, load again
+		stats = c.stats.Load()
 	}
-	return *stats
+	return stats
 }
 
 // evictLRU removes the least recently used entry, prioritizing expired entries.
@@ -234,34 +238,30 @@ func (c *AtomicCache[K, V]) evictLRU(data *atomicMap[K, V]) {
 
 // incrementHits atomically increments the hit counter.
 func (c *AtomicCache[K, V]) incrementHits() {
-	stats := c.stats.Load()
-	if stats != nil {
-		atomic.AddUint64(&stats.Hits, 1)
-	}
+	// Ensure stats are initialized
+	stats := c.Stats()
+	stats.Hits.Add(1)
 }
 
 // incrementMisses atomically increments the miss counter.
 func (c *AtomicCache[K, V]) incrementMisses() {
-	stats := c.stats.Load()
-	if stats != nil {
-		atomic.AddUint64(&stats.Misses, 1)
-	}
+	// Ensure stats are initialized
+	stats := c.Stats()
+	stats.Misses.Add(1)
 }
 
 // incrementSets atomically increments the set counter.
 func (c *AtomicCache[K, V]) incrementSets() {
-	stats := c.stats.Load()
-	if stats != nil {
-		atomic.AddUint64(&stats.Sets, 1)
-	}
+	// Ensure stats are initialized
+	stats := c.Stats()
+	stats.Sets.Add(1)
 }
 
 // incrementEvictions atomically increments the eviction counter.
 func (c *AtomicCache[K, V]) incrementEvictions() {
-	stats := c.stats.Load()
-	if stats != nil {
-		atomic.AddUint64(&stats.Evictions, 1)
-	}
+	// Ensure stats are initialized
+	stats := c.Stats()
+	stats.Evictions.Add(1)
 }
 
 // Keys returns all keys in the cache.
@@ -348,9 +348,7 @@ func (c *AtomicCache[K, V]) BatchSet(items map[K]V) {
 	}
 
 	// Copy existing entries
-	for k, v := range oldData.m {
-		newData.m[k] = v
-	}
+	maps.Copy(newData.m, oldData.m)
 
 	now := time.Now().UnixNano()
 

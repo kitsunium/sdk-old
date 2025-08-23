@@ -28,6 +28,8 @@ tfplan
 # Environment
 token.env
 config.yml
+.env*
+*.env
 
 # Database
 *.db
@@ -53,3 +55,10 @@ coverage.html
 *.prof
 *.testpr-review-issues/
 process_reviews*.py
+
+# Benchmark results
+result_bench
+
+
+#Ignore vscode AI rules
+.github/instructions/

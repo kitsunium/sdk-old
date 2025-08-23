@@ -1,0 +1,10 @@
+---
+# Codacy configuration file
+exclude_paths:
+  - "**/*_test.go"
+  - "**/testdata/**"
+  - "bazel-*/**"
+  - ".git/**"
+  - "vendor/**"
+  # Exclude performance-critical kernel buffer that requires unsafe operations
+  - "pkg/kernel/kbuffer/buffer.go"

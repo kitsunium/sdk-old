@@ -4,6 +4,8 @@ go_library(
     name = "kbuffer",
     srcs = [
         "buffer.go",
+        "constants.go",
+        "errors.go",
         "pool.go",
     ],
     importpath = "github.com/kitsunium/sdk/pkg/kernel/kbuffer",
@@ -12,11 +14,20 @@ go_library(
 
 go_test(
     name = "kbuffer_test",
-    size = "small",
     srcs = [
         "buffer_test.go",
-        "kbuffer_test.go",
+        "kbuffer_bench_test.go",
         "pool_test.go",
     ],
     embed = [":kbuffer"],
+)
+
+go_test(
+    name = "kbuffer_bench_test",
+    srcs = ["kbuffer_bench_test.go"],
+    embed = [":kbuffer"],
+    tags = [
+        "bench",
+        "manual",
+    ],
 )

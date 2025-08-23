@@ -44,6 +44,7 @@ help:
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test" "run all tests with Bazel"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/unit" "run unit tests only"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/coverage" "run tests with coverage report"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks for all packages"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
 	@echo ''
 	@echo 'Quality:'
@@ -110,6 +111,18 @@ test/coverage:
 	@$(BAZEL) coverage //... --combined_report=lcov
 	@echo "$(GREEN)✓ Coverage report generated$(NC)"
 
+## bench: run benchmarks for all packages
+.PHONY: bench
+bench:
+	@echo "$(YELLOW)▶ Running benchmarks...$(NC)"
+	@for target in $$($(BAZEL) query 'attr(tags, "bench", //...)' 2>/dev/null); do \
+		pkg_dir=$$(echo $$target | sed 's|//||' | sed 's|:.*||'); \
+		echo "$(CYAN)  Benchmarking $$pkg_dir...$(NC)"; \
+		set -o pipefail; \
+		$(BAZEL) run $$target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s -test.run=^$$ 2>&1 | grep -v "^exec " | grep -v "^Executing tests" | grep -v "^---" | tee $$pkg_dir/result_bench || exit $$?; \
+	done
+	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
+
 ## deps: download and verify dependencies
 .PHONY: deps
 deps:
@@ -127,10 +140,17 @@ deps:
 quality/analyze: quality/lint quality/security
 	@echo "$(GREEN)✓ Code analysis complete$(NC)"
 
+
 ## quality/format: format all code (Go, YAML, JSON, MD)
 .PHONY: quality/format
 quality/format:
 	@echo "$(YELLOW)▶ Formatting code...$(NC)"
+	@echo "  Formatting Go files..."
+	@gofmt -w -s $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./bazel-*/*")
+	@if command -v goimports >/dev/null 2>&1; then \
+		echo "  Running goimports..."; \
+		goimports -w $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./bazel-*/*"); \
+	fi
 	@if command -v $(PRETTIER) >/dev/null 2>&1; then \
 		$(PRETTIER) --write "**/*.{json,yaml,yml,md}" --ignore-path .prettierignore; \
 	else \

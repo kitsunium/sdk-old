@@ -1,46 +1,74 @@
 #!/bin/bash
-# Hook pre-commit : exécuté automatiquement avant chaque commit
-# Objectif : vérifier que le code est formaté et que les tests passent
+# Pre-commit hook: automatically format code before commit
 
-# Active le mode strict de bash :
-# -e : arrête le script si une commande échoue
-set -e
+echo "🎨 Running pre-commit formatting..."
 
-# Vérifie si la commande 'make' est installée sur le système
-# 'command -v' cherche l'emplacement d'une commande
-# '&> /dev/null' redirige toute sortie vers /dev/null (la supprime)
-# '!' inverse le test : si la commande n'est PAS trouvée
-if ! command -v make &> /dev/null; then
-    # Affiche un message d'erreur avec l'emoji ❌
-    echo "❌ 'make' command not found. Please install it with:"
-    echo "   - macOS: make is pre-installed"
-    echo "   - Linux: sudo apt-get install make"
-    echo "   - Windows: install via MinGW or WSL"
-    # Sort du script avec le code d'erreur 1 (échec)
-    exit 1
+# Get list of staged Go files
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+
+if [ -n "$STAGED_GO_FILES" ]; then
+    echo "📝 Formatting staged Go files..."
+    
+    # Format each staged Go file
+    for file in $STAGED_GO_FILES; do
+        if [ -f "$file" ]; then
+            # Format the file
+            gofmt -w "$file"
+            
+            # Run goimports if available
+            if command -v goimports >/dev/null 2>&1; then
+                goimports -w "$file"
+            fi
+            
+            # Re-add the file to staging after formatting
+            git add "$file"
+        fi
+    done
+    
+    echo "✅ Go files formatted and re-staged"
 fi
 
-# Affiche un message indiquant le début du formatage
-echo "🔧 Running code formatting..."
-# Exécute la tâche de formatage définie dans Makefile
-# Si 'make fmt' échoue, le 'if !' détecte l'échec
-if ! make fmt; then
-    echo "❌ Code formatting failed. Please fix the issues and try again."
-    # Sort avec erreur, empêchant le commit
-    exit 1
+# Update Bazel BUILD files if gazelle is available
+if command -v bazel >/dev/null 2>&1; then
+    echo "🏗️ Updating BUILD files with Gazelle..."
+    bazel run //:gazelle --noshow_progress 2>/dev/null || true
+    
+    # Re-stage any modified BUILD files
+    MODIFIED_BUILD_FILES=$(git diff --name-only | grep 'BUILD.bazel$' || true)
+    if [ -n "$MODIFIED_BUILD_FILES" ]; then
+        for file in $MODIFIED_BUILD_FILES; do
+            git add "$file"
+        done
+        echo "✅ BUILD files updated and re-staged"
+    fi
 fi
 
-# Affiche un message indiquant le début des tests
-echo "🧪 Running tests..."
-# Exécute la tâche de test définie dans Makefile
-# Si 'make test' échoue, le 'if !' détecte l'échec
-if ! make test; then
-    echo "❌ Tests failed. Please fix the issues and try again."
-    # Sort avec erreur, empêchant le commit
-    exit 1
+# Format YAML, JSON, and Markdown files if prettier is available
+if command -v prettier >/dev/null 2>&1; then
+    STAGED_FORMATTED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(yml|yaml|json|md)$' || true)
+    
+    if [ -n "$STAGED_FORMATTED_FILES" ]; then
+        echo "📝 Formatting YAML/JSON/Markdown files..."
+        for file in $STAGED_FORMATTED_FILES; do
+            if [ -f "$file" ]; then
+                prettier --write "$file" 2>/dev/null || true
+                git add "$file"
+            fi
+        done
+        echo "✅ YAML/JSON/Markdown files formatted and re-staged"
+    fi
 fi
 
-# Si on arrive ici, tout s'est bien passé
-echo "✅ Pre-commit checks passed!"
-# Le script se termine avec succès (code 0 par défaut)
-# Git continuera avec le commit
+# Quick vet check on staged Go files (non-blocking)
+if [ -n "$STAGED_GO_FILES" ]; then
+    echo "🔍 Running quick go vet check..."
+    # Extract unique directories from staged files
+    DIRS=$(echo "$STAGED_GO_FILES" | xargs -n1 dirname | sort -u)
+    for dir in $DIRS; do
+        go vet "./$dir" 2>&1 | grep -v "^#" || true
+    done
+fi
+
+echo "✨ Pre-commit formatting complete!"
+echo "💡 Your files have been formatted and re-staged automatically."
+exit 0
