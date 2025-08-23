@@ -7,37 +7,50 @@ import (
 	"unsafe"
 )
 
+// Constants for improved readability and maintainability
+const (
+	tableSize           = 256
+	initialBuilderSize  = 64
+	minQuoteLength      = 2
+	emptyString         = ""
+	asciiUpperCaseStart = 'A'
+	asciiUpperCaseEnd   = 'Z'
+	asciiCaseDiff       = 32
+	startIndex          = 0
+)
+
 var (
-	toLowerTable    [256]byte
-	underscoreToDot [256]byte
+	toLowerTable    [tableSize]byte
+	underscoreToDot [tableSize]byte
 )
 
 func init() {
-	for i := 0; i < 256; i++ {
+	for i := startIndex; i < tableSize; i++ {
 		toLowerTable[i] = byte(i)
 		underscoreToDot[i] = byte(i)
 	}
-	for i := 'A'; i <= 'Z'; i++ {
-		toLowerTable[i] = byte(i + 32)
+	for i := asciiUpperCaseStart; i <= asciiUpperCaseEnd; i++ {
+		toLowerTable[i] = byte(i + asciiCaseDiff)
 	}
 	underscoreToDot['_'] = '.'
 }
 
-// Key normalizes a configuration key by converting to lowercase and replacing underscores with dots.
+// Key normalizes a configuration key by converting to lowercase and
+// replacing underscores with dots.
 //
 // Example:
 //
 //	Key("DATABASE_URL") // returns "database.url"
 //	Key("Redis_Host")   // returns "redis.host"
 func Key(key string) string {
-	if len(key) == 0 {
+	if len(key) == startIndex {
 		return key
 	}
 
 	needsTransform := false
-	for i := 0; i < len(key); i++ {
+	for i := startIndex; i < len(key); i++ {
 		c := key[i]
-		if c == '_' || (c >= 'A' && c <= 'Z') {
+		if c == '_' || (c >= asciiUpperCaseStart && c <= asciiUpperCaseEnd) {
 			needsTransform = true
 			break
 		}
@@ -48,7 +61,7 @@ func Key(key string) string {
 	}
 
 	result := make([]byte, len(key))
-	for i := 0; i < len(key); i++ {
+	for i := startIndex; i < len(key); i++ {
 		c := key[i]
 		c = toLowerTable[c]
 		c = underscoreToDot[c]
@@ -58,7 +71,8 @@ func Key(key string) string {
 	return unsafe.String(unsafe.SliceData(result), len(result))
 }
 
-// Value normalizes a configuration value by trimming whitespace and removing surrounding quotes.
+// Value normalizes a configuration value by trimming whitespace and
+// removing surrounding quotes.
 //
 // Example:
 //
@@ -66,36 +80,54 @@ func Key(key string) string {
 //	Value(`"quoted"`)       // returns "quoted"
 func Value(value string) string {
 	vlen := len(value)
-	if vlen == 0 {
+	if vlen == startIndex {
 		return value
 	}
 
+	start, end := trimWhitespace(value)
+
+	if start >= end {
+		return emptyString
+	}
+
+	start, end = trimQuotes(value, start, end)
+
+	if start == startIndex && end == vlen {
+		return value
+	}
+
+	return value[start:end]
+}
+
+// trimWhitespace removes leading and trailing whitespace
+func trimWhitespace(value string) (start, end int) {
 	data := unsafe.StringData(value)
-	start, end := 0, vlen
+	vlen := len(value)
+	start, end = startIndex, vlen
 
 	for start < end {
 		c := *(*byte)(unsafe.Add(unsafe.Pointer(data), start))
-		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
-			start++
-		} else {
+		if !isWhitespace(c) {
 			break
 		}
+		start++
 	}
 
 	for end > start {
 		c := *(*byte)(unsafe.Add(unsafe.Pointer(data), end-1))
-		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
-			end--
-		} else {
+		if !isWhitespace(c) {
 			break
 		}
+		end--
 	}
 
-	if start >= end {
-		return ""
-	}
+	return start, end
+}
 
-	if end-start >= 2 {
+// trimQuotes removes surrounding quotes if present
+func trimQuotes(value string, start, end int) (int, int) {
+	if end-start >= minQuoteLength {
+		data := unsafe.StringData(value)
 		first := *(*byte)(unsafe.Add(unsafe.Pointer(data), start))
 		last := *(*byte)(unsafe.Add(unsafe.Pointer(data), end-1))
 
@@ -104,15 +136,16 @@ func Value(value string) string {
 			end--
 		}
 	}
-
-	if start == 0 && end == vlen {
-		return value
-	}
-
-	return value[start:end]
+	return start, end
 }
 
-// Map flattens a nested map[string]any into a map[string]string with dot-notation keys.
+// isWhitespace checks if a byte is a whitespace character
+func isWhitespace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+// Map flattens a nested map[string]any into a map[string]string with
+// dot-notation keys.
 //
 // Example:
 //
@@ -126,13 +159,13 @@ func Map(input map[string]any) map[string]string {
 	capacity := estimateCapacity(input)
 	output := make(map[string]string, capacity)
 	var keyBuilder strings.Builder
-	keyBuilder.Grow(64)
+	keyBuilder.Grow(initialBuilderSize)
 	flattenRecursive(output, input, nil, &keyBuilder)
 	return output
 }
 
 func estimateCapacity(m map[string]any) int {
-	count := 0
+	var count int
 	for _, v := range m {
 		switch v := v.(type) {
 		case map[string]any:
@@ -146,58 +179,62 @@ func estimateCapacity(m map[string]any) int {
 	return count
 }
 
-func flattenRecursive(output map[string]string, input map[string]any, prefix []string, keyBuilder *strings.Builder) {
+func flattenRecursive(output map[string]string, input map[string]any,
+	prefix []string, keyBuilder *strings.Builder) {
 	for key, value := range input {
 		keyBuilder.Reset()
+		buildKey(keyBuilder, prefix, key)
+		processValue(output, value, prefix, key, keyBuilder)
+	}
+}
 
-		if len(prefix) > 0 {
-			for i, p := range prefix {
-				if i > 0 {
-					keyBuilder.WriteByte('.')
-				}
-				keyBuilder.WriteString(p)
+// processValue handles different value types during flattening
+func processValue(output map[string]string, value any, prefix []string,
+	key string, keyBuilder *strings.Builder) {
+	switch v := value.(type) {
+	case map[string]any:
+		processMap(output, v, prefix, key, keyBuilder)
+	case []any:
+		processSlice(output, v, prefix, key, keyBuilder)
+	default:
+		storeValue(output, keyBuilder.String(), value)
+	}
+}
+
+// processMap handles nested map values during flattening
+func processMap(output map[string]string, m map[string]any, prefix []string,
+	key string, keyBuilder *strings.Builder) {
+	newPrefix := append(prefix, key)
+	flattenRecursive(output, m, newPrefix, keyBuilder)
+}
+
+// buildKey constructs a dot-separated key from prefix and key
+func buildKey(keyBuilder *strings.Builder, prefix []string, key string) {
+	writePrefix(keyBuilder, prefix)
+	_, _ = keyBuilder.WriteString(key)
+}
+
+// writePrefix writes the prefix parts to the builder with dot separators
+func writePrefix(keyBuilder *strings.Builder, prefix []string) {
+	if len(prefix) > startIndex {
+		for i, p := range prefix {
+			if i > startIndex {
+				_ = keyBuilder.WriteByte('.')
 			}
-			keyBuilder.WriteByte('.')
+			_, _ = keyBuilder.WriteString(p)
 		}
-		keyBuilder.WriteString(key)
-
-		switch v := value.(type) {
-		case map[string]any:
-			newPrefix := append(prefix, key)
-			flattenRecursive(output, v, newPrefix, keyBuilder)
-		case []any:
-			processSlice(output, v, prefix, key, keyBuilder)
-		case string:
-			output[Key(keyBuilder.String())] = Value(v)
-		case nil:
-			output[Key(keyBuilder.String())] = ""
-		default:
-			output[Key(keyBuilder.String())] = Value(fmt.Sprintf("%v", value))
-		}
+		_ = keyBuilder.WriteByte('.')
 	}
 }
 
 // processSlice handles array/slice values during map flattening.
 // Array elements are indexed with dot notation (e.g., "key.0", "key.1").
 // Nested maps within arrays are recursively flattened.
-func processSlice(output map[string]string, slice []any, prefix []string, key string, keyBuilder *strings.Builder) {
+func processSlice(output map[string]string, slice []any, prefix []string,
+	key string, keyBuilder *strings.Builder) {
 	for i, item := range slice {
 		keyBuilder.Reset()
-
-		// Build key with array index
-		if len(prefix) > 0 {
-			for j, p := range prefix {
-				if j > 0 {
-					keyBuilder.WriteByte('.')
-				}
-				keyBuilder.WriteString(p)
-			}
-			keyBuilder.WriteByte('.')
-		}
-
-		keyBuilder.WriteString(key)
-		keyBuilder.WriteByte('.')
-		fmt.Fprintf(keyBuilder, "%d", i)
+		buildArrayKey(keyBuilder, prefix, key, i)
 
 		// Process the array item
 		switch v := item.(type) {
@@ -205,13 +242,31 @@ func processSlice(output map[string]string, slice []any, prefix []string, key st
 			itemKey := fmt.Sprintf("%s.%d", key, i)
 			newPrefix := append(prefix, itemKey)
 			flattenRecursive(output, v, newPrefix, keyBuilder)
-		case string:
-			output[Key(keyBuilder.String())] = Value(v)
-		case nil:
-			output[Key(keyBuilder.String())] = ""
 		default:
-			output[Key(keyBuilder.String())] = Value(fmt.Sprintf("%v", item))
+			storeValue(output, keyBuilder.String(), item)
 		}
+	}
+}
+
+// buildArrayKey constructs a dot-separated key with array index
+func buildArrayKey(keyBuilder *strings.Builder, prefix []string,
+	key string, index int) {
+	writePrefix(keyBuilder, prefix)
+	_, _ = keyBuilder.WriteString(key)
+	_ = keyBuilder.WriteByte('.')
+	_, _ = fmt.Fprintf(keyBuilder, "%d", index)
+}
+
+// storeValue stores a value in the output map with proper formatting
+func storeValue(output map[string]string, key string, value any) {
+	normalizedKey := Key(key)
+	switch v := value.(type) {
+	case string:
+		output[normalizedKey] = Value(v)
+	case nil:
+		output[normalizedKey] = emptyString
+	default:
+		output[normalizedKey] = Value(fmt.Sprintf("%v", value))
 	}
 }
 
