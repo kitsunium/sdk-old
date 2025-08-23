@@ -1,6 +1,0 @@
-# Ignore performance-critical kernel buffer that requires unsafe operations
-# These files are carefully reviewed and use unsafe for zero-copy operations
-pkg/kernel/kbuffer/buffer.go:48
-pkg/kernel/kbuffer/buffer.go:70
-pkg/kernel/kbuffer/buffer.go:71
-pkg/kernel/kbuffer/buffer.go:141
