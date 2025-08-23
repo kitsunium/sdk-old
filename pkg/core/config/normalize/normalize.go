@@ -196,12 +196,8 @@ func processValue(output map[string]string, value any, prefix []string,
 		processMap(output, v, prefix, key, keyBuilder)
 	case []any:
 		processSlice(output, v, prefix, key, keyBuilder)
-	case string:
-		output[Key(keyBuilder.String())] = Value(v)
-	case nil:
-		output[Key(keyBuilder.String())] = emptyString
 	default:
-		output[Key(keyBuilder.String())] = Value(fmt.Sprintf("%v", value))
+		storeValue(output, keyBuilder.String(), value)
 	}
 }
 
@@ -214,6 +210,12 @@ func processMap(output map[string]string, m map[string]any, prefix []string,
 
 // buildKey constructs a dot-separated key from prefix and key
 func buildKey(keyBuilder *strings.Builder, prefix []string, key string) {
+	writePrefix(keyBuilder, prefix)
+	_, _ = keyBuilder.WriteString(key)
+}
+
+// writePrefix writes the prefix parts to the builder with dot separators
+func writePrefix(keyBuilder *strings.Builder, prefix []string) {
 	if len(prefix) > startIndex {
 		for i, p := range prefix {
 			if i > startIndex {
@@ -223,7 +225,6 @@ func buildKey(keyBuilder *strings.Builder, prefix []string, key string) {
 		}
 		_ = keyBuilder.WriteByte('.')
 	}
-	_, _ = keyBuilder.WriteString(key)
 }
 
 // processSlice handles array/slice values during map flattening.
@@ -241,12 +242,8 @@ func processSlice(output map[string]string, slice []any, prefix []string,
 			itemKey := fmt.Sprintf("%s.%d", key, i)
 			newPrefix := append(prefix, itemKey)
 			flattenRecursive(output, v, newPrefix, keyBuilder)
-		case string:
-			output[Key(keyBuilder.String())] = Value(v)
-		case nil:
-			output[Key(keyBuilder.String())] = emptyString
 		default:
-			output[Key(keyBuilder.String())] = Value(fmt.Sprintf("%v", item))
+			storeValue(output, keyBuilder.String(), item)
 		}
 	}
 }
@@ -254,19 +251,23 @@ func processSlice(output map[string]string, slice []any, prefix []string,
 // buildArrayKey constructs a dot-separated key with array index
 func buildArrayKey(keyBuilder *strings.Builder, prefix []string,
 	key string, index int) {
-	if len(prefix) > startIndex {
-		for j, p := range prefix {
-			if j > startIndex {
-				_ = keyBuilder.WriteByte('.')
-			}
-			_, _ = keyBuilder.WriteString(p)
-		}
-		_ = keyBuilder.WriteByte('.')
-	}
-
+	writePrefix(keyBuilder, prefix)
 	_, _ = keyBuilder.WriteString(key)
 	_ = keyBuilder.WriteByte('.')
 	_, _ = fmt.Fprintf(keyBuilder, "%d", index)
+}
+
+// storeValue stores a value in the output map with proper formatting
+func storeValue(output map[string]string, key string, value any) {
+	normalizedKey := Key(key)
+	switch v := value.(type) {
+	case string:
+		output[normalizedKey] = Value(v)
+	case nil:
+		output[normalizedKey] = emptyString
+	default:
+		output[normalizedKey] = Value(fmt.Sprintf("%v", value))
+	}
 }
 
 // StringToBytesSafe converts string to []byte with allocation (safe copy).
