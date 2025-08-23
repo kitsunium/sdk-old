@@ -36,10 +36,23 @@ chmod +x "$HOOKS_DIR"/post-* 2>/dev/null || true  # Hooks post-* (si présents)
 # Liste les hooks installés pour confirmation
 echo ""
 echo "📋 Installed hooks:"
-# ls -la : liste détaillée avec permissions
-# grep -E : expression régulière étendue
-# Cherche les fichiers exécutables qui sont des hooks Git
-ls -la "$HOOKS_DIR" | grep -E "^-..x.*\s+(pre-|commit-|post-)" | awk '{print "  - " $NF}' || echo "  No hooks found"
+# List executable hook files safely without parsing ls output
+# Use find or glob pattern to avoid issues with special filenames
+hook_count=0
+for hook in "$HOOKS_DIR"/*; do
+    if [ -f "$hook" ] && [ -x "$hook" ]; then
+        basename_hook=$(basename "$hook")
+        case "$basename_hook" in
+            pre-*|commit-*|post-*)
+                echo "  - $basename_hook"
+                hook_count=$((hook_count + 1))
+                ;;
+        esac
+    fi
+done
+if [ "$hook_count" -eq 0 ]; then
+    echo "  No hooks found"
+fi
 
 # Instructions finales pour l'utilisateur
 echo ""
