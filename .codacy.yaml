@@ -6,5 +6,3 @@ exclude_paths:
   - "bazel-*/**"
   - ".git/**"
   - "vendor/**"
-  # Exclude performance-critical kernel buffer that requires unsafe operations
-  - "pkg/kernel/kbuffer/buffer.go"
