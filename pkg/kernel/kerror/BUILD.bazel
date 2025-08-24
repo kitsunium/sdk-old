@@ -25,6 +25,7 @@ go_test(
     srcs = [
         "config_test.go",
         "context_test.go",
+        "error_bench_test.go",
         "error_test.go",
         "instance_test.go",
         "metrics_test.go",
@@ -34,4 +35,14 @@ go_test(
     ],
     embed = [":kerror"],
     deps = ["//pkg/kernel/kcache"],
+)
+
+go_test(
+    name = "kerror_bench_test",
+    srcs = ["error_bench_test.go"],
+    embed = [":kerror"],
+    tags = [
+        "bench",
+        "manual",
+    ],
 )

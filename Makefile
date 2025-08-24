@@ -44,8 +44,13 @@ help:
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test" "run all tests with Bazel"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/unit" "run unit tests only"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/coverage" "run tests with coverage report"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks for all packages"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
+	@echo ''
+	@echo 'Benchmarks:'
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks (output only)"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/save" "run and save benchmark results"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/compare" "compare two benchmark commits"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/list" "list saved benchmark results"
 	@echo ''
 	@echo 'Quality:'
 	@printf "  $(BLUE)%-20s$(NC) %s\n" "quality/analyze" "run complete code analysis"
@@ -122,6 +127,42 @@ bench:
 		$(BAZEL) run $$target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s -test.run=^$$ 2>&1 | grep -v "^exec " | grep -v "^Executing tests" | grep -v "^---" | tee $$pkg_dir/result_bench || exit $$?; \
 	done
 	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
+
+## bench/save: run benchmarks and save results to SQLite database
+.PHONY: bench/save
+bench/save:
+	@echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"
+	@python3 scripts/bench_manager.py save
+	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
+
+## bench/compare: compare benchmark results
+# Usage:
+#   make bench/compare                    - compare current with main
+#   make bench/compare COMMIT             - compare current with COMMIT
+#   make bench/compare COMMIT1 COMMIT2    - compare COMMIT1 with COMMIT2
+.PHONY: bench/compare
+bench/compare:
+	@echo "$(YELLOW)▶ Comparing benchmarks...$(NC)"
+	@if [ -z "$(word 2,$(MAKECMDGOALS))" ]; then \
+		echo "$(CYAN)→ Comparing current commit with main branch$(NC)"; \
+		python3 scripts/bench_manager.py compare; \
+	elif [ -z "$(word 3,$(MAKECMDGOALS))" ]; then \
+		echo "$(CYAN)→ Comparing current commit with $(word 2,$(MAKECMDGOALS))$(NC)"; \
+		python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)); \
+	else \
+		echo "$(CYAN)→ Comparing $(word 2,$(MAKECMDGOALS)) with $(word 3,$(MAKECMDGOALS))$(NC)"; \
+		python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)) $(word 3,$(MAKECMDGOALS)); \
+	fi
+	@echo "$(GREEN)✓ Benchmark comparison complete$(NC)"
+
+# Catch the commit arguments for bench/compare
+%:
+	@:
+
+## bench/list: list all saved benchmark results
+.PHONY: bench/list
+bench/list:
+	@python3 scripts/bench_manager.py list
 
 ## deps: download and verify dependencies
 .PHONY: deps
