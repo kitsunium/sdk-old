@@ -16,11 +16,12 @@ go_test(
     size = "small",
     srcs = [
         "atomic_test.go",
+        "cache_bench_test.go",
         "cache_test.go",
         "sharded_test.go",
     ],
+    embed = [":kcache"],
     deps = [
-        ":kcache",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
