@@ -1,126 +1,177 @@
-# Normalize Package
-
-Package normalize provides configuration key and value normalization utilities.
+# Package normalize
 
 ## Overview
 
-The normalize package offers functions to transform configuration keys and
-values into a consistent format, ensuring uniformity across different
-configuration sources.
+The `normalize` package provides high-performance utilities for normalizing
+configuration keys and values in Go applications. It's designed to handle
+various configuration formats and ensure consistent key naming and value
+formatting across different configuration sources.
 
-## API
+## Features
 
-### Key Normalization
+- **Key Normalization**: Convert configuration keys to a consistent lowercase
+  dot-notation format
+- **Value Normalization**: Clean configuration values by trimming whitespace and
+  quotes
+- **Map Flattening**: Transform nested configuration structures into flat
+  key-value pairs
+- **Zero-Allocation Design**: Uses lookup tables and unsafe operations for
+  optimal performance
+- **Array Support**: Handle arrays in configuration with indexed notation
+
+## Installation
 
 ```go
-func Key(key string) string
+import "github.com/kitsunium/sdk/pkg/core/config/normalize"
 ```
 
-Normalizes a configuration key by:
+## API Reference
+
+### Functions
+
+#### `Key(key string) string`
+
+Normalizes configuration keys by:
 
 - Converting uppercase letters to lowercase
 - Replacing underscores with dots
-
-Examples:
-
-- `DATABASE_URL` → `database.url`
-- `Redis_Host` → `redis.host`
-- `already.lowercase` → `already.lowercase`
-
-### Value Normalization
+- Preserving the original string if no transformation is needed
 
 ```go
-func Value(value string) string
+normalized := normalize.Key("DATABASE_URL")  // Returns: "database.url"
+normalized := normalize.Key("Redis_Host")    // Returns: "redis.host"
+normalized := normalize.Key("api.key")       // Returns: "api.key" (unchanged)
 ```
 
-Normalizes a configuration value by:
+#### `Value(value string) string`
 
-- Trimming whitespace (space, tab, newline, carriage return)
-- Removing matching quotes (single or double)
+Normalizes configuration values by:
 
-Examples:
-
-- `"  trimmed  "` → `"trimmed"`
-- `"'quoted'"` → `"quoted"`
-- `"\r\n  Windows  \r\n"` → `"Windows"`
-
-### Map Flattening
+- Trimming leading and trailing whitespace
+- Removing matching surrounding quotes (single or double)
+- Returning empty string for whitespace-only values
 
 ```go
-func Map(input map[string]any) map[string]string
+clean := normalize.Value("  'localhost'  ")  // Returns: "localhost"
+clean := normalize.Value(`"quoted"`)         // Returns: "quoted"
+clean := normalize.Value("  \n\t  ")         // Returns: ""
 ```
 
-Flattens nested map structures into dot-notation keys. Supports:
+#### `Map(input map[string]any) map[string]string`
 
-- Nested maps (recursively flattened)
-- Arrays (indexed with dot notation)
-- String values (normalized)
-- nil values (converted to empty string)
-- Other types (converted via fmt.Sprintf)
-
-Examples:
+Flattens nested configuration maps into a single-level map with dot-notation
+keys:
 
 ```go
-// Input
-{"db": {"host": "localhost", "port": 5432}}
-
-// Output
-{"db.host": "localhost", "db.port": "5432"}
-
-// Input with arrays
-{"servers": ["a", "b"]}
-
-// Output
-{"servers.0": "a", "servers.1": "b"}
-```
-
-### Utility Functions
-
-```go
-func StringToBytes(s string) []byte
-func BytesToString(b []byte) string
-```
-
-Zero-allocation conversion functions between strings and byte slices.
-
-⚠️ **Warning**: These functions use unsafe operations. The returned values share
-memory with the input. Do not modify the byte slice after calling
-`BytesToString` or modify the string data after calling `StringToBytes`.
-
-## Usage Example
-
-```go
-package main
-
-import (
-    "fmt"
-    "github.com/kitsunium/sdk/pkg/core/config/normalize"
-)
-
-func main() {
-    // Normalize a key
-    key := normalize.Key("DATABASE_URL")
-    fmt.Println(key) // "database.url"
-
-    // Normalize a value
-    value := normalize.Value("  'localhost'  ")
-    fmt.Println(value) // "localhost"
-
-    // Flatten a nested map
-    config := map[string]any{
-        "database": map[string]any{
-            "host": "localhost",
-            "port": 5432,
+input := map[string]any{
+    "database": map[string]any{
+        "host": "localhost",
+        "port": 5432,
+        "options": map[string]any{
+            "ssl": true,
+            "timeout": 30,
         },
-    }
-    flat := normalize.Map(config)
-    fmt.Println(flat["database.host"]) // "localhost"
-    fmt.Println(flat["database.port"]) // "5432"
+    },
+    "servers": []any{"server1", "server2"},
+}
+
+flat := normalize.Map(input)
+// Results in:
+// flat["database.host"] = "localhost"
+// flat["database.port"] = "5432"
+// flat["database.options.ssl"] = "true"
+// flat["database.options.timeout"] = "30"
+// flat["servers.0"] = "server1"
+// flat["servers.1"] = "server2"
+```
+
+#### `StringToBytesSafe(s string) []byte`
+
+Safely converts a string to a byte slice with allocation:
+
+```go
+bytes := normalize.StringToBytesSafe("hello")
+// Safe to modify bytes without affecting the original string
+```
+
+#### `BytesToStringSafe(b []byte) string`
+
+Safely converts a byte slice to a string with allocation:
+
+```go
+str := normalize.BytesToStringSafe([]byte("hello"))
+// Safe to modify the original byte slice without affecting str
+```
+
+## Use Cases
+
+### Configuration File Processing
+
+Perfect for processing configuration from various sources (environment
+variables, YAML, JSON, etc.):
+
+```go
+// Environment variables often use UPPER_SNAKE_CASE
+envKey := "DATABASE_CONNECTION_POOL_SIZE"
+normalizedKey := normalize.Key(envKey)  // "database.connection.pool.size"
+
+// Values might have extra formatting
+envValue := " '10' "
+normalizedValue := normalize.Value(envValue)  // "10"
+```
+
+### Multi-Source Configuration Merging
+
+When merging configurations from different sources with different naming
+conventions:
+
+```go
+// From environment
+envConfig := map[string]string{
+    "APP_NAME": "MyApp",
+    "DB_HOST": "localhost",
+}
+
+// From JSON file
+jsonConfig := map[string]any{
+    "app": map[string]any{
+        "name": "MyApp",
+        "version": "1.0.0",
+    },
+}
+
+// Normalize and merge
+normalized := make(map[string]string)
+for k, v := range envConfig {
+    normalized[normalize.Key(k)] = normalize.Value(v)
+}
+
+flatJson := normalize.Map(jsonConfig)
+for k, v := range flatJson {
+    normalized[k] = v
 }
 ```
 
-## Implementation Details
+## Performance Considerations
 
-The package uses lookup tables for character transformations and unsafe
-operations for string/byte conversions to minimize allocations and maximize
-efficiency.
+- **Lookup Tables**: Uses pre-computed 256-byte lookup tables for O(1) character
+  transformations
+- **Unsafe Operations**: Employs unsafe pointer arithmetic for zero-allocation
+  string processing
+- **Capacity Pre-allocation**: Estimates required capacity for output maps to
+  minimize reallocations
+- **String Builder Reuse**: Reuses string builders during recursive flattening
+  operations
+
+## Thread Safety
+
+All functions in this package are thread-safe and can be called concurrently.
+The lookup tables are initialized once at startup and are read-only thereafter.
+
+## Dependencies
+
+This package has no external dependencies beyond the Go standard library.
+
+## License
+
+Part of the Kitsunium SDK. See the main repository for license information.

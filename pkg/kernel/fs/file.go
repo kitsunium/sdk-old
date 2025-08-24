@@ -1,3 +1,23 @@
+// Package fs provides file system operations and utilities for the Kitsunium kernel.
+//
+// This package offers low-level file system operations using direct Unix system calls
+// for optimal performance in kernel-level applications. It provides abstractions for
+// files, directories, archives, and system statistics while maintaining high performance
+// through minimal allocations and direct system call usage.
+//
+// Key Features:
+//   - High-performance file I/O using Unix system calls
+//   - Zero-copy operations where possible
+//   - Parallel I/O pipelines for large file operations
+//   - Comprehensive file system statistics
+//   - Archive creation and extraction support
+//   - Cross-platform compatibility through golang.org/x/sys
+//
+// Performance Characteristics:
+//   - Uses direct Unix system calls (unix.Open, unix.Read, unix.Write)
+//   - Implements parallel copy operations with pipelines
+//   - Configurable buffer sizes for optimal throughput
+//   - Minimal memory allocations in hot paths
 package fs
 
 import (
@@ -16,6 +36,8 @@ const (
 )
 
 // File interface defines operations for file management.
+// Implementations provide high-performance file operations using
+// direct system calls where possible.
 type File interface {
 	Path() string
 	Parent() (Directory, error)
@@ -31,6 +53,8 @@ type File interface {
 }
 
 // file struct represents a file with its path and metadata.
+// It caches file statistics and provides configurable options for
+// permissions, ownership, and I/O buffer sizes.
 type file struct {
 	parent     string
 	path       string
@@ -43,6 +67,8 @@ type file struct {
 }
 
 // NewFile creates a new File object based on the given options.
+// It validates the path, checks if it exists, and optionally creates
+// the file if CreateIfNotExist is set in options.
 func NewFile(option Option) (File, error) {
 	if !option.Validate() {
 		return nil, fmt.Errorf("invalid option: %v", option)
@@ -73,6 +99,8 @@ func NewFile(option Option) (File, error) {
 	return f, nil
 }
 
+// Size returns the size of the file in bytes.
+// It refreshes the file statistics before returning the size.
 func (f *file) Size() int64 {
 	_ = f.stats.Refresh() // Ignore refresh error for size calculation
 	return f.stats.meta.Size

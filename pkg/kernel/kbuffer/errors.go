@@ -25,16 +25,23 @@ var (
 )
 
 // bufferError implements the error interface with zero allocations.
+// Uses string constants to avoid heap allocations during error creation.
+// This is critical for high-performance kernel code where allocations
+// in error paths can cause performance degradation.
 type bufferError string
 
-// Error returns the error message.
+// Error returns the error message string.
+// This method has the //go:nosplit directive to prevent stack growth
+// and ensure minimal overhead in error handling paths.
 //
 //go:nosplit
 func (e bufferError) Error() string {
 	return string(e)
 }
 
-// Is implements error comparison for errors.Is.
+// Is implements error comparison for errors.Is functionality.
+// Allows for efficient error type checking without reflection.
+// Used by the standard library's errors.Is() function.
 func (e bufferError) Is(target error) bool {
 	t, ok := target.(bufferError)
 	return ok && e == t
