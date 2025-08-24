@@ -140,7 +140,6 @@ func (a *ARGS) ParseArgsStrict(args []string) (map[string]string, error) {
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-
 		if len(arg) == 0 {
 			continue
 		}
@@ -149,34 +148,55 @@ func (a *ARGS) ParseArgsStrict(args []string) (map[string]string, error) {
 			return nil, ErrARGSInvalid.Newf("expected flag starting with -, got: %s", arg)
 		}
 
-		if arg[0] == '-' {
-			if len(arg) > 1 && arg[1] == '-' {
-				arg = arg[2:]
-			} else {
-				arg = arg[1:]
-			}
-		}
-
-		eqIdx := strings.IndexByte(arg, '=')
-		if eqIdx != -1 {
-			key := arg[:eqIdx]
-			value := arg[eqIdx+1:]
-			config[normalize.Key(key)] = normalize.Value(value)
-		} else if i+1 < len(args) {
-			// Check if next arg is a negative number (treat as value)
-			if isNegativeNumber(args[i+1]) {
-				config[normalize.Key(arg)] = normalize.Value(args[i+1])
-				i++
-			} else if strings.HasPrefix(args[i+1], "-") {
-				config[normalize.Key(arg)] = "true"
-			} else {
-				config[normalize.Key(arg)] = normalize.Value(args[i+1])
-				i++
-			}
-		} else {
-			config[normalize.Key(arg)] = "true"
-		}
+		key, value, consumed := a.parseArgument(arg, args, i)
+		config[normalize.Key(key)] = normalize.Value(value)
+		i += consumed
 	}
 
 	return config, nil
+}
+
+// parseArgument parses a single argument and returns the key, value, and whether next arg was consumed.
+func (a *ARGS) parseArgument(arg string, args []string, index int) (key, value string, consumed int) {
+	// Strip leading dashes
+	key = a.stripDashes(arg)
+
+	// Check for key=value format
+	if eqIdx := strings.IndexByte(key, '='); eqIdx != -1 {
+		return key[:eqIdx], key[eqIdx+1:], 0
+	}
+
+	// Handle standalone flag or flag with value
+	return a.handleFlagValue(key, args, index)
+}
+
+// stripDashes removes leading dashes from the argument.
+func (a *ARGS) stripDashes(arg string) string {
+	if len(arg) > 1 && arg[1] == '-' {
+		return arg[2:]
+	}
+	return arg[1:]
+}
+
+// handleFlagValue determines the value for a flag without '='.
+func (a *ARGS) handleFlagValue(key string, args []string, index int) (string, string, int) {
+	// No next argument available
+	if index+1 >= len(args) {
+		return key, "true", 0
+	}
+
+	nextArg := args[index+1]
+
+	// Next arg is a negative number (treat as value)
+	if isNegativeNumber(nextArg) {
+		return key, nextArg, 1
+	}
+
+	// Next arg is another flag
+	if strings.HasPrefix(nextArg, "-") {
+		return key, "true", 0
+	}
+
+	// Next arg is a value
+	return key, nextArg, 1
 }
