@@ -309,7 +309,92 @@ jobs:
           coverage-reports: coverage.lcov
         continue-on-error: true
 
-  # Job 6: Final status check
+  # Job 6: Benchmarks (only on main after merge)
+  benchmarks:
+    name: ⚡ Collect Benchmarks
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: 🏗️ Setup Bazel
+        uses: bazel-contrib/setup-bazel@4fd964a13a440a8aeb0be47350db2fc640f19ca8 # v0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: 🔧 Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: 📊 Update and save benchmarks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📊 Updating benchmark database from BENCH tag..."
+          make bench/update || echo "No existing BENCH tag found"
+
+          echo "⚡ Running benchmarks..."
+          make bench/save
+
+          # Check if benchmarks.sqlite exists
+          if [ ! -f benchmarks.sqlite ]; then
+            echo "❌ No benchmarks.sqlite file found"
+            exit 1
+          fi
+
+          echo "✅ Benchmarks database ready"
+
+      - name: 🚀 Create/Update BENCH Release
+        uses: ncipollo/release-action@2c591bcc8ecdcd2db72b97d6147f871fcd833ba5 # v1.14.0
+        with:
+          allowUpdates: true
+          artifacts: "benchmarks.sqlite"
+          body: |
+            ## 📊 Benchmark Database
+
+            This release contains the cumulative benchmark database for the SDK.
+
+            **Last updated**: ${{ github.event.head_commit.timestamp }}
+            **Commit**: ${{ github.sha }}
+
+            ### Usage
+            ```bash
+            # Download benchmark database
+            make bench/update
+
+            # Compare benchmarks
+            make bench/compare
+            ```
+          name: "Benchmark Database"
+          tag: "BENCH"
+          commit: ${{ github.sha }}
+          makeLatest: false
+          prerelease: true
+          replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 7: Final status check
   status:
     name: ✅ CI Status
     runs-on: ubuntu-latest
