@@ -25,6 +25,7 @@ go_test(
     srcs = [
         "config_test.go",
         "context_test.go",
+        "error_bench_test.go",
         "error_test.go",
         "instance_test.go",
         "metrics_test.go",
