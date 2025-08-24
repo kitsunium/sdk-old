@@ -139,9 +139,9 @@ bench/save: bench/update
 .PHONY: bench/update
 bench/update:
 	@echo "$(YELLOW)▶ Fetching benchmark database from BENCH release...$(NC)"
-	@if curl -s https://api.github.com/repos/kitsunium/sdk/releases/tags/BENCH | grep -q "benchmarks.sqlite"; then \
+	@if curl -s https://api.github.com/repos/$(REPO_PATH)/releases/tags/BENCH | grep -q "benchmarks.sqlite"; then \
 		echo "$(CYAN)→ BENCH release found, downloading benchmarks.sqlite$(NC)"; \
-		curl -sL https://github.com/kitsunium/sdk/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
+		curl -sL https://github.com/$(REPO_PATH)/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
 		echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
 		echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
 	else \
