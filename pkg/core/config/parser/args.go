@@ -102,29 +102,38 @@ func (a *ARGS) countFlags(args []string) int {
 
 func (a *ARGS) processSingleArg(args []string, index int) (string, string, int) {
 	arg := args[index]
-	if len(arg) == 0 || arg[0] != '-' {
+	if !a.isFlag(arg) {
 		return "", "", 0
 	}
 
-	// Fast path for stripping dashes
-	if len(arg) > 1 && arg[1] == '-' {
-		arg = arg[2:]
-	} else {
-		arg = arg[1:]
-	}
+	key := a.stripDashesOptimized(arg)
+	return a.extractKeyValue(key, args, index)
+}
 
+func (a *ARGS) isFlag(arg string) bool {
+	return len(arg) > 0 && arg[0] == '-'
+}
+
+func (a *ARGS) stripDashesOptimized(arg string) string {
+	if len(arg) > 1 && arg[1] == '-' {
+		return arg[2:]
+	}
+	return arg[1:]
+}
+
+func (a *ARGS) extractKeyValue(key string, args []string, index int) (string, string, int) {
 	// Check for key=value format (most common case)
-	if eqIdx := strings.IndexByte(arg, '='); eqIdx != -1 {
-		return arg[:eqIdx], arg[eqIdx+1:], 0
+	if eqIdx := strings.IndexByte(key, '='); eqIdx != -1 {
+		return key[:eqIdx], key[eqIdx+1:], 0
 	}
 
 	// Check if next arg is a value
 	if index+1 < len(args) && a.isValue(args[index+1]) {
-		return arg, args[index+1], 1
+		return key, args[index+1], 1
 	}
 
 	// Boolean flag
-	return arg, "true", 0
+	return key, "true", 0
 }
 
 func (a *ARGS) isValue(arg string) bool {
