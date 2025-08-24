@@ -189,6 +189,14 @@ type stackItem struct {
 	depth  int
 }
 
+// jsonProcessContext holds context for JSON processing to reduce parameter count
+type jsonProcessContext struct {
+	depth      int
+	stack      *[]stackItem
+	result     map[string]string
+	keyBuilder *strings.Builder
+}
+
 func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]string, error) {
 	estimatedSize := max(dataSize/30, 16)
 	result := make(map[string]string, estimatedSize)
@@ -198,11 +206,19 @@ func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]st
 
 	stack := []stackItem{{data: config, prefix: "", depth: 0}}
 
+	ctx := &jsonProcessContext{
+		depth:      0,
+		stack:      &stack,
+		result:     result,
+		keyBuilder: &keyBuilder,
+	}
+
 	for len(stack) > 0 {
 		current := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
+		ctx.depth = current.depth
 
-		if err := j.processStackItem(current, &stack, result, &keyBuilder); err != nil {
+		if err := j.processStackItem(current, ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -211,13 +227,13 @@ func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]st
 }
 
 // processStackItem processes a single stack item.
-func (j *JSON) processStackItem(current stackItem, stack *[]stackItem, result map[string]string, keyBuilder *strings.Builder) error {
+func (j *JSON) processStackItem(current stackItem, ctx *jsonProcessContext) error {
 	needsDot := len(current.prefix) > 0
 
 	for key, value := range current.data {
-		fullKey := j.buildKey(keyBuilder, current.prefix, key, needsDot)
+		fullKey := j.buildKey(ctx.keyBuilder, current.prefix, key, needsDot)
 
-		if err := j.processValue(fullKey, value, current.depth, stack, result, keyBuilder); err != nil {
+		if err := j.processValue(fullKey, value, ctx); err != nil {
 			return err
 		}
 	}
@@ -236,48 +252,48 @@ func (j *JSON) buildKey(keyBuilder *strings.Builder, prefix, key string, needsDo
 }
 
 // processValue processes a single value based on its type.
-func (j *JSON) processValue(fullKey string, value any, depth int, stack *[]stackItem, result map[string]string, keyBuilder *strings.Builder) error {
+func (j *JSON) processValue(fullKey string, value any, ctx *jsonProcessContext) error {
 	switch v := value.(type) {
 	case string:
-		result[normalize.Key(fullKey)] = normalize.Value(v)
+		ctx.result[normalize.Key(fullKey)] = normalize.Value(v)
 	case map[string]any:
-		return j.processMap(fullKey, v, depth, stack)
+		return j.processMap(fullKey, v, ctx)
 	case []any:
-		return j.processArray(fullKey, v, depth, stack, result, keyBuilder)
+		return j.processArray(fullKey, v, ctx)
 	case json.Number:
-		result[normalize.Key(fullKey)] = normalizeJSONNumber(v)
+		ctx.result[normalize.Key(fullKey)] = normalizeJSONNumber(v)
 	case float64:
-		result[normalize.Key(fullKey)] = fastFloat64ToString(v)
+		ctx.result[normalize.Key(fullKey)] = fastFloat64ToString(v)
 	case bool:
-		result[normalize.Key(fullKey)] = strconv.FormatBool(v)
+		ctx.result[normalize.Key(fullKey)] = strconv.FormatBool(v)
 	case nil:
-		result[normalize.Key(fullKey)] = ""
+		ctx.result[normalize.Key(fullKey)] = ""
 	default:
-		result[normalize.Key(fullKey)] = normalize.Value(fmt.Sprint(v))
+		ctx.result[normalize.Key(fullKey)] = normalize.Value(fmt.Sprint(v))
 	}
 	return nil
 }
 
 // processMap handles nested map processing.
-func (j *JSON) processMap(fullKey string, data map[string]any, depth int, stack *[]stackItem) error {
-	if depth >= MaxJSONDepth {
+func (j *JSON) processMap(fullKey string, data map[string]any, ctx *jsonProcessContext) error {
+	if ctx.depth >= MaxJSONDepth {
 		return ErrJSONParse.Newf("JSON nesting depth exceeds maximum: %d", MaxJSONDepth)
 	}
-	*stack = append(*stack, stackItem{data: data, prefix: fullKey, depth: depth + 1})
+	*ctx.stack = append(*ctx.stack, stackItem{data: data, prefix: fullKey, depth: ctx.depth + 1})
 	return nil
 }
 
 // processArray handles array processing.
-func (j *JSON) processArray(fullKey string, arr []any, depth int, stack *[]stackItem, result map[string]string, keyBuilder *strings.Builder) error {
+func (j *JSON) processArray(fullKey string, arr []any, ctx *jsonProcessContext) error {
 	for i, item := range arr {
-		itemKey := j.buildArrayKey(keyBuilder, fullKey, i)
+		itemKey := j.buildArrayKey(ctx.keyBuilder, fullKey, i)
 
 		if subMap, ok := item.(map[string]any); ok {
-			if err := j.processMap(itemKey, subMap, depth, stack); err != nil {
+			if err := j.processMap(itemKey, subMap, ctx); err != nil {
 				return err
 			}
 		} else {
-			result[normalize.Key(itemKey)] = normalizeAnyValue(item)
+			ctx.result[normalize.Key(itemKey)] = normalizeAnyValue(item)
 		}
 	}
 	return nil
