@@ -1,6 +1,12 @@
 #!/bin/bash
 # Pre-commit hook: automatically format code before commit
 
+# Source the main branch protection hook
+HOOK_DIR="$(dirname "$0")"
+if [ -f "$HOOK_DIR/pre-commit-main-protection" ]; then
+    source "$HOOK_DIR/pre-commit-main-protection"
+fi
+
 echo "🎨 Running pre-commit formatting..."
 
 # Get list of staged Go files

@@ -9,27 +9,37 @@ package normalize
 // Returns:
 // - string: The normalized string with spaces and quotes removed if applicable.
 func Value(value string) string {
-	// Trim spaces manually without using strings.TrimSpace
+	start, end := trimWhitespace(value)
+	start, end = trimQuotes(value, start, end)
+	return value[start:end]
+}
+
+func trimWhitespace(value string) (int, int) {
 	start, end := 0, len(value)
 
-	for start < end && (value[start] == ' ' || value[start] == '\t' || value[start] == '\n') {
+	for start < end && isWhitespace(value[start]) {
 		start++
 	}
-	for start < end && (value[end-1] == ' ' || value[end-1] == '\t' || value[end-1] == '\n') {
+	for start < end && isWhitespace(value[end-1]) {
 		end--
 	}
 
-	// Check for surrounding quotes if at least two characters remain
-	if end-start >= 2 {
-		if value[start] == '\'' && value[end-1] == '\'' {
-			start++
-			end--
-		} else if value[start] == '"' && value[end-1] == '"' {
-			start++
-			end--
-		}
+	return start, end
+}
+
+func trimQuotes(value string, start, end int) (int, int) {
+	if end-start < 2 {
+		return start, end
 	}
 
-	// Return the sliced and normalized string
-	return value[start:end]
+	if (value[start] == '\'' && value[end-1] == '\'') ||
+		(value[start] == '"' && value[end-1] == '"') {
+		return start + 1, end - 1
+	}
+
+	return start, end
+}
+
+func isWhitespace(ch byte) bool {
+	return ch == ' ' || ch == '\t' || ch == '\n'
 }
