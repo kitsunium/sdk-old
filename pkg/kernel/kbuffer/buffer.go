@@ -64,7 +64,6 @@ func NewBuffer(capacity int) *Buffer {
 // Write appends bytes to the buffer.
 // Returns the number of bytes written and ErrBufferOverflow if insufficient space.
 // This method is optimized for hot paths with nosplit directive.
-// Small performance optimization: reduced branching for better prediction
 //
 //go:nosplit
 func (b *Buffer) Write(p []byte) (int, error) {
