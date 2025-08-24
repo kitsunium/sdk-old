@@ -133,12 +133,24 @@ bench-save:
 	@python3 scripts/bench_manager.py save
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
-## bench-compare: run benchmarks and compare with previous results
+## bench-compare: compare benchmark results between two commits
 .PHONY: bench-compare
 bench-compare:
-	@echo "$(YELLOW)▶ Running benchmarks and comparing with previous results...$(NC)"
-	@python3 scripts/bench_manager.py compare
+	@if [ -z "$(word 2,$(MAKECMDGOALS))" ] || [ -z "$(word 3,$(MAKECMDGOALS))" ]; then \
+		echo "$(RED)❌ Error: bench-compare requires two commit arguments$(NC)"; \
+		echo "$(YELLOW)Usage: make bench-compare BASE_COMMIT CURRENT_COMMIT$(NC)"; \
+		echo "$(YELLOW)Example: make bench-compare c96356fb fe57684a$(NC)"; \
+		echo ""; \
+		echo "$(CYAN)Run 'make bench-list' to see available commits$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)▶ Comparing benchmarks between commits...$(NC)"
+	@python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)) $(word 3,$(MAKECMDGOALS))
 	@echo "$(GREEN)✓ Benchmark comparison complete$(NC)"
+
+# Catch the commit arguments for bench-compare
+%:
+	@:
 
 ## bench-list: list all saved benchmark results
 .PHONY: bench-list
