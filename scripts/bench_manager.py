@@ -388,8 +388,8 @@ class BenchmarkManager:
             
             print(f"{color}{commit[:8]}{NC}  {branch:20} {dt.strftime('%Y-%m-%d'):16} {dt.strftime('%H:%M'):8} {count:>6}  {pkg_display}")
         
-        print(f"\n{CYAN}ℹ Usage: make bench-compare BASE_COMMIT CURRENT_COMMIT{NC}")
-        print(f"{CYAN}Example: make bench-compare {rows[-1][0][:8]} {rows[0][0][:8]}{NC}\n")
+        print(f"\n{CYAN}ℹ Usage: make bench/compare BASE_COMMIT CURRENT_COMMIT{NC}")
+        print(f"{CYAN}Example: make bench/compare {rows[-1][0][:8]} {rows[0][0][:8]}{NC}\n")
 
     def close(self):
         """Close database connection."""
