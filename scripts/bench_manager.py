@@ -63,17 +63,22 @@ class BenchmarkManager:
     def get_current_commit(self) -> Tuple[str, str, bool]:
         """Get current git commit hash, branch, and dirty status."""
         try:
-            commit_hash = self._get_git_output(["git", "rev-parse", "HEAD"])
-            branch = self._get_git_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+            # Use static commands directly for security
+            commit_hash = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                text=True
+            ).strip()
+            
+            branch = subprocess.check_output(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                text=True
+            ).strip()
+            
             is_dirty = self._check_dirty_status()
             return commit_hash, branch, is_dirty
         except subprocess.CalledProcessError:
             print(f"{RED}Error: Not in a git repository{NC}")
             sys.exit(1)
-
-    def _get_git_output(self, cmd: List[str]) -> str:
-        """Execute git command and return output."""
-        return subprocess.check_output(cmd, text=True).strip()
 
     def _check_dirty_status(self) -> bool:
         """Check if working directory has uncommitted changes."""
