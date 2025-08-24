@@ -1,4 +1,3 @@
-// Package parser provides configuration parsing utilities for various formats.
 package parser
 
 import (
@@ -21,9 +20,17 @@ const (
 	MaxJSONDepth = 100
 )
 
-// JSON is a JSON configuration parser that flattens nested
-// structures into a flat key-value map with dot-separated keys.
-// It supports all JSON types including arrays and nested objects.
+// JSON implements a high-performance JSON configuration parser that flattens
+// nested structures into a flat key-value map with dot-separated keys.
+// It supports all JSON types including arrays, nested objects, and preserves
+// numeric precision using json.Number.
+//
+// Features:
+//   - Zero-copy parsing with bytes.Reader
+//   - Stack-based iteration to avoid recursion overhead
+//   - Pre-allocated data structures for performance
+//   - Protection against malicious inputs (size and depth limits)
+//   - Precise number handling without floating-point errors
 //
 // Example:
 //
@@ -110,8 +117,9 @@ func (j *JSON) LoadReader(r io.Reader) (map[string]string, error) {
 	return j.LoadBytes(data)
 }
 
-// fastFloat64ToString converts float64 to string.
-// Integers are formatted without decimal points.
+// fastFloat64ToString converts float64 to string with optimal formatting.
+// Integers are formatted without decimal points to maintain readability.
+// Uses 'g' format for automatic precision selection on floating-point values.
 func fastFloat64ToString(f float64) string {
 	if f == float64(int64(f)) {
 		return strconv.FormatInt(int64(f), 10)
@@ -119,8 +127,9 @@ func fastFloat64ToString(f float64) string {
 	return strconv.FormatFloat(f, 'g', -1, 64)
 }
 
-// normalizeJSONNumber converts json.Number to string.
-// Preserves the exact textual representation to avoid precision loss.
+// normalizeJSONNumber converts json.Number to string while preserving precision.
+// Returns the original string representation to avoid floating-point errors
+// with large integers or precise decimal values.
 func normalizeJSONNumber(n json.Number) string {
 	// Return the original string representation to preserve precision
 	// This avoids issues with large integers or precise decimals
@@ -170,7 +179,9 @@ func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
 	return j.processConfig(config, len(data))
 }
 
-// processConfig converts the parsed JSON config to a flat string map
+// processConfig converts the parsed JSON config to a flat string map.
+// Uses stack-based iteration for better performance and memory efficiency
+// compared to recursive approaches.
 func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]string, error) {
 	// Better size estimation: ~1 key per 30 bytes of JSON
 	estimatedSize := max(dataSize/30, 16)
@@ -261,7 +272,8 @@ func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]st
 }
 
 // normalizeAnyValue converts any JSON value type to its string representation.
-// Handles all JSON types including those from Decoder.UseNumber().
+// Handles all JSON types including json.Number from Decoder.UseNumber(),
+// ensuring type safety and consistent string conversion.
 func normalizeAnyValue(v any) string {
 	switch val := v.(type) {
 	case string:

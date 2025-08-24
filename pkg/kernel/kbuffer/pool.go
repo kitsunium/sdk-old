@@ -7,14 +7,23 @@ import (
 	"sync/atomic"
 )
 
-// Pool size class boundaries
+// Pool size class boundaries for efficient memory allocation.
+// Uses power-of-2 sizes to minimize fragmentation and improve cache locality.
 const (
 	minPoolSize = 64      // Minimum pooled buffer size
 	maxPoolSize = 1 << 20 // Maximum pooled buffer size (1MB)
 )
 
-// BufferPool implements a lock-free, size-classed buffer pool.
-// Uses sync.Pool internally with power-of-2 size classes for efficiency.
+// BufferPool implements a lock-free, size-classed buffer pool for high-performance buffer reuse.
+//
+// The pool uses sync.Pool internally with power-of-2 size classes for efficiency:
+//   - Reduces GC pressure by reusing buffers
+//   - Minimizes memory fragmentation with size classes
+//   - Provides lock-free access to pooled buffers
+//   - Supports configuration for security-sensitive use cases
+//
+// Size classes range from 64 bytes (2^6) to 1MB (2^20), providing efficient
+// allocation for a wide range of buffer sizes commonly used in kernel operations.
 type BufferPool struct {
 	pools [21]*sync.Pool // Power-of-2 pools from 2^6 to 2^20
 
@@ -23,9 +32,19 @@ type BufferPool struct {
 	maxSize    atomic.Int64 // Maximum pooled size
 }
 
-// globalPool is the singleton pool instance.
+// globalPool is the singleton pool instance used by package-level functions.
+// Initialized once at package load time and shared across all users of the package.
 var globalPool = newPool()
 
+// newPool creates and initializes a new BufferPool with default configuration.
+//
+// The pool is initialized with:
+//   - 21 size classes from 64 bytes to 1MB
+//   - Pre-warmed pools for common sizes
+//   - Maximum size limit of 1MB
+//   - Buffer clearing disabled by default for performance
+//
+// Returns a fully initialized BufferPool ready for use.
 func newPool() *BufferPool {
 	p := &BufferPool{}
 	p.maxSize.Store(maxPoolSize)
