@@ -25,3 +25,13 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+go_test(
+    name = "kcache_bench_test",
+    srcs = ["cache_bench_test.go"],
+    embed = [":kcache"],
+    tags = [
+        "bench",
+        "manual",
+    ],
+)

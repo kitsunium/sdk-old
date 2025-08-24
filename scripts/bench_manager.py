@@ -56,8 +56,8 @@ class BenchmarkManager:
         
         self.conn.commit()
 
-    def get_current_commit(self) -> Tuple[str, str]:
-        """Get current git commit hash and branch."""
+    def get_current_commit(self) -> Tuple[str, str, bool]:
+        """Get current git commit hash, branch, and dirty status."""
         try:
             commit_hash = subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], 
@@ -69,10 +69,34 @@ class BenchmarkManager:
                 text=True
             ).strip()
             
-            return commit_hash, branch
+            # Check if working directory is dirty (has uncommitted changes)
+            try:
+                subprocess.check_output(
+                    ["git", "diff-index", "--quiet", "HEAD", "--"],
+                    stderr=subprocess.DEVNULL
+                )
+                is_dirty = False
+            except subprocess.CalledProcessError:
+                is_dirty = True
+            
+            return commit_hash, branch, is_dirty
         except subprocess.CalledProcessError:
             print(f"{RED}Error: Not in a git repository{NC}")
             sys.exit(1)
+    
+    def get_main_commit(self) -> Optional[str]:
+        """Get the most recent commit hash from main branch with saved benchmarks."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT commit_hash 
+            FROM benchmarks 
+            WHERE branch = 'main' 
+            GROUP BY commit_hash
+            ORDER BY timestamp DESC 
+            LIMIT 1
+        """)
+        result = cursor.fetchone()
+        return result[0] if result else None
 
     def parse_benchmark_output(self, output: str, package: str) -> List[Dict]:
         """Parse benchmark output from Go test format."""
@@ -144,7 +168,7 @@ class BenchmarkManager:
                     [
                         "bazel", "run", target, "--",
                         "-test.bench=.", "-test.benchmem",
-                        "-test.benchtime=1s", "-test.run=^$"
+                        "-test.benchtime=100ms", "-test.run=^$"
                     ],
                     stderr=subprocess.STDOUT,
                     text=True
@@ -165,9 +189,15 @@ class BenchmarkManager:
         
         return results
 
-    def save_results(self, results: Dict[str, str], commit_hash: str, branch: str):
+    def save_results(self, results: Dict[str, str], commit_hash: str, branch: str, is_dirty: bool = False):
         """Save benchmark results to database."""
         cursor = self.conn.cursor()
+        
+        # Use "current" as commit hash for uncommitted changes
+        save_hash = "current" if is_dirty else commit_hash
+        
+        # Delete existing results for this commit (replace instead of append)
+        cursor.execute("DELETE FROM benchmarks WHERE commit_hash = ?", (save_hash,))
         
         for package, output in results.items():
             if not output:
@@ -183,7 +213,7 @@ class BenchmarkManager:
                         bytes_per_op, allocs_per_op, raw_output
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    commit_hash, branch, result['package'], result['test_name'],
+                    save_hash, branch, result['package'], result['test_name'],
                     result['iterations'], result['ns_per_op'], result['mb_per_sec'],
                     result['bytes_per_op'], result['allocs_per_op'], result['raw_output']
                 ))
@@ -368,6 +398,20 @@ class BenchmarkManager:
         for i, (commit, branch, timestamp, count, packages) in enumerate(rows):
             dt = datetime.fromisoformat(timestamp)
             
+            # Special handling for "current" commit
+            if commit == "current":
+                commit_display = f"{YELLOW}current{NC}  "
+                color = YELLOW
+            else:
+                # Color code recent commits
+                if i == 0:
+                    color = GREEN  # Most recent
+                elif i < 5:
+                    color = CYAN   # Recent
+                else:
+                    color = ""     # Older
+                commit_display = f"{color}{commit[:8]}{NC}"
+            
             # Truncate branch name if too long
             if len(branch) > 18:
                 branch = branch[:15] + "..."
@@ -378,15 +422,7 @@ class BenchmarkManager:
             if len(pkg_list) > 3:
                 pkg_display += f" (+{len(pkg_list)-3} more)"
             
-            # Color code recent commits
-            if i == 0:
-                color = GREEN  # Most recent
-            elif i < 5:
-                color = CYAN   # Recent
-            else:
-                color = ""     # Older
-            
-            print(f"{color}{commit[:8]}{NC}  {branch:20} {dt.strftime('%Y-%m-%d'):16} {dt.strftime('%H:%M'):8} {count:>6}  {pkg_display}")
+            print(f"{commit_display}  {branch:20} {dt.strftime('%Y-%m-%d'):16} {dt.strftime('%H:%M'):8} {count:>6}  {pkg_display}")
         
         print(f"\n{CYAN}ℹ Usage: make bench/compare BASE_COMMIT CURRENT_COMMIT{NC}")
         print(f"{CYAN}Example: make bench/compare {rows[-1][0][:8]} {rows[0][0][:8]}{NC}\n")
@@ -406,9 +442,9 @@ def main():
     save_parser.add_argument('--targets', nargs='*', help='Specific targets to benchmark')
     
     # Compare command  
-    compare_parser = subparsers.add_parser('compare', help='Compare benchmark results between two commits')
-    compare_parser.add_argument('base', help='Base commit hash (from bench-list)')
-    compare_parser.add_argument('current', help='Current commit hash (from bench-list)')
+    compare_parser = subparsers.add_parser('compare', help='Compare benchmark results')
+    compare_parser.add_argument('base', nargs='?', help='Base commit hash (default: main branch)')
+    compare_parser.add_argument('current', nargs='?', help='Current commit hash (default: current HEAD)')
     
     # List command
     list_parser = subparsers.add_parser('list', help='List saved benchmark results')
@@ -427,16 +463,38 @@ def main():
     
     try:
         if args.command == 'save':
-            commit_hash, branch = manager.get_current_commit()
-            print(f"{YELLOW}▶ Running benchmarks for commit: {commit_hash[:8]} ({branch}){NC}")
+            commit_hash, branch, is_dirty = manager.get_current_commit()
+            if is_dirty:
+                print(f"{YELLOW}▶ Running benchmarks for uncommitted changes (current) on {branch}{NC}")
+            else:
+                print(f"{YELLOW}▶ Running benchmarks for commit: {commit_hash[:8]} ({branch}){NC}")
             results = manager.run_benchmarks(args.targets)
             if results:
-                manager.save_results(results, commit_hash, branch)
+                manager.save_results(results, commit_hash, branch, is_dirty)
             else:
                 print(f"{RED}No benchmark results collected{NC}")
         
         elif args.command == 'compare':
-            manager.compare_commits(args.base, args.current)
+            # Determine which commits to compare
+            if args.base is None:
+                # No arguments: compare current with main
+                commit_hash, _, is_dirty = manager.get_current_commit()
+                current_hash = "current" if is_dirty else commit_hash
+                base_hash = manager.get_main_commit()
+                if base_hash is None:
+                    print(f"{RED}Error: No benchmarks found for main branch{NC}")
+                    sys.exit(1)
+            elif args.current is None:
+                # One argument: compare current with specified commit
+                commit_hash, _, is_dirty = manager.get_current_commit()
+                current_hash = "current" if is_dirty else commit_hash
+                base_hash = args.base
+            else:
+                # Two arguments: compare two specified commits
+                base_hash = args.base
+                current_hash = args.current
+            
+            manager.compare_commits(base_hash, current_hash)
         
         elif args.command == 'list':
             manager.list_commits(args.limit)
