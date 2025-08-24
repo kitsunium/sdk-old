@@ -34,8 +34,6 @@ config.yml
 # Database
 *.db
 *.sqlite
-# But keep benchmark database
-!benchmarks.sqlite
 
 # OS
 .DS_Store
