@@ -5,3 +5,4 @@ exclude_paths:
   - "bazel-*/**"
   - ".git/**"
   - "vendor/**"
+  - "**/*.md"
