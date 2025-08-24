@@ -189,26 +189,32 @@ func (i *INI) trimBytes(b []byte) []byte {
 }
 
 func (i *INI) trimLeftBytes(b []byte) []byte {
-	for len(b) > 0 && i.isWhitespaceINI(b[0]) {
+	for len(b) > 0 && i.isTrimWhitespace(b[0]) {
 		b = b[1:]
 	}
 	return b
 }
 
 func (i *INI) trimRightBytes(b []byte) []byte {
-	for len(b) > 0 && i.isWhitespaceINI(b[len(b)-1]) {
+	for len(b) > 0 && i.isTrimWhitespace(b[len(b)-1]) {
 		b = b[:len(b)-1]
 	}
 	return b
 }
 
-func (i *INI) isWhitespaceINI(ch byte) bool {
+// isTrimWhitespace checks if a byte is whitespace for trimming (space, tab, carriage return)
+func (i *INI) isTrimWhitespace(ch byte) bool {
 	return ch == ' ' || ch == '\t' || ch == '\r'
 }
 
-// trimRight removes trailing whitespace from bytes.
+// isLineEndWhitespace checks if a byte is line-end whitespace (space, tab only)
+func (i *INI) isLineEndWhitespace(ch byte) bool {
+	return ch == ' ' || ch == '\t'
+}
+
+// trimRight removes trailing whitespace from bytes (excludes \r).
 func (i *INI) trimRight(b []byte) []byte {
-	for len(b) > 0 && (b[len(b)-1] == ' ' || b[len(b)-1] == '\t') {
+	for len(b) > 0 && i.isLineEndWhitespace(b[len(b)-1]) {
 		b = b[:len(b)-1]
 	}
 	return b
