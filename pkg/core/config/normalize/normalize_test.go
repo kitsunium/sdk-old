@@ -16,6 +16,12 @@ func TestKey(t *testing.T) {
 		{"MIXED_CASE_KEY", "mixed.case.key"},
 		{"", ""},
 		{"a_b_c_d", "a.b.c.d"},
+		// Edge cases to ensure prefix is preserved
+		{"_leading", ".leading"},
+		{"__double", "..double"},
+		{"ABC_DEF", "abc.def"},
+		{"123_test", "123.test"}, // Numbers should be preserved
+		{"@#$_test", "@#$.test"}, // Special chars should be preserved
 	}
 
 	for _, tt := range tests {
