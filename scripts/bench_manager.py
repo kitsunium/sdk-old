@@ -168,7 +168,7 @@ class BenchmarkManager:
                     [
                         "bazel", "run", target, "--",
                         "-test.bench=.", "-test.benchmem",
-                        "-test.benchtime=100ms", "-test.run=^$"
+                        "-test.benchtime=10ms", "-test.run=^$"
                     ],
                     stderr=subprocess.STDOUT,
                     text=True
@@ -198,6 +198,11 @@ class BenchmarkManager:
         
         # Delete existing results for this commit (replace instead of append)
         cursor.execute("DELETE FROM benchmarks WHERE commit_hash = ?", (save_hash,))
+        
+        # If we're saving a clean commit, also delete any "current" results
+        # as they are now outdated
+        if not is_dirty:
+            cursor.execute("DELETE FROM benchmarks WHERE commit_hash = 'current'")
         
         for package, output in results.items():
             if not output:
