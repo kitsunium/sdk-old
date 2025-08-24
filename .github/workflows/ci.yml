@@ -366,7 +366,7 @@ jobs:
           echo "✅ Benchmarks database ready"
 
       - name: 🚀 Create/Update BENCH Release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@2c591bcc8ecdcd2db72b97d6147f871fcd833ba5 # v1.14.0
         with:
           allowUpdates: true
           artifacts: "benchmarks.sqlite"
