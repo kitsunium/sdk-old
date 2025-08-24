@@ -119,52 +119,64 @@ func (p *BufferPool) Put(buf []byte) {
 
 	capacity := cap(buf)
 
-	// Clear if configured (for security) - do this before fast path
+	// Clear if configured (for security)
 	if p.clearOnPut.Load() {
-		clear(buf[:cap(buf)])
+		clear(buf[:capacity])
 	}
 
-	// Fast path for common sizes
+	// Try fast path first
+	if poolIdx := p.tryFastPath(buf, capacity); poolIdx >= 0 {
+		return
+	}
+
+	// Slow path for other sizes
+	p.putSlowPath(buf, capacity)
+}
+
+func (p *BufferPool) tryFastPath(buf []byte, capacity int) int {
+	// Fast lookup table for common sizes
 	switch capacity {
 	case 64:
 		buf = buf[:64]
 		p.pools[0].Put(&buf)
-		return
+		return 0
 	case 128:
 		buf = buf[:128]
 		p.pools[1].Put(&buf)
-		return
+		return 1
 	case 256:
 		buf = buf[:256]
 		p.pools[2].Put(&buf)
-		return
+		return 2
 	case 512:
 		buf = buf[:512]
 		p.pools[3].Put(&buf)
-		return
+		return 3
 	case 1024:
 		buf = buf[:1024]
 		p.pools[4].Put(&buf)
-		return
+		return 4
 	case 2048:
 		buf = buf[:2048]
 		p.pools[5].Put(&buf)
-		return
+		return 5
 	case 4096:
 		buf = buf[:4096]
 		p.pools[6].Put(&buf)
+		return 6
+	default:
+		return -1
+	}
+}
+
+func (p *BufferPool) putSlowPath(buf []byte, capacity int) {
+	// Check size constraints
+	if !p.isPoolable(capacity) {
 		return
 	}
 
-	// Don't pool oversized or non-power-of-2 buffers
-	if capacity > int(p.maxSize.Load()) || !isPowerOf2(capacity) {
-		return
-	}
-
-	// Calculate pool index for larger sizes
-	class := bits.Len(uint(capacity)) - 1
-	poolIdx := class - 6
-
+	// Calculate pool index
+	poolIdx := p.getPoolIndex(capacity)
 	if poolIdx < 0 || poolIdx >= len(p.pools) {
 		return
 	}
@@ -172,6 +184,14 @@ func (p *BufferPool) Put(buf []byte) {
 	// Reset to full capacity and return to pool
 	buf = buf[:capacity]
 	p.pools[poolIdx].Put(&buf)
+}
+
+func (p *BufferPool) isPoolable(capacity int) bool {
+	return capacity <= int(p.maxSize.Load()) && isPowerOf2(capacity)
+}
+
+func (p *BufferPool) getPoolIndex(capacity int) int {
+	return bits.Len(uint(capacity)) - 1 - 6
 }
 
 // GetBuffer retrieves a Buffer from the pool.

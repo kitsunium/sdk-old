@@ -79,7 +79,7 @@ func (b *Buffer) Write(p []byte) (int, error) {
 
 	// Use unsafe for zero-copy operation
 	// SAFETY: Bounds checked above (available = cap - pos), prevents overflow
-	dst := unsafe.Slice(&b.data[b.pos], available) // codacy-ignore
+	dst := unsafe.Slice(&b.data[b.pos], available)
 	copy(dst, p)
 	b.pos += int32(n)
 	return n, nil
@@ -103,8 +103,8 @@ func (b *Buffer) WriteString(s string) (int, error) {
 
 	// Zero-allocation string write using unsafe
 	// SAFETY: String length n and buffer available space checked above
-	src := unsafe.Slice(unsafe.StringData(s), n)   // codacy-ignore
-	dst := unsafe.Slice(&b.data[b.pos], available) // codacy-ignore
+	src := unsafe.Slice(unsafe.StringData(s), n)
+	dst := unsafe.Slice(&b.data[b.pos], available)
 	copy(dst, src)
 	b.pos += int32(n)
 	return n, nil
@@ -180,7 +180,7 @@ func (b *Buffer) String() string {
 		return ""
 	}
 	// SAFETY: pos is bounded by buffer capacity, data[0:pos] is valid
-	return unsafe.String(&b.data[0], int(b.pos)) // codacy-ignore
+	return unsafe.String(&b.data[0], int(b.pos))
 }
 
 // Len returns the number of bytes written.
