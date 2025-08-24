@@ -191,146 +191,205 @@ class BenchmarkManager:
         self.conn.commit()
         print(f"{GREEN}✓ Results saved to {self.db_path}{NC}")
 
-    def compare_results(self, targets: Optional[List[str]] = None, base_commit: Optional[str] = None):
-        """Run benchmarks and compare with previous results."""
-        current_commit, current_branch = self.get_current_commit()
+    def compare_commits(self, base_commit: str, current_commit: str):
+        """Compare benchmark results between two specific commits."""
+        cursor = self.conn.cursor()
         
-        # Run current benchmarks
-        print(f"{YELLOW}▶ Running benchmarks for current commit: {current_commit[:8]}{NC}")
-        current_results = self.run_benchmarks(targets)
+        # Validate both commits exist in database
+        cursor.execute("""
+            SELECT COUNT(DISTINCT commit_hash) 
+            FROM benchmarks 
+            WHERE commit_hash LIKE ? OR commit_hash LIKE ?
+        """, (base_commit + '%', current_commit + '%'))
         
-        if not current_results:
-            print(f"{RED}No benchmark results to compare{NC}")
-            return
+        count = cursor.fetchone()[0]
+        if count < 2:
+            print(f"{RED}❌ Error: Both commits must have saved benchmark results{NC}")
+            print(f"\nChecking commits:")
+            
+            # Check base commit
+            cursor.execute("SELECT commit_hash FROM benchmarks WHERE commit_hash LIKE ? LIMIT 1", (base_commit + '%',))
+            base_result = cursor.fetchone()
+            if base_result:
+                print(f"  {GREEN}✓{NC} Base commit {base_commit} found: {base_result[0][:8]}")
+            else:
+                print(f"  {RED}✗{NC} Base commit {base_commit} not found")
+            
+            # Check current commit  
+            cursor.execute("SELECT commit_hash FROM benchmarks WHERE commit_hash LIKE ? LIMIT 1", (current_commit + '%',))
+            current_result = cursor.fetchone()
+            if current_result:
+                print(f"  {GREEN}✓{NC} Current commit {current_commit} found: {current_result[0][:8]}")
+            else:
+                print(f"  {RED}✗{NC} Current commit {current_commit} not found")
+            
+            print(f"\n{YELLOW}Run 'make bench-list' to see available commits{NC}")
+            print(f"{YELLOW}Run 'make bench-save' to save current benchmark results{NC}")
+            sys.exit(1)
         
-        # Get base commit for comparison
-        if base_commit is None:
-            # Try to find the latest saved results
-            cursor = self.conn.cursor()
-            cursor.execute("""
-                SELECT DISTINCT commit_hash 
-                FROM benchmarks 
-                WHERE commit_hash != ?
-                ORDER BY timestamp DESC 
-                LIMIT 1
-            """, (current_commit,))
-            row = cursor.fetchone()
-            base_commit = row[0] if row else None
+        # Get full commit hashes
+        cursor.execute("SELECT DISTINCT commit_hash FROM benchmarks WHERE commit_hash LIKE ? LIMIT 1", (base_commit + '%',))
+        base_full = cursor.fetchone()[0]
         
-        if not base_commit:
-            print(f"{YELLOW}No previous results found for comparison{NC}")
-            print(f"{YELLOW}Saving current results for future comparisons{NC}")
-            self.save_results(current_results, current_commit, current_branch)
-            return
+        cursor.execute("SELECT DISTINCT commit_hash FROM benchmarks WHERE commit_hash LIKE ? LIMIT 1", (current_commit + '%',))
+        current_full = cursor.fetchone()[0]
         
         # Compare results
         print(f"\n{BLUE}{'='*80}{NC}")
         print(f"{BLUE}Benchmark Comparison{NC}")
-        print(f"{BLUE}Base:    {base_commit[:8]}{NC}")
-        print(f"{BLUE}Current: {current_commit[:8]} ({current_branch}){NC}")
+        print(f"{BLUE}Base:    {base_full[:8]}{NC}")
+        print(f"{BLUE}Current: {current_full[:8]}{NC}")
         print(f"{BLUE}{'='*80}{NC}\n")
         
-        cursor = self.conn.cursor()
+        # Get all benchmarks from both commits
+        cursor.execute("""
+            SELECT DISTINCT package, test_name
+            FROM benchmarks
+            WHERE commit_hash IN (?, ?)
+            ORDER BY package, test_name
+        """, (base_full, current_full))
         
-        for package, output in current_results.items():
-            current_benchmarks = self.parse_benchmark_output(output, package)
-            
-            print(f"{CYAN}Package: {package}{NC}")
-            print("-" * 70)
-            
-            for bench in current_benchmarks:
-                # Get baseline result
-                cursor.execute("""
-                    SELECT ns_per_op, mb_per_sec, bytes_per_op, allocs_per_op
-                    FROM benchmarks
-                    WHERE commit_hash = ? AND package = ? AND test_name = ?
-                    ORDER BY timestamp DESC
-                    LIMIT 1
-                """, (base_commit, package, bench['test_name']))
-                
-                baseline = cursor.fetchone()
-                
-                if baseline:
-                    base_ns, base_mb, base_bytes, base_allocs = baseline
-                    
-                    # Calculate changes
-                    ns_change = ((bench['ns_per_op'] - base_ns) / base_ns) * 100 if base_ns else 0
-                    
-                    # Format test name
-                    test_display = bench['test_name'].replace('Benchmark', '')
-                    if len(test_display) > 40:
-                        test_display = test_display[:37] + "..."
-                    
-                    print(f"  {test_display:40}", end=" ")
-                    
-                    # Show ns/op with change
-                    ns_color = GREEN if ns_change < 0 else RED if ns_change > 0 else NC
-                    ns_symbol = "↓" if ns_change < 0 else "↑" if ns_change > 0 else "="
-                    print(f"{bench['ns_per_op']:8.2f} ns/op ", end="")
-                    print(f"{ns_color}{ns_symbol}{abs(ns_change):6.1f}%{NC}", end="  ")
-                    
-                    # Show MB/s if available
-                    if bench['mb_per_sec'] and base_mb:
-                        mb_change = ((bench['mb_per_sec'] - base_mb) / base_mb) * 100
-                        mb_color = GREEN if mb_change > 0 else RED if mb_change < 0 else NC
-                        mb_symbol = "↑" if mb_change > 0 else "↓" if mb_change < 0 else "="
-                        print(f"{bench['mb_per_sec']:8.1f} MB/s ", end="")
-                        print(f"{mb_color}{mb_symbol}{abs(mb_change):5.1f}%{NC}", end="  ")
-                    
-                    # Show allocations if changed
-                    if bench['allocs_per_op'] != base_allocs:
-                        alloc_diff = bench['allocs_per_op'] - base_allocs
-                        alloc_color = GREEN if alloc_diff < 0 else RED
-                        alloc_symbol = "+" if alloc_diff > 0 else ""
-                        print(f"{alloc_color}allocs: {alloc_symbol}{alloc_diff}{NC}", end="")
-                    
-                    print()  # New line
-                    
-                else:
-                    # New benchmark
-                    test_display = bench['test_name'].replace('Benchmark', '')
-                    if len(test_display) > 40:
-                        test_display = test_display[:37] + "..."
-                    print(f"  {test_display:40} {YELLOW}[NEW]{NC}")
-                    print(f"    {bench['ns_per_op']:.2f} ns/op", end="")
-                    if bench['mb_per_sec']:
-                        print(f"  {bench['mb_per_sec']:.1f} MB/s", end="")
-                    if bench['bytes_per_op']:
-                        print(f"  {bench['bytes_per_op']} B/op", end="")
-                    if bench['allocs_per_op']:
-                        print(f"  {bench['allocs_per_op']} allocs/op", end="")
-                    print()
-            
-            print()
+        all_tests = cursor.fetchall()
+        current_package = None
         
-        # Save current results
-        self.save_results(current_results, current_commit, current_branch)
+        for package, test_name in all_tests:
+            # Print package header when it changes
+            if package != current_package:
+                if current_package is not None:
+                    print()  # Space between packages
+                print(f"{CYAN}Package: {package}{NC}")
+                print("-" * 100)
+                current_package = package
+            
+            # Get base results
+            cursor.execute("""
+                SELECT ns_per_op, mb_per_sec, bytes_per_op, allocs_per_op
+                FROM benchmarks
+                WHERE commit_hash = ? AND package = ? AND test_name = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+            """, (base_full, package, test_name))
+            base_result = cursor.fetchone()
+            
+            # Get current results
+            cursor.execute("""
+                SELECT ns_per_op, mb_per_sec, bytes_per_op, allocs_per_op
+                FROM benchmarks
+                WHERE commit_hash = ? AND package = ? AND test_name = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+            """, (current_full, package, test_name))
+            current_result = cursor.fetchone()
+            
+            # Format test name
+            test_display = test_name.replace('Benchmark', '')
+            if len(test_display) > 35:
+                test_display = test_display[:32] + "..."
+            
+            print(f"  {test_display:35}", end=" ")
+            
+            if base_result and current_result:
+                base_ns, base_mb, base_bytes, base_allocs = base_result
+                curr_ns, curr_mb, curr_bytes, curr_allocs = current_result
+                
+                # Show ns/op comparison
+                ns_change = ((curr_ns - base_ns) / base_ns) * 100 if base_ns else 0
+                ns_color = GREEN if ns_change < 0 else RED if ns_change > 0 else NC
+                ns_symbol = "↓" if ns_change < 0 else "↑" if ns_change > 0 else "="
+                
+                print(f"{base_ns:7.2f} → {curr_ns:7.2f} ns/op ", end="")
+                print(f"{ns_color}{ns_symbol}{abs(ns_change):5.1f}%{NC}", end="  ")
+                
+                # Show MB/s comparison if available
+                if base_mb and curr_mb:
+                    mb_change = ((curr_mb - base_mb) / base_mb) * 100
+                    mb_color = GREEN if mb_change > 0 else RED if mb_change < 0 else NC
+                    mb_symbol = "↑" if mb_change > 0 else "↓" if mb_change < 0 else "="
+                    
+                    print(f"{base_mb:8.1f} → {curr_mb:8.1f} MB/s ", end="")
+                    print(f"{mb_color}{mb_symbol}{abs(mb_change):5.1f}%{NC}", end="")
+                
+                # Show allocation changes if different
+                if base_allocs != curr_allocs:
+                    alloc_diff = curr_allocs - base_allocs
+                    alloc_color = GREEN if alloc_diff < 0 else RED
+                    print(f"  {alloc_color}allocs: {base_allocs} → {curr_allocs}{NC}", end="")
+                
+            elif base_result and not current_result:
+                # Test removed in current
+                print(f"{RED}[REMOVED]{NC} - was {base_result[0]:.2f} ns/op", end="")
+                
+            elif not base_result and current_result:
+                # Test added in current
+                curr_ns, curr_mb, curr_bytes, curr_allocs = current_result
+                print(f"{YELLOW}[NEW]{NC} - {curr_ns:.2f} ns/op", end="")
+                if curr_mb:
+                    print(f"  {curr_mb:.1f} MB/s", end="")
+                if curr_allocs:
+                    print(f"  {curr_allocs} allocs/op", end="")
+            
+            print()  # New line
+        
+        print()
         
         print(f"{BLUE}{'='*80}{NC}")
         print(f"{GREEN}✓ Comparison complete and results saved{NC}")
 
-    def list_commits(self):
-        """List all commits with saved benchmarks."""
+    def list_commits(self, limit: int = 25):
+        """List commits with saved benchmarks."""
         cursor = self.conn.cursor()
         cursor.execute("""
-            SELECT DISTINCT commit_hash, branch, timestamp, COUNT(*) as bench_count
-            FROM benchmarks
-            GROUP BY commit_hash
-            ORDER BY timestamp DESC
-        """)
+            SELECT DISTINCT 
+                b.commit_hash, 
+                b.branch, 
+                b.timestamp, 
+                COUNT(*) as bench_count,
+                GROUP_CONCAT(DISTINCT b.package) as packages
+            FROM benchmarks b
+            GROUP BY b.commit_hash
+            ORDER BY b.timestamp DESC
+            LIMIT ?
+        """, (limit,))
         
         rows = cursor.fetchall()
         
         if not rows:
-            print(f"{YELLOW}No benchmark results found{NC}")
+            print(f"{RED}❌ No benchmark results found{NC}")
+            print(f"{YELLOW}Run 'make bench-save' to save benchmark results{NC}")
             return
         
-        print(f"{BLUE}Saved benchmark results:{NC}")
+        print(f"\n{BLUE}{'='*80}{NC}")
+        print(f"{BLUE}Saved Benchmark Results (Last {min(len(rows), limit)} commits){NC}")
+        print(f"{BLUE}{'='*80}{NC}\n")
+        
+        print(f"{'Commit':10} {'Branch':20} {'Date':16} {'Time':8} {'Tests':>6}  Packages")
         print("-" * 80)
         
-        for commit, branch, timestamp, count in rows:
+        for i, (commit, branch, timestamp, count, packages) in enumerate(rows):
             dt = datetime.fromisoformat(timestamp)
-            print(f"  {commit[:8]}  {branch:15}  {dt.strftime('%Y-%m-%d %H:%M')}  {count} benchmarks")
+            
+            # Truncate branch name if too long
+            if len(branch) > 18:
+                branch = branch[:15] + "..."
+            
+            # Format packages list
+            pkg_list = packages.split(',') if packages else []
+            pkg_display = ', '.join([p.split('/')[-1] for p in pkg_list[:3]])
+            if len(pkg_list) > 3:
+                pkg_display += f" (+{len(pkg_list)-3} more)"
+            
+            # Color code recent commits
+            if i == 0:
+                color = GREEN  # Most recent
+            elif i < 5:
+                color = CYAN   # Recent
+            else:
+                color = ""     # Older
+            
+            print(f"{color}{commit[:8]}{NC}  {branch:20} {dt.strftime('%Y-%m-%d'):16} {dt.strftime('%H:%M'):8} {count:>6}  {pkg_display}")
+        
+        print(f"\n{CYAN}ℹ Usage: make bench-compare BASE_COMMIT CURRENT_COMMIT{NC}")
+        print(f"{CYAN}Example: make bench-compare {rows[-1][0][:8]} {rows[0][0][:8]}{NC}\n")
 
     def close(self):
         """Close database connection."""
@@ -346,13 +405,14 @@ def main():
     save_parser = subparsers.add_parser('save', help='Run benchmarks and save results')
     save_parser.add_argument('--targets', nargs='*', help='Specific targets to benchmark')
     
-    # Compare command
-    compare_parser = subparsers.add_parser('compare', help='Run benchmarks and compare with previous results')
-    compare_parser.add_argument('--base', help='Base commit to compare against')
-    compare_parser.add_argument('--targets', nargs='*', help='Specific targets to benchmark')
+    # Compare command  
+    compare_parser = subparsers.add_parser('compare', help='Compare benchmark results between two commits')
+    compare_parser.add_argument('base', help='Base commit hash (from bench-list)')
+    compare_parser.add_argument('current', help='Current commit hash (from bench-list)')
     
     # List command
     list_parser = subparsers.add_parser('list', help='List saved benchmark results')
+    list_parser.add_argument('--limit', type=int, default=25, help='Number of commits to display (default: 25)')
     
     # Database path option
     parser.add_argument('--db', default='benchmarks.sqlite', help='Path to SQLite database')
@@ -376,10 +436,10 @@ def main():
                 print(f"{RED}No benchmark results collected{NC}")
         
         elif args.command == 'compare':
-            manager.compare_results(args.targets, args.base)
+            manager.compare_commits(args.base, args.current)
         
         elif args.command == 'list':
-            manager.list_commits()
+            manager.list_commits(args.limit)
     
     finally:
         manager.close()
