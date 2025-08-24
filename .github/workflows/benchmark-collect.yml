@@ -1,0 +1,150 @@
+name: Collect Benchmarks
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'benchmarks.sqlite'
+      - '.github/workflows/benchmark-collect.yml'
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: 1.24.6
+  BAZEL_VERSION: 7.0.0
+
+jobs:
+  collect-benchmarks:
+    name: 📊 Collect and Store Benchmarks
+    runs-on: ubuntu-latest
+    if: |
+      !contains(github.event.head_commit.message, '[skip ci]') && 
+      !contains(github.event.head_commit.message, '[benchmark-bot]') &&
+      github.actor != 'github-actions[bot]'
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: 🏗️ Setup Bazel
+        uses: bazel-contrib/setup-bazel@4fd964a13a440a8aeb0be47350db2fc640f19ca8 # v0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 📦 Download dependencies
+        run: |
+          echo "📦 Downloading Go modules..."
+          go mod download
+          go mod verify
+
+      - name: ⚡ Run and save benchmarks
+        run: |
+          echo "⚡ Running benchmarks for commit ${{ github.sha }}..."
+          make bench/save
+          echo "✅ Benchmarks saved successfully"
+
+      - name: 🔧 Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: 📤 Commit and push benchmark data
+        run: |
+          # Check if benchmarks.sqlite has changed
+          if git diff --exit-code benchmarks.sqlite > /dev/null 2>&1; then
+            echo "ℹ️ No changes to benchmark data"
+            exit 0
+          fi
+          
+          echo "📊 Committing benchmark data..."
+          
+          # Stage the benchmark database
+          git add benchmarks.sqlite
+          
+          # Create commit with skip-ci tag to prevent recursion
+          git commit -m "[benchmark-bot] Update benchmark data [skip ci]" \
+            -m "Automated benchmark collection for commit ${{ github.sha }}"
+          
+          # Force push with lease to be safe
+          git push --force-with-lease origin main
+
+  squash-benchmark-commits:
+    name: 🗜️ Squash Benchmark Commits
+    runs-on: ubuntu-latest
+    needs: collect-benchmarks
+    if: success()
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🔧 Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: 🗜️ Squash benchmark commits
+        run: |
+          # Pull latest changes
+          git pull origin main --rebase
+          
+          # Count consecutive benchmark-bot commits
+          COUNT=0
+          while true; do
+            COMMIT_MSG=$(git log --format=%s -n 1 HEAD~$COUNT 2>/dev/null || echo "")
+            if [[ "$COMMIT_MSG" == *"[benchmark-bot]"* ]]; then
+              COUNT=$((COUNT + 1))
+            else
+              break
+            fi
+          done
+          
+          # Only squash if we have multiple benchmark commits
+          if [ $COUNT -gt 1 ]; then
+            echo "🗜️ Found $COUNT consecutive benchmark commits to squash"
+            
+            # Get the commit before the benchmark commits
+            BASE_COMMIT=$(git rev-parse HEAD~$COUNT)
+            
+            # Save the current benchmark file
+            cp benchmarks.sqlite benchmarks.sqlite.bak
+            
+            # Reset to base commit
+            git reset --hard $BASE_COMMIT
+            
+            # Restore the benchmark file
+            mv benchmarks.sqlite.bak benchmarks.sqlite
+            
+            # Stage and commit
+            git add benchmarks.sqlite
+            git commit -m "[benchmark-bot] Update benchmark data [skip ci]" \
+              -m "Squashed $COUNT automated benchmark collections"
+            
+            # Force push the squashed history
+            git push --force-with-lease origin main
+            
+            echo "✅ Successfully squashed $COUNT benchmark commits"
+          else
+            echo "ℹ️ Only $COUNT benchmark commit(s) found, no squashing needed"
+          fi
