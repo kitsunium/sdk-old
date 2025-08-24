@@ -139,11 +139,19 @@ bench/save: bench/update
 .PHONY: bench/update
 bench/update:
 	@echo "$(YELLOW)▶ Fetching benchmark database from BENCH release...$(NC)"
-	@if curl -s https://api.github.com/repos/$(REPO_PATH)/releases/tags/BENCH | grep -q "benchmarks.sqlite"; then \
+	@RELEASE_INFO=$$(curl -s https://api.github.com/repos/kitsunium/sdk/releases/tags/BENCH); \
+	if echo "$$RELEASE_INFO" | grep -q '"tag_name".*"BENCH"'; then \
 		echo "$(CYAN)→ BENCH release found, downloading benchmarks.sqlite$(NC)"; \
-		curl -sL https://github.com/$(REPO_PATH)/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
-		echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
-		echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
+		ASSET_URL=$$(echo "$$RELEASE_INFO" | grep -o '"browser_download_url".*benchmarks.sqlite"' | cut -d'"' -f4); \
+		if [ -n "$$ASSET_URL" ]; then \
+			curl -sL "$$ASSET_URL" -o benchmarks.sqlite && \
+			echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
+			echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
+		else \
+			curl -sL https://github.com/kitsunium/sdk/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
+			echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
+			echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
+		fi; \
 	else \
 		echo "$(YELLOW)⚠ BENCH release not found, starting with empty database$(NC)"; \
 	fi
