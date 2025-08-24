@@ -44,11 +44,13 @@ help:
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test" "run all tests with Bazel"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/unit" "run unit tests only"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/coverage" "run tests with coverage report"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks for all packages"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench-save" "run benchmarks and save to database"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench-compare" "run benchmarks and compare results"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench-list" "list saved benchmark results"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
+	@echo ''
+	@echo 'Benchmarks:'
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks (output only)"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/save" "run and save benchmark results"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/compare" "compare two benchmark commits"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/list" "list saved benchmark results"
 	@echo ''
 	@echo 'Quality:'
 	@printf "  $(BLUE)%-20s$(NC) %s\n" "quality/analyze" "run complete code analysis"
@@ -126,35 +128,35 @@ bench:
 	done
 	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
 
-## bench-save: run benchmarks and save results to SQLite database
-.PHONY: bench-save
-bench-save:
+## bench/save: run benchmarks and save results to SQLite database
+.PHONY: bench/save
+bench/save:
 	@echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"
 	@python3 scripts/bench_manager.py save
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
-## bench-compare: compare benchmark results between two commits
-.PHONY: bench-compare
-bench-compare:
+## bench/compare: compare benchmark results between two commits
+.PHONY: bench/compare
+bench/compare:
 	@if [ -z "$(word 2,$(MAKECMDGOALS))" ] || [ -z "$(word 3,$(MAKECMDGOALS))" ]; then \
-		echo "$(RED)❌ Error: bench-compare requires two commit arguments$(NC)"; \
-		echo "$(YELLOW)Usage: make bench-compare BASE_COMMIT CURRENT_COMMIT$(NC)"; \
-		echo "$(YELLOW)Example: make bench-compare c96356fb fe57684a$(NC)"; \
+		echo "$(RED)❌ Error: bench/compare requires two commit arguments$(NC)"; \
+		echo "$(YELLOW)Usage: make bench/compare BASE_COMMIT CURRENT_COMMIT$(NC)"; \
+		echo "$(YELLOW)Example: make bench/compare c96356fb fe57684a$(NC)"; \
 		echo ""; \
-		echo "$(CYAN)Run 'make bench-list' to see available commits$(NC)"; \
+		echo "$(CYAN)Run 'make bench/list' to see available commits$(NC)"; \
 		exit 1; \
 	fi
 	@echo "$(YELLOW)▶ Comparing benchmarks between commits...$(NC)"
 	@python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)) $(word 3,$(MAKECMDGOALS))
 	@echo "$(GREEN)✓ Benchmark comparison complete$(NC)"
 
-# Catch the commit arguments for bench-compare
+# Catch the commit arguments for bench/compare
 %:
 	@:
 
-## bench-list: list all saved benchmark results
-.PHONY: bench-list
-bench-list:
+## bench/list: list all saved benchmark results
+.PHONY: bench/list
+bench/list:
 	@python3 scripts/bench_manager.py list
 
 ## deps: download and verify dependencies
