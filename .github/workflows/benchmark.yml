@@ -2,6 +2,7 @@ name: Benchmarks
 
 on:
   workflow_dispatch: # Manual trigger only, no inputs for security
+  # Note: Automatic benchmark collection after merge is handled by benchmark-collect.yml
 
 permissions:
   contents: read
