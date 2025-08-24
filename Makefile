@@ -130,22 +130,20 @@ bench:
 
 ## bench/save: run benchmarks and save results to SQLite database
 .PHONY: bench/save
-bench/save: bench/update
+bench/save:
 	@echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"
 	@python3 scripts/bench_manager.py save
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
-## bench/update: fetch benchmark database from BENCH release
+## bench/update: update benchmark database from git
 .PHONY: bench/update
 bench/update:
-	@echo "$(YELLOW)▶ Fetching benchmark database from BENCH release...$(NC)"
-	@if curl -s https://api.github.com/repos/$(REPO_PATH)/releases/tags/BENCH | grep -q "benchmarks.sqlite"; then \
-		echo "$(CYAN)→ BENCH release found, downloading benchmarks.sqlite$(NC)"; \
-		curl -sL https://github.com/$(REPO_PATH)/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
-		echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
-		echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
+	@echo "$(YELLOW)▶ Updating benchmark database from git...$(NC)"
+	@git pull origin main --no-edit || echo "$(YELLOW)⚠ Could not pull latest changes$(NC)"
+	@if [ -f benchmarks.sqlite ]; then \
+		echo "$(GREEN)✓ Benchmark database updated$(NC)"; \
 	else \
-		echo "$(YELLOW)⚠ BENCH release not found, starting with empty database$(NC)"; \
+		echo "$(YELLOW)⚠ No benchmark database found$(NC)"; \
 	fi
 
 ## bench/compare: compare benchmark results

@@ -347,52 +347,23 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-      - name: 📊 Update and save benchmarks
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: ⚡ Run and save benchmarks
         run: |
-          echo "📊 Updating benchmark database from BENCH tag..."
-          make bench/update || echo "No existing BENCH tag found"
-
-          echo "⚡ Running benchmarks..."
+          echo "⚡ Running benchmarks and updating database..."
           make bench/save
-
-          # Check if benchmarks.sqlite exists
-          if [ ! -f benchmarks.sqlite ]; then
-            echo "❌ No benchmarks.sqlite file found"
-            exit 1
+          
+          # Check if benchmarks.sqlite was modified
+          if git diff --exit-code benchmarks.sqlite > /dev/null 2>&1; then
+            echo "ℹ️ No changes to benchmark database"
+          else
+            echo "📤 Committing updated benchmark database..."
+            git add benchmarks.sqlite
+            git commit -m "chore: update benchmark database [skip ci]
+            
+            Automated benchmark update for commit ${{ github.sha }}"
+            git push origin main
+            echo "✅ Benchmark database updated"
           fi
-
-          echo "✅ Benchmarks database ready"
-
-      - name: 🚀 Create/Update BENCH Release
-        uses: ncipollo/release-action@2c591bcc8ecdcd2db72b97d6147f871fcd833ba5 # v1.14.0
-        with:
-          allowUpdates: true
-          artifacts: "benchmarks.sqlite"
-          body: |
-            ## 📊 Benchmark Database
-
-            This release contains the cumulative benchmark database for the SDK.
-
-            **Last updated**: ${{ github.event.head_commit.timestamp }}
-            **Commit**: ${{ github.sha }}
-
-            ### Usage
-            ```bash
-            # Download benchmark database
-            make bench/update
-
-            # Compare benchmarks
-            make bench/compare
-            ```
-          name: "Benchmark Database"
-          tag: "BENCH"
-          commit: ${{ github.sha }}
-          makeLatest: false
-          prerelease: true
-          replacesArtifacts: true
-          token: ${{ secrets.GITHUB_TOKEN }}
 
   # Job 7: Final status check
   status:

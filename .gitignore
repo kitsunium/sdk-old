@@ -34,6 +34,8 @@ config.yml
 # Database
 *.db
 *.sqlite
+# Keep benchmarks database in git
+!benchmarks.sqlite
 
 # OS
 .DS_Store
