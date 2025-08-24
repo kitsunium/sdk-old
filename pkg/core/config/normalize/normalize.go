@@ -106,6 +106,11 @@ func isUpperCase(c byte) bool {
 // transformKey applies lowercase and underscore-to-dot transformations
 func transformKey(key string) string {
 	result := make([]byte, len(key))
+	// Copy the prefix unchanged (indices 0 to startIndex-1)
+	for i := 0; i < startIndex && i < len(key); i++ {
+		result[i] = key[i]
+	}
+	// Transform the rest of the key
 	for i := startIndex; i < len(key); i++ {
 		result[i] = transformByte(key[i])
 	}
