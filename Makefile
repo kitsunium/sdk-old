@@ -130,10 +130,23 @@ bench:
 
 ## bench/save: run benchmarks and save results to SQLite database
 .PHONY: bench/save
-bench/save:
+bench/save: bench/update
 	@echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"
 	@python3 scripts/bench_manager.py save
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
+
+## bench/update: fetch benchmark database from BENCH release
+.PHONY: bench/update
+bench/update:
+	@echo "$(YELLOW)▶ Fetching benchmark database from BENCH release...$(NC)"
+	@if curl -s https://api.github.com/repos/$(REPO_PATH)/releases/tags/BENCH | grep -q "benchmarks.sqlite"; then \
+		echo "$(CYAN)→ BENCH release found, downloading benchmarks.sqlite$(NC)"; \
+		curl -sL https://github.com/$(REPO_PATH)/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
+		echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
+		echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ BENCH release not found, starting with empty database$(NC)"; \
+	fi
 
 ## bench/compare: compare benchmark results
 # Usage:
