@@ -14,6 +14,10 @@ const (
 )
 
 // Directory interface defines operations for directory management.
+//
+// This interface provides high-performance directory operations using direct
+// Unix system calls for optimal kernel-level performance. All operations
+// are designed to minimize allocations and provide fast execution.
 type Directory interface {
 	Path() string
 	Parent() (Directory, error)
@@ -26,6 +30,8 @@ type Directory interface {
 }
 
 // directory struct represents a directory with its path and metadata.
+// It encapsulates directory-specific operations and maintains file system
+// statistics for performance monitoring.
 type directory struct {
 	path       string
 	parentPath string
@@ -36,6 +42,25 @@ type directory struct {
 }
 
 // NewDirectory creates a new Directory object based on the given options.
+//
+// This function validates the provided options and creates a directory instance
+// with the specified permissions, ownership, and creation behavior. If the
+// directory already exists and is not a directory, it returns os.ErrInvalid.
+//
+// Example:
+//
+//	option := Option{
+//		Path:             "/tmp/mydir",
+//		CreateIfNotExist: true,
+//		Chmod:            pointer.Uint32(0755),
+//	}
+//	dir, err := NewDirectory(option)
+//	if err != nil {
+//		return err
+//	}
+//
+// Returns an error if the option validation fails or if the path exists
+// but is not a directory.
 func NewDirectory(option Option) (Directory, error) {
 	if !option.Validate() {
 		return nil, fmt.Errorf("invalid option: %v", option)

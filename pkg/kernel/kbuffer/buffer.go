@@ -1,6 +1,19 @@
-// Package kbuffer provides high-performance, zero-allocation byte buffers for kernel operations.
+// Package kbuffer provides high-performance, zero-allocation byte buffers optimized
+// for kernel-level operations and system programming.
 //
-// SECURITY NOTE: This package uses unsafe operations for performance-critical kernel code.
+// This package implements a fixed-capacity buffer with carefully designed memory
+// layout for optimal CPU cache performance. It provides zero-copy operations
+// through unsafe pointer manipulations, making it suitable for performance-critical
+// paths where allocations must be avoided.
+//
+// Key features:
+//   - Zero-allocation operations for string/byte conversions
+//   - Cache-line aligned structure for optimal CPU performance
+//   - Compiler directives for aggressive inlining
+//   - Comprehensive bounds checking for safety
+//   - Pool support for buffer reuse
+//
+// SECURITY NOTE: This package uses unsafe operations for performance.
 // All unsafe usages are:
 //  1. Bounded by explicit capacity checks to prevent buffer overflows
 //  2. Used only for zero-copy string/slice conversions
@@ -8,6 +21,13 @@
 //  4. Thoroughly tested with race detector and fuzzing
 //
 // Codacy/Semgrep warnings about unsafe are expected and reviewed for this file.
+//
+// Example usage:
+//
+//	buf := kbuffer.NewBuffer(1024)
+//	buf.WriteString("Hello ")
+//	buf.WriteString("World")
+//	result := buf.String() // "Hello World" (zero-allocation)
 package kbuffer
 
 import (
@@ -15,7 +35,8 @@ import (
 )
 
 // Buffer represents a high-performance byte buffer with zero-allocation operations.
-// The struct is carefully aligned for optimal CPU cache performance.
+// The struct is carefully aligned for optimal CPU cache performance with hot path
+// fields placed in the first cache line for better locality.
 type Buffer struct {
 	// Cache line 1 (64 bytes) - hot path fields
 	data []byte   // Underlying byte slice
@@ -26,6 +47,7 @@ type Buffer struct {
 
 // NewBuffer creates a new Buffer with the specified capacity.
 // The buffer is pre-allocated to avoid future allocations.
+// If capacity <= 0, uses defaultBufferSize.
 //
 //go:inline
 func NewBuffer(capacity int) *Buffer {
@@ -40,7 +62,8 @@ func NewBuffer(capacity int) *Buffer {
 }
 
 // Write appends bytes to the buffer.
-// Returns the number of bytes written and any error.
+// Returns the number of bytes written and ErrBufferOverflow if insufficient space.
+// This method is optimized for hot paths with nosplit directive.
 //
 //go:nosplit
 func (b *Buffer) Write(p []byte) (int, error) {
@@ -63,7 +86,8 @@ func (b *Buffer) Write(p []byte) (int, error) {
 }
 
 // WriteString appends a string to the buffer without allocation.
-// Uses unsafe conversion to avoid string-to-bytes allocation.
+// Uses unsafe conversion to avoid string-to-bytes allocation, making it
+// ideal for high-frequency string concatenation in performance-critical code.
 //
 //go:nosplit
 func (b *Buffer) WriteString(s string) (int, error) {
@@ -87,6 +111,7 @@ func (b *Buffer) WriteString(s string) (int, error) {
 }
 
 // WriteByte appends a single byte to the buffer.
+// Optimized for single-byte writes with inline and nosplit directives.
 //
 //go:inline
 //go:nosplit
@@ -99,8 +124,9 @@ func (b *Buffer) WriteByte(c byte) error {
 	return nil
 }
 
-// WriteAt writes bytes at a specific offset without changing position.
-// This method performs bounds checking for security.
+// WriteAt writes bytes at a specific offset without changing the current write position.
+// Performs strict bounds checking to prevent buffer overflows.
+// Returns the number of bytes written, which may be less than len(p) if near capacity.
 //
 //go:nosplit
 func (b *Buffer) WriteAt(p []byte, offset int64) (int, error) {
@@ -120,6 +146,7 @@ func (b *Buffer) WriteAt(p []byte, offset int64) (int, error) {
 
 // TryWrite attempts to write without error return for hot paths.
 // Returns true if successful, false if insufficient space.
+// This method is ideal for tight loops where error handling overhead should be avoided.
 //
 //go:inline
 //go:nosplit
@@ -133,8 +160,9 @@ func (b *Buffer) TryWrite(p []byte) bool {
 	return true
 }
 
-// Bytes returns the written portion of the buffer.
-// The returned slice shares memory with the buffer.
+// Bytes returns the written portion of the buffer as a byte slice.
+// The returned slice shares memory with the buffer and remains valid
+// until the buffer is modified or freed.
 //
 //go:inline
 //go:nosplit
@@ -143,7 +171,8 @@ func (b *Buffer) Bytes() []byte {
 }
 
 // String returns the buffer contents as a string using zero-allocation conversion.
-// Uses unsafe.String for maximum performance.
+// Uses unsafe.String for maximum performance, avoiding the allocation that would
+// occur with a normal string([]byte) conversion.
 //
 //go:nosplit
 func (b *Buffer) String() string {
@@ -179,6 +208,7 @@ func (b *Buffer) Available() int {
 }
 
 // Reset clears the buffer for reuse without deallocating memory.
+// The underlying byte slice is retained, making this efficient for buffer reuse.
 //
 //go:inline
 //go:nosplit
@@ -187,7 +217,8 @@ func (b *Buffer) Reset() {
 }
 
 // Clear zeroes the buffer content and resets position.
-// Use for security-sensitive data.
+// Use this method for security-sensitive data to ensure no information leakage.
+// Uses the optimized clear builtin for best performance.
 //
 //go:nosplit
 func (b *Buffer) Clear() {
@@ -210,6 +241,8 @@ func (b *Buffer) Truncate(n int) {
 }
 
 // Grow ensures at least n bytes are available for writing.
+// Returns ErrBufferOverflow if the requested space exceeds capacity.
+// This is a non-allocating check - the buffer size is fixed.
 //
 //go:inline
 func (b *Buffer) Grow(n int) error {
@@ -219,8 +252,9 @@ func (b *Buffer) Grow(n int) error {
 	return nil
 }
 
-// Extend advances the write position by n bytes without writing.
-// Returns error if n would exceed capacity.
+// Extend advances the write position by n bytes without writing data.
+// Useful for reserving space that will be filled later.
+// Returns ErrInvalidOffset if n is negative or would exceed capacity.
 //
 //go:inline
 func (b *Buffer) Extend(n int) error {
@@ -231,7 +265,8 @@ func (b *Buffer) Extend(n int) error {
 	return nil
 }
 
-// RemainingSlice returns the unused portion of the buffer.
+// RemainingSlice returns the unused portion of the buffer as a slice.
+// Useful for direct writing into the buffer's memory.
 //
 //go:inline
 //go:nosplit
@@ -239,7 +274,8 @@ func (b *Buffer) RemainingSlice() []byte {
 	return b.data[b.pos:b.cap]
 }
 
-// AppendBytes appends multiple bytes efficiently.
+// AppendBytes appends multiple bytes efficiently using variadic arguments.
+// Returns ErrBufferOverflow if insufficient space.
 //
 //go:nosplit
 func (b *Buffer) AppendBytes(data ...byte) error {
@@ -252,7 +288,9 @@ func (b *Buffer) AppendBytes(data ...byte) error {
 	return nil
 }
 
-// Clone creates a copy of the buffer with its own memory.
+// Clone creates a deep copy of the buffer with its own memory allocation.
+// The cloned buffer has the same capacity and contains the same data up to
+// the current write position.
 //
 //go:nosplit
 func (b *Buffer) Clone() *Buffer {
