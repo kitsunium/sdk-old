@@ -295,6 +295,77 @@ func TestXML_LoadReader_ErrorReading(t *testing.T) {
 	}
 }
 
+func TestXML_BuildIndexedKey(t *testing.T) {
+	x := &XML{}
+
+	tests := []struct {
+		name     string
+		nodeName string
+		index    int
+		prefix   string
+		want     string
+	}{
+		{
+			name:     "with prefix",
+			nodeName: "item",
+			index:    0,
+			prefix:   "root",
+			want:     "root.item.0",
+		},
+		{
+			name:     "without prefix",
+			nodeName: "item",
+			index:    1,
+			prefix:   "",
+			want:     "item.1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := x.buildIndexedKey(tt.nodeName, tt.index, tt.prefix)
+			if got != tt.want {
+				t.Errorf("buildIndexedKey() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestXML_EstimateSize(t *testing.T) {
+	x := &XML{}
+
+	tests := []struct {
+		name string
+		data []byte
+		want int
+	}{
+		{
+			name: "small data returns minimum",
+			data: []byte("small"),
+			want: 32,
+		},
+		{
+			name: "large data calculates size",
+			data: make([]byte, 5000),
+			want: 100, // 5000 / 50
+		},
+		{
+			name: "empty data returns minimum",
+			data: []byte{},
+			want: 32,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := x.estimateSize(tt.data)
+			if got != tt.want {
+				t.Errorf("estimateSize() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestXML_AllTypes(t *testing.T) {
 	// Test ALL possible XML structures
 	content := `<?xml version="1.0" encoding="UTF-8"?>
