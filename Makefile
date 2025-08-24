@@ -135,19 +135,24 @@ bench/save:
 	@python3 scripts/bench_manager.py save
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
-## bench/compare: compare benchmark results between two commits
+## bench/compare: compare benchmark results
+# Usage:
+#   make bench/compare                    - compare current with main
+#   make bench/compare COMMIT             - compare current with COMMIT
+#   make bench/compare COMMIT1 COMMIT2    - compare COMMIT1 with COMMIT2
 .PHONY: bench/compare
 bench/compare:
-	@if [ -z "$(word 2,$(MAKECMDGOALS))" ] || [ -z "$(word 3,$(MAKECMDGOALS))" ]; then \
-		echo "$(RED)❌ Error: bench/compare requires two commit arguments$(NC)"; \
-		echo "$(YELLOW)Usage: make bench/compare BASE_COMMIT CURRENT_COMMIT$(NC)"; \
-		echo "$(YELLOW)Example: make bench/compare c96356fb fe57684a$(NC)"; \
-		echo ""; \
-		echo "$(CYAN)Run 'make bench/list' to see available commits$(NC)"; \
-		exit 1; \
+	@echo "$(YELLOW)▶ Comparing benchmarks...$(NC)"
+	@if [ -z "$(word 2,$(MAKECMDGOALS))" ]; then \
+		echo "$(CYAN)→ Comparing current commit with main branch$(NC)"; \
+		python3 scripts/bench_manager.py compare; \
+	elif [ -z "$(word 3,$(MAKECMDGOALS))" ]; then \
+		echo "$(CYAN)→ Comparing current commit with $(word 2,$(MAKECMDGOALS))$(NC)"; \
+		python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)); \
+	else \
+		echo "$(CYAN)→ Comparing $(word 2,$(MAKECMDGOALS)) with $(word 3,$(MAKECMDGOALS))$(NC)"; \
+		python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)) $(word 3,$(MAKECMDGOALS)); \
 	fi
-	@echo "$(YELLOW)▶ Comparing benchmarks between commits...$(NC)"
-	@python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)) $(word 3,$(MAKECMDGOALS))
 	@echo "$(GREEN)✓ Benchmark comparison complete$(NC)"
 
 # Catch the commit arguments for bench/compare
