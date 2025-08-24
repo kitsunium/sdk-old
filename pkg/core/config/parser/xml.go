@@ -212,37 +212,54 @@ func (x *XML) handleCharData(t xml.CharData, current, root *xmlNode) {
 func (x *XML) flattenXMLNode(node *xmlNode, prefix string, output map[string]string) {
 	for name, nodes := range node.children {
 		for i, child := range nodes {
-			var key string
-			if len(nodes) > 1 {
-				if prefix == "" {
-					key = fmt.Sprintf("%s.%d", name, i)
-				} else {
-					key = fmt.Sprintf("%s.%s.%d", prefix, name, i)
-				}
-			} else {
-				if prefix == "" {
-					key = name
-				} else {
-					key = fmt.Sprintf("%s.%s", prefix, name)
-				}
-			}
-
-			for _, attr := range child.attrs {
-				attrKey := fmt.Sprintf("%s.%s", key, attr.key)
-				output[attrKey] = attr.value
-			}
-
-			if child.value != "" {
-				output[key] = child.value
-			} else if len(child.children) == 0 {
-				// Empty element or self-closing tag
-				output[key] = ""
-			}
-
-			if len(child.children) > 0 {
-				x.flattenXMLNode(child, key, output)
-			}
+			key := x.buildNodeKey(name, i, len(nodes), prefix)
+			x.processNodeAttributes(child, key, output)
+			x.processNodeValue(child, key, output)
+			x.processChildNodes(child, key, output)
 		}
+	}
+}
+
+func (x *XML) buildNodeKey(name string, index, nodeCount int, prefix string) string {
+	if nodeCount > 1 {
+		return x.buildIndexedKey(name, index, prefix)
+	}
+	return x.buildSimpleKey(name, prefix)
+}
+
+func (x *XML) buildIndexedKey(name string, index int, prefix string) string {
+	if prefix == "" {
+		return fmt.Sprintf("%s.%d", name, index)
+	}
+	return fmt.Sprintf("%s.%s.%d", prefix, name, index)
+}
+
+func (x *XML) buildSimpleKey(name, prefix string) string {
+	if prefix == "" {
+		return name
+	}
+	return fmt.Sprintf("%s.%s", prefix, name)
+}
+
+func (x *XML) processNodeAttributes(child *xmlNode, key string, output map[string]string) {
+	for _, attr := range child.attrs {
+		attrKey := fmt.Sprintf("%s.%s", key, attr.key)
+		output[attrKey] = attr.value
+	}
+}
+
+func (x *XML) processNodeValue(child *xmlNode, key string, output map[string]string) {
+	if child.value != "" {
+		output[key] = child.value
+	} else if len(child.children) == 0 {
+		// Empty element or self-closing tag
+		output[key] = ""
+	}
+}
+
+func (x *XML) processChildNodes(child *xmlNode, key string, output map[string]string) {
+	if len(child.children) > 0 {
+		x.flattenXMLNode(child, key, output)
 	}
 }
 

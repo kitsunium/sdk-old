@@ -655,6 +655,135 @@ func (r *errorReader) Read(p []byte) (n int, err error) {
 	return 0, r.err
 }
 
+func TestINI_WhitespaceFunctions(t *testing.T) {
+	i := &INI{}
+
+	t.Run("isTrimWhitespace", func(t *testing.T) {
+		tests := []struct {
+			ch   byte
+			want bool
+		}{
+			{' ', true},
+			{'\t', true},
+			{'\r', true},
+			{'\n', false},
+			{'a', false},
+		}
+
+		for _, tt := range tests {
+			got := i.isTrimWhitespace(tt.ch)
+			if got != tt.want {
+				t.Errorf("isTrimWhitespace(%q) = %v, want %v", tt.ch, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("isLineEndWhitespace", func(t *testing.T) {
+		tests := []struct {
+			ch   byte
+			want bool
+		}{
+			{' ', true},
+			{'\t', true},
+			{'\r', false},
+			{'\n', false},
+			{'a', false},
+		}
+
+		for _, tt := range tests {
+			got := i.isLineEndWhitespace(tt.ch)
+			if got != tt.want {
+				t.Errorf("isLineEndWhitespace(%q) = %v, want %v", tt.ch, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("trimRight functionality", func(t *testing.T) {
+		// trimRight only removes space and tab from the end (not \r)
+		tests := []struct {
+			input    []byte
+			expected []byte
+			desc     string
+		}{
+			{
+				input:    []byte("test  \t"),
+				expected: []byte("test"),
+				desc:     "removes trailing spaces and tabs",
+			},
+			{
+				input:    []byte("test"),
+				expected: []byte("test"),
+				desc:     "no trailing whitespace",
+			},
+			{
+				input:    []byte("test\r"),
+				expected: []byte("test\r"),
+				desc:     "preserves \\r",
+			},
+			{
+				input:    []byte("test\r  "),
+				expected: []byte("test\r"),
+				desc:     "removes spaces after \\r",
+			},
+		}
+
+		for _, tt := range tests {
+			result := i.trimRight(tt.input)
+			if !bytes.Equal(result, tt.expected) {
+				t.Errorf("%s: trimRight(%q) = %q, want %q", tt.desc, tt.input, result, tt.expected)
+			}
+		}
+	})
+}
+
+func TestINI_Load_ErrorCases(t *testing.T) {
+	t.Run("invalid file path", func(t *testing.T) {
+		ini := NewINI("/nonexistent/path/file.txt") // Not .ini extension
+		_, err := ini.Load()
+		if err == nil {
+			t.Error("Load() should return error for invalid extension")
+		}
+	})
+
+	t.Run("cfg extension", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cfgPath := filepath.Join(tmpDir, "test.cfg")
+
+		content := "[section]\nkey=value"
+		if err := os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+
+		ini := NewINI(cfgPath)
+		result, err := ini.Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if result["section.key"] != "value" {
+			t.Errorf("Expected section.key=value, got %v", result["section.key"])
+		}
+	})
+
+	t.Run("conf extension", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		confPath := filepath.Join(tmpDir, "test.conf")
+
+		content := "[section]\nkey=value"
+		if err := os.WriteFile(confPath, []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+
+		ini := NewINI(confPath)
+		result, err := ini.Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if result["section.key"] != "value" {
+			t.Errorf("Expected section.key=value, got %v", result["section.key"])
+		}
+	})
+}
+
 func TestINI_RealWorldExample(t *testing.T) {
 	content := `
 # Application Configuration

@@ -270,6 +270,125 @@ func TestENV_EmptyPrefix(t *testing.T) {
 	}
 }
 
+func TestENV_HelperFunctions(t *testing.T) {
+	e := NewENV("APP")
+
+	t.Run("countMatchingVars", func(t *testing.T) {
+		// Set up test environment
+		os.Setenv("APP_KEY1", "value1")
+		os.Setenv("APP_KEY2", "value2")
+		os.Setenv("OTHER_KEY", "value3")
+		os.Setenv("INVALID", "") // Will be skipped - no =
+		defer os.Unsetenv("APP_KEY1")
+		defer os.Unsetenv("APP_KEY2")
+		defer os.Unsetenv("OTHER_KEY")
+		defer os.Unsetenv("INVALID")
+
+		envVars := os.Environ()
+		count := e.countMatchingVars(envVars)
+		// Should count APP_KEY1 and APP_KEY2
+		if count < 2 {
+			t.Errorf("countMatchingVars() = %d, want at least 2", count)
+		}
+	})
+
+	t.Run("parseEnvVar", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			env       string
+			prefix    string
+			wantKey   string
+			wantValue string
+			wantOk    bool
+		}{
+			{
+				name:      "valid with prefix match",
+				env:       "APP_KEY=value",
+				prefix:    "APP",
+				wantKey:   "KEY",
+				wantValue: "value",
+				wantOk:    true,
+			},
+			{
+				name:      "no equals sign",
+				env:       "INVALID",
+				prefix:    "",
+				wantKey:   "",
+				wantValue: "",
+				wantOk:    false,
+			},
+			{
+				name:      "prefix mismatch",
+				env:       "OTHER_KEY=value",
+				prefix:    "APP",
+				wantKey:   "",
+				wantValue: "",
+				wantOk:    false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				e := NewENV(tt.prefix)
+				key, value, ok := e.parseEnvVar(tt.env)
+				if key != tt.wantKey || value != tt.wantValue || ok != tt.wantOk {
+					t.Errorf("parseEnvVar(%q) = (%q, %q, %v), want (%q, %q, %v)",
+						tt.env, key, value, ok, tt.wantKey, tt.wantValue, tt.wantOk)
+				}
+			})
+		}
+	})
+
+	t.Run("processPrefix", func(t *testing.T) {
+		// processPrefix assumes the prefix has already been removed,
+		// so we test with keys that start after the prefix
+		e := NewENV("APP")
+		tests := []struct {
+			key  string
+			want string
+		}{
+			{"APP_KEY", "KEY"}, // Remove prefix and underscore
+			{"APPKEY", "KEY"},  // Remove prefix, no underscore
+			{"APP_", ""},       // Just prefix and underscore
+			{"APP", ""},        // Just prefix
+		}
+
+		for _, tt := range tests {
+			got := e.processPrefix(tt.key)
+			if got != tt.want {
+				t.Errorf("processPrefix(%q) = %q, want %q", tt.key, got, tt.want)
+			}
+		}
+	})
+}
+
+func TestENV_LoadFiltered_EdgeCases(t *testing.T) {
+	// Test LoadFiltered with various scenarios
+	os.Setenv("FILTER_YES", "include")
+	os.Setenv("FILTER_NO", "exclude")
+	os.Setenv("INVALID", "") // No equals sign - should handle gracefully
+	defer os.Unsetenv("FILTER_YES")
+	defer os.Unsetenv("FILTER_NO")
+	defer os.Unsetenv("INVALID")
+
+	env := NewENV("")
+	result, err := env.LoadFiltered(func(s string) bool {
+		return strings.HasPrefix(s, "FILTER_YES")
+	})
+
+	if err != nil {
+		t.Fatalf("LoadFiltered() error = %v", err)
+	}
+
+	if result["filter.yes"] != "include" {
+		t.Errorf("filter.yes = %q, want %q", result["filter.yes"], "include")
+	}
+
+	if _, exists := result["filter.no"]; exists {
+		t.Error("filter.no should not exist (filtered out)")
+	}
+}
+
 func TestENV_PrefixEdgeCases(t *testing.T) {
 	// Test edge cases with prefix matching
 	testVars := map[string]string{
