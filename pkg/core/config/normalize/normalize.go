@@ -236,36 +236,46 @@ func estimateCapacity(m map[string]any) int {
 	return count
 }
 
+// flattenContext holds context for map flattening to reduce parameter count
+type flattenContext struct {
+	output     map[string]string
+	prefix     []string
+	keyBuilder *strings.Builder
+}
+
 func flattenRecursive(output map[string]string, input map[string]any,
 	prefix []string, keyBuilder *strings.Builder) {
+	ctx := &flattenContext{
+		output:     output,
+		prefix:     prefix,
+		keyBuilder: keyBuilder,
+	}
 	for key, value := range input {
 		keyBuilder.Reset()
 		buildKey(keyBuilder, prefix, key)
-		processValue(output, value, prefix, key, keyBuilder)
+		processValue(ctx, value, key)
 	}
 }
 
 // processValue handles different value types during flattening.
 // Dispatches to appropriate handlers based on value type:
 // maps are recursively flattened, arrays are indexed, and other values are stored.
-func processValue(output map[string]string, value any, prefix []string,
-	key string, keyBuilder *strings.Builder) {
+func processValue(ctx *flattenContext, value any, key string) {
 	switch v := value.(type) {
 	case map[string]any:
-		processMap(output, v, prefix, key, keyBuilder)
+		processMap(ctx, v, key)
 	case []any:
-		processSlice(output, v, prefix, key, keyBuilder)
+		processSlice(ctx, v, key)
 	default:
-		storeValue(output, keyBuilder.String(), value)
+		storeValue(ctx.output, ctx.keyBuilder.String(), value)
 	}
 }
 
 // processMap handles nested map values during flattening.
 // Creates a new prefix by appending the current key and recursively processes the map.
-func processMap(output map[string]string, m map[string]any, prefix []string,
-	key string, keyBuilder *strings.Builder) {
-	newPrefix := append(prefix, key)
-	flattenRecursive(output, m, newPrefix, keyBuilder)
+func processMap(ctx *flattenContext, m map[string]any, key string) {
+	newPrefix := append(ctx.prefix, key)
+	flattenRecursive(ctx.output, m, newPrefix, ctx.keyBuilder)
 }
 
 // buildKey constructs a dot-separated key from prefix and key.
@@ -292,20 +302,19 @@ func writePrefix(keyBuilder *strings.Builder, prefix []string) {
 // processSlice handles array/slice values during map flattening.
 // Array elements are indexed with dot notation (e.g., "key.0", "key.1").
 // Nested maps within arrays are recursively flattened.
-func processSlice(output map[string]string, slice []any, prefix []string,
-	key string, keyBuilder *strings.Builder) {
+func processSlice(ctx *flattenContext, slice []any, key string) {
 	for i, item := range slice {
-		keyBuilder.Reset()
-		buildArrayKey(keyBuilder, prefix, key, i)
+		ctx.keyBuilder.Reset()
+		buildArrayKey(ctx.keyBuilder, ctx.prefix, key, i)
 
 		// Process the array item
 		switch v := item.(type) {
 		case map[string]any:
 			itemKey := fmt.Sprintf("%s.%d", key, i)
-			newPrefix := append(prefix, itemKey)
-			flattenRecursive(output, v, newPrefix, keyBuilder)
+			newPrefix := append(ctx.prefix, itemKey)
+			flattenRecursive(ctx.output, v, newPrefix, ctx.keyBuilder)
 		default:
-			storeValue(output, keyBuilder.String(), item)
+			storeValue(ctx.output, ctx.keyBuilder.String(), item)
 		}
 	}
 }
