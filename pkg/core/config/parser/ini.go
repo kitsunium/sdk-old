@@ -105,82 +105,97 @@ func iniBytesToString(b []byte) string {
 // Implements a single-pass parser with direct byte manipulation.
 func (i *INI) LoadBytes(data []byte) (map[string]string, error) {
 	config := make(map[string]string, 128)
-
 	var currentSection string
 	lineStart := 0
 
-	for i := 0; i < len(data); i++ {
-		if data[i] == '\n' || i == len(data)-1 {
-			lineEnd := i
-			if i == len(data)-1 && data[i] != '\n' {
-				lineEnd = i + 1
-			}
-
-			// Process line
+	for idx := 0; idx < len(data); idx++ {
+		if data[idx] == '\n' || idx == len(data)-1 {
+			lineEnd := i.findLineEnd(idx, data)
 			if lineEnd > lineStart {
-				line := data[lineStart:lineEnd]
-
-				// Trim line
-				for len(line) > 0 && (line[0] == ' ' || line[0] == '\t' || line[0] == '\r') {
-					line = line[1:]
-				}
-				for len(line) > 0 && (line[len(line)-1] == ' ' || line[len(line)-1] == '\t' || line[len(line)-1] == '\r') {
-					line = line[:len(line)-1]
-				}
-
-				if len(line) > 0 && line[0] != '#' && line[0] != ';' {
-					if line[0] == '[' && line[len(line)-1] == ']' {
-						// Section
-						currentSection = normalize.Key(iniBytesToString(line[1 : len(line)-1]))
-					} else {
-						// Key-value
-						sepIdx := -1
-						for j := 0; j < len(line); j++ {
-							if line[j] == '=' || line[j] == ':' {
-								sepIdx = j
-								break
-							}
-						}
-
-						if sepIdx != -1 {
-							key := line[:sepIdx]
-							value := line[sepIdx+1:]
-
-							// Trim key
-							for len(key) > 0 && (key[len(key)-1] == ' ' || key[len(key)-1] == '\t') {
-								key = key[:len(key)-1]
-							}
-
-							// Trim value
-							for len(value) > 0 && (value[0] == ' ' || value[0] == '\t') {
-								value = value[1:]
-							}
-							for len(value) > 0 && (value[len(value)-1] == ' ' || value[len(value)-1] == '\t') {
-								value = value[:len(value)-1]
-							}
-
-							// Handle quotes
-							if len(value) >= 2 {
-								first, last := value[0], value[len(value)-1]
-								if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
-									value = value[1 : len(value)-1]
-								}
-							}
-
-							keyStr := iniBytesToString(key)
-							if currentSection != "" {
-								keyStr = currentSection + "." + keyStr
-							}
-
-							config[normalize.Key(keyStr)] = normalize.Value(iniBytesToString(value))
-						}
-					}
-				}
+				i.processLine(data[lineStart:lineEnd], &currentSection, config)
 			}
-
-			lineStart = i + 1
+			lineStart = idx + 1
 		}
 	}
-
 	return config, nil
+}
+
+// findLineEnd determines the end of the current line.
+func (i *INI) findLineEnd(idx int, data []byte) int {
+	if idx == len(data)-1 && data[idx] != '\n' {
+		return idx + 1
+	}
+	return idx
+}
+
+// processLine processes a single INI line.
+func (i *INI) processLine(line []byte, currentSection *string, config map[string]string) {
+	line = i.trimBytes(line)
+	if len(line) == 0 || line[0] == '#' || line[0] == ';' {
+		return
+	}
+
+	if line[0] == '[' && line[len(line)-1] == ']' {
+		*currentSection = normalize.Key(iniBytesToString(line[1 : len(line)-1]))
+	} else {
+		i.parseKeyValue(line, *currentSection, config)
+	}
+}
+
+// parseKeyValue parses a key-value pair from a line.
+func (i *INI) parseKeyValue(line []byte, section string, config map[string]string) {
+	sepIdx := i.findSeparator(line)
+	if sepIdx == -1 {
+		return
+	}
+
+	key := i.trimRight(line[:sepIdx])
+	value := i.processValue(line[sepIdx+1:])
+
+	keyStr := iniBytesToString(key)
+	if section != "" {
+		keyStr = section + "." + keyStr
+	}
+	config[normalize.Key(keyStr)] = normalize.Value(iniBytesToString(value))
+}
+
+// findSeparator finds the position of '=' or ':' in a line.
+func (i *INI) findSeparator(line []byte) int {
+	for j := 0; j < len(line); j++ {
+		if line[j] == '=' || line[j] == ':' {
+			return j
+		}
+	}
+	return -1
+}
+
+// processValue trims and unquotes a value.
+func (i *INI) processValue(value []byte) []byte {
+	value = i.trimBytes(value)
+	if len(value) >= 2 {
+		first, last := value[0], value[len(value)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			return value[1 : len(value)-1]
+		}
+	}
+	return value
+}
+
+// trimBytes removes leading and trailing whitespace from bytes.
+func (i *INI) trimBytes(b []byte) []byte {
+	for len(b) > 0 && (b[0] == ' ' || b[0] == '\t' || b[0] == '\r') {
+		b = b[1:]
+	}
+	for len(b) > 0 && (b[len(b)-1] == ' ' || b[len(b)-1] == '\t' || b[len(b)-1] == '\r') {
+		b = b[:len(b)-1]
+	}
+	return b
+}
+
+// trimRight removes trailing whitespace from bytes.
+func (i *INI) trimRight(b []byte) []byte {
+	for len(b) > 0 && (b[len(b)-1] == ' ' || b[len(b)-1] == '\t') {
+		b = b[:len(b)-1]
+	}
+	return b
 }

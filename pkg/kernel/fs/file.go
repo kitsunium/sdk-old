@@ -175,77 +175,99 @@ func (f *file) Create() (File, error) {
 	return f, nil
 }
 
+// chunk represents a data chunk for file copying.
+type chunk struct {
+	data []byte
+	n    int
+	err  error
+	done bool
+}
+
 // Copy copies the file to a new destination using unix.Read and unix.Write with parallel pipelines..
 func (f *file) Copy(dst string) error {
-	srcFD, err := unix.Open(f.path, unix.O_RDONLY, 0)
+	srcFD, dstFD, err := f.openFiles(dst)
 	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
+		return err
 	}
 	defer unix.Close(srcFD)
+	defer unix.Close(dstFD)
 
-	// Get source file stats for mode and size.
+	readChan := make(chan chunk, 2) // Buffered channel for pipelining
+	go f.readFileAsync(srcFD, readChan)
+
+	return f.writeFromChannel(dstFD, readChan)
+}
+
+// openFiles opens source and destination files for copying.
+func (f *file) openFiles(dst string) (srcFD, dstFD int, err error) {
+	srcFD, err = unix.Open(f.path, unix.O_RDONLY, 0)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to open source file: %w", err)
+	}
+
+	// Get source file stats for mode.
 	srcStat := &unix.Stat_t{}
 	if err := unix.Fstat(srcFD, srcStat); err != nil {
-		return fmt.Errorf("failed to stat source file: %w", err)
+		unix.Close(srcFD)
+		return 0, 0, fmt.Errorf("failed to stat source file: %w", err)
 	}
 
 	// Open destination file with permission bits only (mask out file type bits).
-	dstFD, err := unix.Open(dst, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, uint32(srcStat.Mode&0777))
+	dstFD, err = unix.Open(dst, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC, uint32(srcStat.Mode&0777))
 	if err != nil {
-		return fmt.Errorf("failed to open destination file: %w", err)
+		unix.Close(srcFD)
+		return 0, 0, fmt.Errorf("failed to open destination file: %w", err)
 	}
-	defer unix.Close(dstFD)
 
-	// Channels for communication between reader and writer.
-	type chunk struct {
-		data []byte
-		n    int
-		err  error
-		done bool
-	}
-	readChan := make(chan chunk, 2) // Buffered channel for pipelining
+	return srcFD, dstFD, nil
+}
 
-	// Goroutine for reading.
-	go func() {
-		defer close(readChan)
-		buffer := make([]byte, *f.buffersize)
-		for {
-			bytesRead, readErr := unix.Read(srcFD, buffer)
-			readChan <- chunk{
-				data: buffer[:bytesRead],
-				n:    bytesRead,
-				err:  readErr,
-				done: bytesRead == 0 || readErr != nil,
-			}
-			if bytesRead == 0 || readErr != nil {
-				break
-			}
+// readFileAsync reads file data asynchronously and sends chunks to the channel.
+func (f *file) readFileAsync(fd int, readChan chan<- chunk) {
+	defer close(readChan)
+	buffer := make([]byte, *f.buffersize)
+	for {
+		bytesRead, readErr := unix.Read(fd, buffer)
+		readChan <- chunk{
+			data: buffer[:bytesRead],
+			n:    bytesRead,
+			err:  readErr,
+			done: bytesRead == 0 || readErr != nil,
 		}
-	}()
+		if bytesRead == 0 || readErr != nil {
+			break
+		}
+	}
+}
 
-	// Writing in the main goroutine.
+// writeFromChannel writes data from the channel to the destination file.
+func (f *file) writeFromChannel(dstFD int, readChan <-chan chunk) error {
 	for chunk := range readChan {
-		if chunk.err != nil {
-			if errors.Is(chunk.err, io.EOF) {
-				break // End of file
-			}
+		if chunk.err != nil && !errors.Is(chunk.err, io.EOF) {
 			return fmt.Errorf("failed to read from source file: %w", chunk.err)
 		}
 
-		bytesWritten := 0
-		for bytesWritten < chunk.n {
-			n, writeErr := unix.Write(dstFD, chunk.data[bytesWritten:chunk.n])
-			if writeErr != nil {
-				return fmt.Errorf("failed to write to destination file: %w", writeErr)
-			}
-			bytesWritten += n
+		if err := f.writeChunk(dstFD, chunk.data[:chunk.n]); err != nil {
+			return err
 		}
 
 		if chunk.done {
 			break
 		}
 	}
+	return nil
+}
 
+// writeChunk writes a complete chunk of data to the file.
+func (f *file) writeChunk(fd int, data []byte) error {
+	bytesWritten := 0
+	for bytesWritten < len(data) {
+		n, err := unix.Write(fd, data[bytesWritten:])
+		if err != nil {
+			return fmt.Errorf("failed to write to destination file: %w", err)
+		}
+		bytesWritten += n
+	}
 	return nil
 }
 
