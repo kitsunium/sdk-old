@@ -76,48 +76,59 @@ func (a *ARGS) Load() (map[string]string, error) {
 //   - Boolean flags (no value means "true")
 //   - Single and double dash prefixes
 func (a *ARGS) ParseArgs(args []string) (map[string]string, error) {
-	// Pre-count flags for optimal map allocation
-	flagCount := 0
-	for _, arg := range args {
-		if len(arg) > 0 && arg[0] == '-' {
-			flagCount++
-		}
-	}
-
-	// Allocate map with exact size to prevent rehashing
+	flagCount := a.countFlags(args)
 	config := make(map[string]string, flagCount)
 
 	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		if len(arg) == 0 {
-			continue
-		}
-
-		if arg[0] == '-' {
-			if len(arg) > 1 && arg[1] == '-' {
-				arg = arg[2:]
-			} else {
-				arg = arg[1:]
-			}
-		} else {
-			continue // Skip non-flag arguments
-		}
-
-		eqIdx := strings.IndexByte(arg, '=')
-		if eqIdx != -1 {
-			key := arg[:eqIdx]
-			value := arg[eqIdx+1:]
+		key, value, skip := a.processSingleArg(args, i)
+		if key != "" {
 			config[normalize.Key(key)] = normalize.Value(value)
-		} else if i+1 < len(args) && len(args[i+1]) > 0 && args[i+1][0] != '-' {
-			config[normalize.Key(arg)] = normalize.Value(args[i+1])
-			i++
-		} else {
-			config[normalize.Key(arg)] = "true"
+			i += skip
 		}
 	}
 
 	return config, nil
+}
+
+func (a *ARGS) countFlags(args []string) int {
+	count := 0
+	for _, arg := range args {
+		if len(arg) > 0 && arg[0] == '-' {
+			count++
+		}
+	}
+	return count
+}
+
+func (a *ARGS) processSingleArg(args []string, index int) (string, string, int) {
+	arg := args[index]
+	if len(arg) == 0 || arg[0] != '-' {
+		return "", "", 0
+	}
+
+	// Fast path for stripping dashes
+	if len(arg) > 1 && arg[1] == '-' {
+		arg = arg[2:]
+	} else {
+		arg = arg[1:]
+	}
+
+	// Check for key=value format (most common case)
+	if eqIdx := strings.IndexByte(arg, '='); eqIdx != -1 {
+		return arg[:eqIdx], arg[eqIdx+1:], 0
+	}
+
+	// Check if next arg is a value
+	if index+1 < len(args) && a.isValue(args[index+1]) {
+		return arg, args[index+1], 1
+	}
+
+	// Boolean flag
+	return arg, "true", 0
+}
+
+func (a *ARGS) isValue(arg string) bool {
+	return len(arg) > 0 && arg[0] != '-'
 }
 
 // isNegativeNumber checks if a string represents a negative number.

@@ -27,57 +27,62 @@ func (e *ENV) Type() string {
 
 func (e *ENV) Load() (map[string]string, error) {
 	envVars := os.Environ()
+	matchCount := e.countMatchingVars(envVars)
+	config := make(map[string]string, matchCount)
 
-	// Pre-count matching env vars for perfect allocation (like we did for ARGS)
-	matchCount := 0
-	prefixLen := len(e.Prefix)
-
-	if prefixLen > 0 {
-		// Count only matching vars
-		for _, env := range envVars {
-			if idx := strings.IndexByte(env, '='); idx >= prefixLen {
-				if strings.HasPrefix(env[:idx], e.Prefix) {
-					matchCount++
-				}
-			}
+	for _, env := range envVars {
+		key, value, ok := e.parseEnvVar(env)
+		if !ok {
+			continue
 		}
-	} else {
-		// Count all valid env vars
-		for _, env := range envVars {
-			if strings.IndexByte(env, '=') != -1 {
-				matchCount++
-			}
-		}
+		config[normalize.Key(key)] = normalize.Value(value)
 	}
 
-	// Perfect size allocation to prevent rehashing
-	config := make(map[string]string, matchCount)
+	return config, nil
+}
+
+func (e *ENV) countMatchingVars(envVars []string) int {
+	count := 0
+	prefixLen := len(e.Prefix)
 
 	for _, env := range envVars {
 		idx := strings.IndexByte(env, '=')
 		if idx == -1 {
 			continue
 		}
-
-		key := env[:idx]
-		value := env[idx+1:]
-
-		// Optimized prefix handling
-		if prefixLen > 0 {
-			if !strings.HasPrefix(key, e.Prefix) {
-				continue
-			}
-			key = key[prefixLen:]
-			// Strip optional underscore after prefix
-			if len(key) > 0 && key[0] == '_' {
-				key = key[1:]
-			}
+		if prefixLen > 0 && !strings.HasPrefix(env[:idx], e.Prefix) {
+			continue
 		}
+		count++
+	}
+	return count
+}
 
-		config[normalize.Key(key)] = normalize.Value(value)
+func (e *ENV) parseEnvVar(env string) (string, string, bool) {
+	idx := strings.IndexByte(env, '=')
+	if idx == -1 {
+		return "", "", false
 	}
 
-	return config, nil
+	key := env[:idx]
+	value := env[idx+1:]
+
+	if len(e.Prefix) > 0 {
+		if !strings.HasPrefix(key, e.Prefix) {
+			return "", "", false
+		}
+		key = e.processPrefix(key)
+	}
+
+	return key, value, true
+}
+
+func (e *ENV) processPrefix(key string) string {
+	key = key[len(e.Prefix):]
+	if len(key) > 0 && key[0] == '_' {
+		key = key[1:]
+	}
+	return key
 }
 
 // LoadFiltered parses environment variables with a custom filter function.
