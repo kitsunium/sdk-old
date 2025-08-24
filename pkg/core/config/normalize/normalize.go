@@ -80,28 +80,43 @@ func Key(key string) string {
 		return key
 	}
 
-	needsTransform := false
-	for i := startIndex; i < len(key); i++ {
-		c := key[i]
-		if c == '_' || (c >= asciiUpperCaseStart && c <= asciiUpperCaseEnd) {
-			needsTransform = true
-			break
-		}
-	}
-
-	if !needsTransform {
+	if !needsKeyTransform(key) {
 		return key
 	}
 
-	result := make([]byte, len(key))
+	return transformKey(key)
+}
+
+// needsKeyTransform checks if a key needs transformation
+func needsKeyTransform(key string) bool {
 	for i := startIndex; i < len(key); i++ {
 		c := key[i]
-		c = toLowerTable[c]
-		c = underscoreToDot[c]
-		result[i] = c
+		if c == '_' || isUpperCase(c) {
+			return true
+		}
 	}
+	return false
+}
 
+// isUpperCase checks if a byte is an uppercase ASCII letter
+func isUpperCase(c byte) bool {
+	return c >= asciiUpperCaseStart && c <= asciiUpperCaseEnd
+}
+
+// transformKey applies lowercase and underscore-to-dot transformations
+func transformKey(key string) string {
+	result := make([]byte, len(key))
+	for i := startIndex; i < len(key); i++ {
+		result[i] = transformByte(key[i])
+	}
 	return unsafe.String(unsafe.SliceData(result), len(result))
+}
+
+// transformByte applies transformations to a single byte
+func transformByte(c byte) byte {
+	c = toLowerTable[c]
+	c = underscoreToDot[c]
+	return c
 }
 
 // Value normalizes a configuration value by trimming whitespace and
