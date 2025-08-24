@@ -183,13 +183,27 @@ func (i *INI) processValue(value []byte) []byte {
 
 // trimBytes removes leading and trailing whitespace from bytes.
 func (i *INI) trimBytes(b []byte) []byte {
-	for len(b) > 0 && (b[0] == ' ' || b[0] == '\t' || b[0] == '\r') {
+	b = i.trimLeftBytes(b)
+	b = i.trimRightBytes(b)
+	return b
+}
+
+func (i *INI) trimLeftBytes(b []byte) []byte {
+	for len(b) > 0 && i.isWhitespaceINI(b[0]) {
 		b = b[1:]
 	}
-	for len(b) > 0 && (b[len(b)-1] == ' ' || b[len(b)-1] == '\t' || b[len(b)-1] == '\r') {
+	return b
+}
+
+func (i *INI) trimRightBytes(b []byte) []byte {
+	for len(b) > 0 && i.isWhitespaceINI(b[len(b)-1]) {
 		b = b[:len(b)-1]
 	}
 	return b
+}
+
+func (i *INI) isWhitespaceINI(ch byte) bool {
+	return ch == ' ' || ch == '\t' || ch == '\r'
 }
 
 // trimRight removes trailing whitespace from bytes.
