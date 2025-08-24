@@ -45,6 +45,9 @@ help:
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/unit" "run unit tests only"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/coverage" "run tests with coverage report"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks for all packages"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench-save" "run benchmarks and save to database"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench-compare" "run benchmarks and compare results"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench-list" "list saved benchmark results"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
 	@echo ''
 	@echo 'Quality:'
@@ -122,6 +125,25 @@ bench:
 		$(BAZEL) run $$target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s -test.run=^$$ 2>&1 | grep -v "^exec " | grep -v "^Executing tests" | grep -v "^---" | tee $$pkg_dir/result_bench || exit $$?; \
 	done
 	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
+
+## bench-save: run benchmarks and save results to SQLite database
+.PHONY: bench-save
+bench-save:
+	@echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"
+	@python3 scripts/bench_manager.py save
+	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
+
+## bench-compare: run benchmarks and compare with previous results
+.PHONY: bench-compare
+bench-compare:
+	@echo "$(YELLOW)▶ Running benchmarks and comparing with previous results...$(NC)"
+	@python3 scripts/bench_manager.py compare
+	@echo "$(GREEN)✓ Benchmark comparison complete$(NC)"
+
+## bench-list: list all saved benchmark results
+.PHONY: bench-list
+bench-list:
+	@python3 scripts/bench_manager.py list
 
 ## deps: download and verify dependencies
 .PHONY: deps
