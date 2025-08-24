@@ -318,6 +318,121 @@ func TestARGS_ParseArgsStrict(t *testing.T) {
 	}
 }
 
+func TestARGS_NewHelperFunctions(t *testing.T) {
+	a := NewARGS(false)
+
+	t.Run("isFlag", func(t *testing.T) {
+		tests := []struct {
+			arg  string
+			want bool
+		}{
+			{"-f", true},
+			{"--flag", true},
+			{"", false},
+			{"value", false},
+		}
+
+		for _, tt := range tests {
+			got := a.isFlag(tt.arg)
+			if got != tt.want {
+				t.Errorf("isFlag(%q) = %v, want %v", tt.arg, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("stripDashesOptimized", func(t *testing.T) {
+		tests := []struct {
+			arg  string
+			want string
+		}{
+			{"--flag", "flag"},
+			{"-f", "f"},
+			{"---triple", "-triple"},
+		}
+
+		for _, tt := range tests {
+			got := a.stripDashesOptimized(tt.arg)
+			if got != tt.want {
+				t.Errorf("stripDashesOptimized(%q) = %v, want %v", tt.arg, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("extractKeyValue", func(t *testing.T) {
+		args := []string{"--key=value", "--flag", "value", "--bool"}
+
+		// Test key=value format
+		key, value, skip := a.extractKeyValue("key=value", args, 0)
+		if key != "key" || value != "value" || skip != 0 {
+			t.Errorf("extractKeyValue with = got key=%v, value=%v, skip=%v", key, value, skip)
+		}
+
+		// Test flag with next value
+		key, value, skip = a.extractKeyValue("flag", args[1:], 0)
+		if key != "flag" || value != "value" || skip != 1 {
+			t.Errorf("extractKeyValue with next value got key=%v, value=%v, skip=%v", key, value, skip)
+		}
+
+		// Test boolean flag at end
+		key, value, skip = a.extractKeyValue("bool", args[3:], 0)
+		if key != "bool" || value != "true" || skip != 0 {
+			t.Errorf("extractKeyValue boolean got key=%v, value=%v, skip=%v", key, value, skip)
+		}
+	})
+}
+
+func TestARGS_HandleFlagValue(t *testing.T) {
+	a := NewARGS(false)
+
+	tests := []struct {
+		name     string
+		key      string
+		args     []string
+		index    int
+		wantKey  string
+		wantVal  string
+		wantSkip int
+	}{
+		{
+			name:     "negative number value",
+			key:      "threshold",
+			args:     []string{"--threshold", "-10"},
+			index:    0,
+			wantKey:  "threshold",
+			wantVal:  "-10",
+			wantSkip: 1,
+		},
+		{
+			name:     "no next arg",
+			key:      "flag",
+			args:     []string{"--flag"},
+			index:    0,
+			wantKey:  "flag",
+			wantVal:  "true",
+			wantSkip: 0,
+		},
+		{
+			name:     "next arg is flag",
+			key:      "flag1",
+			args:     []string{"--flag1", "--flag2"},
+			index:    0,
+			wantKey:  "flag1",
+			wantVal:  "true",
+			wantSkip: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotKey, gotVal, gotSkip := a.handleFlagValue(tt.key, tt.args, tt.index)
+			if gotKey != tt.wantKey || gotVal != tt.wantVal || gotSkip != tt.wantSkip {
+				t.Errorf("handleFlagValue() = (%v, %v, %v), want (%v, %v, %v)",
+					gotKey, gotVal, gotSkip, tt.wantKey, tt.wantVal, tt.wantSkip)
+			}
+		})
+	}
+}
+
 func TestARGS_ParseArgsStrict_EdgeCases(t *testing.T) {
 	parser := NewARGS(false)
 
