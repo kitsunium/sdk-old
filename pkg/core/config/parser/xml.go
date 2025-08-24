@@ -116,17 +116,28 @@ func (x *XML) LoadReader(r io.Reader) (map[string]string, error) {
 // LoadBytes parses XML from a byte slice.
 // Uses a stack-based approach to handle nested elements.
 func (x *XML) LoadBytes(data []byte) (map[string]string, error) {
-	// Pre-size based on typical XML structure
+	config := make(map[string]string, x.estimateSize(data))
+	root, err := x.parseXML(data)
+	if err != nil {
+		return nil, err
+	}
+	x.flattenXMLNode(root, "", config)
+	return config, nil
+}
+
+// estimateSize estimates the initial map size based on data length.
+func (x *XML) estimateSize(data []byte) int {
 	estimatedSize := len(data) / 50
 	if estimatedSize < 32 {
-		estimatedSize = 32
+		return 32
 	}
-	config := make(map[string]string, estimatedSize)
+	return estimatedSize
+}
 
-	// Use bytes.Reader to avoid string conversion
+// parseXML parses XML data into a tree structure.
+func (x *XML) parseXML(data []byte) (*xmlNode, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
-
-	stack := make([]*xmlNode, 0, 8) // Most XML has shallow nesting
+	stack := make([]*xmlNode, 0, 8)
 	root := &xmlNode{children: make(map[string][]*xmlNode, 4)}
 	current := root
 
@@ -141,47 +152,59 @@ func (x *XML) LoadBytes(data []byte) (map[string]string, error) {
 
 		switch t := token.(type) {
 		case xml.StartElement:
-			node := &xmlNode{
-				name:     normalize.Key(t.Name.Local),
-				parent:   current,
-				children: nil, // Allocate lazily only if needed
-			}
-
-			for _, attr := range t.Attr {
-				attrKey := normalize.Key(attr.Name.Local)
-				attrValue := normalize.Value(attr.Value)
-				node.attrs = append(node.attrs, xmlAttr{key: attrKey, value: attrValue})
-			}
-
-			if current.children == nil {
-				current.children = make(map[string][]*xmlNode)
-			}
-			current.children[node.name] = append(current.children[node.name], node)
-
-			stack = append(stack, current)
-			current = node
-
+			current = x.handleStartElement(t, current, &stack)
 		case xml.EndElement:
-			if len(stack) > 0 {
-				current = stack[len(stack)-1]
-				stack = stack[:len(stack)-1]
-			}
-
+			current = x.handleEndElement(current, &stack)
 		case xml.CharData:
-			text := strings.TrimSpace(string(t))
-			if text != "" && current != root {
-				// Accumulate text fragments (XML can split text across multiple CharData tokens)
-				if current.value != "" {
-					current.value += " " + normalize.Value(text)
-				} else {
-					current.value = normalize.Value(text)
-				}
-			}
+			x.handleCharData(t, current, root)
 		}
 	}
+	return root, nil
+}
 
-	x.flattenXMLNode(root, "", config)
-	return config, nil
+// handleStartElement processes an XML start element.
+func (x *XML) handleStartElement(t xml.StartElement, current *xmlNode, stack *[]*xmlNode) *xmlNode {
+	node := &xmlNode{
+		name:     normalize.Key(t.Name.Local),
+		parent:   current,
+		children: nil,
+	}
+
+	for _, attr := range t.Attr {
+		node.attrs = append(node.attrs, xmlAttr{
+			key:   normalize.Key(attr.Name.Local),
+			value: normalize.Value(attr.Value),
+		})
+	}
+
+	if current.children == nil {
+		current.children = make(map[string][]*xmlNode)
+	}
+	current.children[node.name] = append(current.children[node.name], node)
+
+	*stack = append(*stack, current)
+	return node
+}
+
+// handleEndElement processes an XML end element.
+func (x *XML) handleEndElement(current *xmlNode, stack *[]*xmlNode) *xmlNode {
+	if len(*stack) > 0 {
+		current = (*stack)[len(*stack)-1]
+		*stack = (*stack)[:len(*stack)-1]
+	}
+	return current
+}
+
+// handleCharData processes XML character data.
+func (x *XML) handleCharData(t xml.CharData, current, root *xmlNode) {
+	text := strings.TrimSpace(string(t))
+	if text != "" && current != root {
+		if current.value != "" {
+			current.value += " " + normalize.Value(text)
+		} else {
+			current.value = normalize.Value(text)
+		}
+	}
 }
 
 // flattenXMLNode recursively flattens an XML node tree into a key-value map.

@@ -182,93 +182,114 @@ func (j *JSON) LoadBytes(data []byte) (map[string]string, error) {
 // processConfig converts the parsed JSON config to a flat string map.
 // Uses stack-based iteration for better performance and memory efficiency
 // compared to recursive approaches.
+// stackItem represents an item in the processing stack.
+type stackItem struct {
+	data   map[string]any
+	prefix string
+	depth  int
+}
+
 func (j *JSON) processConfig(config map[string]any, dataSize int) (map[string]string, error) {
-	// Better size estimation: ~1 key per 30 bytes of JSON
 	estimatedSize := max(dataSize/30, 16)
 	result := make(map[string]string, estimatedSize)
 
-	// Pre-allocate string builder for key construction
 	var keyBuilder strings.Builder
 	keyBuilder.Grow(256)
 
-	// Use stack for iteration instead of recursion to improve performance
-	type stackItem struct {
-		data   map[string]any
-		prefix string
-		depth  int
-	}
-
-	// Pre-size stack based on typical nesting depth
-	stack := make([]stackItem, 1, 8)
-	stack[0] = stackItem{data: config, prefix: "", depth: 0}
+	stack := []stackItem{{data: config, prefix: "", depth: 0}}
 
 	for len(stack) > 0 {
-		// Pop from stack
 		current := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
-		prefixLen := len(current.prefix)
-		needsDot := prefixLen > 0
-
-		for key, value := range current.data {
-			// Optimized key construction
-			keyBuilder.Reset()
-			if needsDot {
-				keyBuilder.WriteString(current.prefix)
-				keyBuilder.WriteByte('.')
-			}
-			keyBuilder.WriteString(key)
-			fullKey := keyBuilder.String()
-
-			switch v := value.(type) {
-			case string:
-				result[normalize.Key(fullKey)] = normalize.Value(v)
-			case map[string]any:
-				// Check depth to prevent stack overflow
-				if current.depth >= MaxJSONDepth {
-					return nil, ErrJSONParse.Newf("JSON nesting depth exceeds maximum: %d", MaxJSONDepth)
-				}
-				stack = append(stack, stackItem{data: v, prefix: fullKey, depth: current.depth + 1})
-			case []any:
-				for i, item := range v {
-					// Optimized array key construction
-					arrayKeyBuilder := &keyBuilder
-					arrayKeyBuilder.Reset()
-					arrayKeyBuilder.WriteString(fullKey)
-					arrayKeyBuilder.WriteByte('.')
-					arrayKeyBuilder.WriteString(strconv.Itoa(i))
-					itemKey := arrayKeyBuilder.String()
-
-					if subMap, ok := item.(map[string]any); ok {
-						// Check depth for arrays containing objects
-						if current.depth >= MaxJSONDepth {
-							return nil, ErrJSONParse.Newf("JSON nesting depth exceeds maximum: %d", MaxJSONDepth)
-						}
-						stack = append(stack, stackItem{data: subMap, prefix: itemKey, depth: current.depth + 1})
-					} else {
-						result[normalize.Key(itemKey)] = normalizeAnyValue(item)
-					}
-				}
-			case json.Number:
-				result[normalize.Key(fullKey)] = normalizeJSONNumber(v)
-			case float64:
-				result[normalize.Key(fullKey)] = fastFloat64ToString(v)
-			case bool:
-				if v {
-					result[normalize.Key(fullKey)] = "true"
-				} else {
-					result[normalize.Key(fullKey)] = "false"
-				}
-			case nil:
-				result[normalize.Key(fullKey)] = ""
-			default:
-				// Fallback for any unexpected types
-				result[normalize.Key(fullKey)] = normalize.Value(fmt.Sprint(v))
-			}
+		if err := j.processStackItem(current, &stack, result, &keyBuilder); err != nil {
+			return nil, err
 		}
 	}
 
 	return result, nil
+}
+
+// processStackItem processes a single stack item.
+func (j *JSON) processStackItem(current stackItem, stack *[]stackItem, result map[string]string, keyBuilder *strings.Builder) error {
+	needsDot := len(current.prefix) > 0
+
+	for key, value := range current.data {
+		fullKey := j.buildKey(keyBuilder, current.prefix, key, needsDot)
+
+		if err := j.processValue(fullKey, value, current.depth, stack, result, keyBuilder); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// buildKey constructs a full key path.
+func (j *JSON) buildKey(keyBuilder *strings.Builder, prefix, key string, needsDot bool) string {
+	keyBuilder.Reset()
+	if needsDot {
+		keyBuilder.WriteString(prefix)
+		keyBuilder.WriteByte('.')
+	}
+	keyBuilder.WriteString(key)
+	return keyBuilder.String()
+}
+
+// processValue processes a single value based on its type.
+func (j *JSON) processValue(fullKey string, value any, depth int, stack *[]stackItem, result map[string]string, keyBuilder *strings.Builder) error {
+	switch v := value.(type) {
+	case string:
+		result[normalize.Key(fullKey)] = normalize.Value(v)
+	case map[string]any:
+		return j.processMap(fullKey, v, depth, stack)
+	case []any:
+		return j.processArray(fullKey, v, depth, stack, result, keyBuilder)
+	case json.Number:
+		result[normalize.Key(fullKey)] = normalizeJSONNumber(v)
+	case float64:
+		result[normalize.Key(fullKey)] = fastFloat64ToString(v)
+	case bool:
+		result[normalize.Key(fullKey)] = strconv.FormatBool(v)
+	case nil:
+		result[normalize.Key(fullKey)] = ""
+	default:
+		result[normalize.Key(fullKey)] = normalize.Value(fmt.Sprint(v))
+	}
+	return nil
+}
+
+// processMap handles nested map processing.
+func (j *JSON) processMap(fullKey string, data map[string]any, depth int, stack *[]stackItem) error {
+	if depth >= MaxJSONDepth {
+		return ErrJSONParse.Newf("JSON nesting depth exceeds maximum: %d", MaxJSONDepth)
+	}
+	*stack = append(*stack, stackItem{data: data, prefix: fullKey, depth: depth + 1})
+	return nil
+}
+
+// processArray handles array processing.
+func (j *JSON) processArray(fullKey string, arr []any, depth int, stack *[]stackItem, result map[string]string, keyBuilder *strings.Builder) error {
+	for i, item := range arr {
+		itemKey := j.buildArrayKey(keyBuilder, fullKey, i)
+
+		if subMap, ok := item.(map[string]any); ok {
+			if err := j.processMap(itemKey, subMap, depth, stack); err != nil {
+				return err
+			}
+		} else {
+			result[normalize.Key(itemKey)] = normalizeAnyValue(item)
+		}
+	}
+	return nil
+}
+
+// buildArrayKey constructs a key for an array element.
+func (j *JSON) buildArrayKey(keyBuilder *strings.Builder, fullKey string, index int) string {
+	keyBuilder.Reset()
+	keyBuilder.WriteString(fullKey)
+	keyBuilder.WriteByte('.')
+	keyBuilder.WriteString(strconv.Itoa(index))
+	return keyBuilder.String()
 }
 
 // normalizeAnyValue converts any JSON value type to its string representation.
