@@ -120,13 +120,14 @@ test/coverage:
 # Usage:
 #   make bench                   - run benchmarks for current commit
 #   make bench <hash>            - checkout commit and run benchmarks
+#   make bench CI=true           - preserve history (for CI/CD)
 .PHONY: bench
 bench:
 	@if [ ! -f benchmarks.sqlite ]; then \
 		echo "$(YELLOW)▶ No local benchmark database found, downloading from BENCH release...$(NC)"; \
 		$(MAKE) bench/update; \
 	fi
-	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ] && [ "$(filter-out $@,$(MAKECMDGOALS))" != "CI=true" ]; then \
 		COMMIT="$(filter-out $@,$(MAKECMDGOALS))"; \
 		echo "$(YELLOW)▶ Checking out commit $$COMMIT...$(NC)"; \
 		STASH_OUTPUT=$$(git stash push -m "bench: auto-stash before checkout" --include-untracked 2>&1); \
@@ -146,26 +147,24 @@ bench:
 	else \
 		echo "$(YELLOW)▶ Running stable benchmarks...$(NC)"; \
 		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
+		if [ "$(CI)" = "true" ]; then \
+			echo "$(CYAN)ℹ Preserving benchmark history (CI/CD mode)$(NC)"; \
+			PRESERVE_FLAG="--preserve-history"; \
+		else \
+			PRESERVE_FLAG=""; \
+		fi; \
 		bazel test --config=benchmark \
 			//pkg/kernel/kbuffer:kbuffer_bench_test \
 			//pkg/kernel/kcache:kcache_bench_test \
 			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
-			python3 scripts/bench_manager.py save --stdin; \
+			python3 scripts/bench_manager.py save --stdin $$PRESERVE_FLAG; \
 	fi
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
-
-## bench/save: save benchmark results (CI mode - preserves history)
+# Alias for compatibility (redirects to bench with CI flag)
 .PHONY: bench/save
 bench/save:
-	@echo "$(YELLOW)▶ Running benchmarks and saving results (preserving history)...$(NC)"
-	@echo "$(CYAN)→ Using stable configuration (single-core, 10s per test)$(NC)"
-	@bazel test --config=benchmark \
-		//pkg/kernel/kbuffer:kbuffer_bench_test \
-		//pkg/kernel/kcache:kcache_bench_test \
-		//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
-		python3 scripts/bench_manager.py save --stdin --preserve-history
-	@echo "$(GREEN)✓ Benchmark results saved with history preserved$(NC)"
+	@$(MAKE) bench CI=true
 
 ## bench/update: fetch benchmark database from BENCH release
 .PHONY: bench/update
