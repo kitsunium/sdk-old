@@ -137,6 +137,13 @@ bench: bench/update
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
 
+## bench/save: save benchmark results (CI mode - preserves history)
+.PHONY: bench/save
+bench/save:
+	@echo "$(YELLOW)▶ Running benchmarks and saving results (preserving history)...$(NC)"
+	@python3 scripts/bench_manager.py save --preserve-history
+	@echo "$(GREEN)✓ Benchmark results saved with history preserved$(NC)"
+
 ## bench/update: fetch benchmark database from BENCH release
 .PHONY: bench/update
 bench/update:
