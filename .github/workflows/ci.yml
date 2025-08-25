@@ -370,7 +370,7 @@ jobs:
           # Delete the existing BENCH tag if it exists (both locally and remotely)
           git tag -d BENCH 2>/dev/null || true
           git push origin :refs/tags/BENCH 2>/dev/null || true
-          
+
           # Create new BENCH tag at current commit
           git tag BENCH
           git push origin BENCH
