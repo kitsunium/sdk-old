@@ -47,8 +47,8 @@ help:
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
 	@echo ''
 	@echo 'Benchmarks:'
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run and save benchmark results"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/update" "download latest benchmark database"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks (output only)"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/save" "run and save benchmark results"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/compare" "compare two benchmark commits"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/list" "list saved benchmark results"
 	@echo ''
@@ -116,56 +116,34 @@ test/coverage:
 	@$(BAZEL) coverage //... --combined_report=lcov
 	@echo "$(GREEN)✓ Coverage report generated$(NC)"
 
-## bench: run benchmarks and save results to SQLite database
-# Usage:
-#   make bench                   - run benchmarks for current commit
-#   make bench <hash>            - checkout commit and run benchmarks
+## bench: run benchmarks for all packages
 .PHONY: bench
 bench:
-	@if [ ! -f benchmarks.sqlite ]; then \
-		echo "$(YELLOW)▶ No local benchmark database found, downloading from BENCH release...$(NC)"; \
-		$(MAKE) bench/update; \
-	fi
-	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		COMMIT="$(filter-out $@,$(MAKECMDGOALS))"; \
-		echo "$(YELLOW)▶ Checking out commit $$COMMIT...$(NC)"; \
-		git stash push -m "bench: auto-stash before checkout" --include-untracked 2>/dev/null || true; \
-		git checkout $$COMMIT || exit 1; \
-		echo "$(YELLOW)▶ Running benchmarks for commit $$COMMIT...$(NC)"; \
-		python3 scripts/bench_manager.py save; \
-		git checkout - >/dev/null 2>&1; \
-		git stash pop 2>/dev/null || true; \
-	else \
-		echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"; \
-		python3 scripts/bench_manager.py save; \
-	fi
-	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
+	@echo "$(YELLOW)▶ Running benchmarks...$(NC)"
+	@for target in $$($(BAZEL) query 'attr(tags, "bench", //...)' 2>/dev/null); do \
+		pkg_dir=$$(echo $$target | sed 's|//||' | sed 's|:.*||'); \
+		echo "$(CYAN)  Benchmarking $$pkg_dir...$(NC)"; \
+		set -o pipefail; \
+		$(BAZEL) run $$target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s -test.run=^$$ 2>&1 | grep -v "^exec " | grep -v "^Executing tests" | grep -v "^---" | tee $$pkg_dir/result_bench || exit $$?; \
+	done
+	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
 
-
-## bench/save: save benchmark results (CI mode - preserves history)
+## bench/save: run benchmarks and save results to SQLite database
 .PHONY: bench/save
-bench/save:
-	@echo "$(YELLOW)▶ Running benchmarks and saving results (preserving history)...$(NC)"
-	@python3 scripts/bench_manager.py save --preserve-history
-	@echo "$(GREEN)✓ Benchmark results saved with history preserved$(NC)"
+bench/save: bench/update
+	@echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"
+	@python3 scripts/bench_manager.py save
+	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
 ## bench/update: fetch benchmark database from BENCH release
 .PHONY: bench/update
 bench/update:
 	@echo "$(YELLOW)▶ Fetching benchmark database from BENCH release...$(NC)"
-	@RELEASE_INFO=$$(curl -s https://api.github.com/repos/kitsunium/sdk/releases/tags/BENCH); \
-	if echo "$$RELEASE_INFO" | grep -q '"tag_name".*"BENCH"'; then \
+	@if curl -s https://api.github.com/repos/$(REPO_PATH)/releases/tags/BENCH | grep -q "benchmarks.sqlite"; then \
 		echo "$(CYAN)→ BENCH release found, downloading benchmarks.sqlite$(NC)"; \
-		ASSET_URL=$$(echo "$$RELEASE_INFO" | grep -o '"browser_download_url".*benchmarks.sqlite"' | cut -d'"' -f4); \
-		if [ -n "$$ASSET_URL" ]; then \
-			curl -sL "$$ASSET_URL" -o benchmarks.sqlite && \
-			echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
-			echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
-		else \
-			curl -sL https://github.com/kitsunium/sdk/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
-			echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
-			echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
-		fi; \
+		curl -sL https://github.com/$(REPO_PATH)/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
+		echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
+		echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
 	else \
 		echo "$(YELLOW)⚠ BENCH release not found, starting with empty database$(NC)"; \
 	fi
@@ -173,39 +151,31 @@ bench/update:
 ## bench/compare: compare benchmark results
 # Usage:
 #   make bench/compare                    - compare current with main
-#   make bench/compare <commit>           - compare current with <commit>
-#   make bench/compare <commit1> <commit2> - compare <commit1> with <commit2>
+#   make bench/compare COMMIT             - compare current with COMMIT
+#   make bench/compare COMMIT1 COMMIT2    - compare COMMIT1 with COMMIT2
 .PHONY: bench/compare
 bench/compare:
 	@echo "$(YELLOW)▶ Comparing benchmarks...$(NC)"
-	@args="$(filter-out $@,$(MAKECMDGOALS))"; \
-	if [ -z "$$args" ]; then \
+	@if [ -z "$(word 2,$(MAKECMDGOALS))" ]; then \
 		echo "$(CYAN)→ Comparing current commit with main branch$(NC)"; \
 		python3 scripts/bench_manager.py compare; \
-	elif [ "$$(echo $$args | wc -w)" = "1" ]; then \
-		echo "$(CYAN)→ Comparing current commit with $$args$(NC)"; \
-		python3 scripts/bench_manager.py compare $$args; \
-	elif [ "$$(echo $$args | wc -w)" = "2" ]; then \
-		arg1=$$(echo $$args | cut -d' ' -f1); \
-		arg2=$$(echo $$args | cut -d' ' -f2); \
-		echo "$(CYAN)→ Comparing $$arg1 with $$arg2$(NC)"; \
-		python3 scripts/bench_manager.py compare $$arg1 $$arg2; \
+	elif [ -z "$(word 3,$(MAKECMDGOALS))" ]; then \
+		echo "$(CYAN)→ Comparing current commit with $(word 2,$(MAKECMDGOALS))$(NC)"; \
+		python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)); \
 	else \
-		echo "$(RED)❌ Invalid arguments. Usage:$(NC)"; \
-		echo "  make bench/compare                    - compare current with main"; \
-		echo "  make bench/compare <commit>           - compare current with <commit>"; \
-		echo "  make bench/compare <commit1> <commit2> - compare <commit1> with <commit2>"; \
-		exit 1; \
+		echo "$(CYAN)→ Comparing $(word 2,$(MAKECMDGOALS)) with $(word 3,$(MAKECMDGOALS))$(NC)"; \
+		python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)) $(word 3,$(MAKECMDGOALS)); \
 	fi
+	@echo "$(GREEN)✓ Benchmark comparison complete$(NC)"
+
+# Catch the commit arguments for bench/compare
+%:
+	@:
 
 ## bench/list: list all saved benchmark results
 .PHONY: bench/list
 bench/list:
 	@python3 scripts/bench_manager.py list
-
-# Catch-all rule for positional arguments to bench and bench/compare
-%:
-	@:
 
 ## deps: download and verify dependencies
 .PHONY: deps

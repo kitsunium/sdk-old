@@ -62,4 +62,3 @@ result_bench
 
 #Ignore vscode AI rules
 .github/instructions/
-*.txt

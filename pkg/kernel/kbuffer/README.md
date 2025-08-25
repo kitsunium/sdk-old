@@ -11,14 +11,14 @@ allocations must be avoided.
 ## Features
 
 - **Zero-Allocation Operations**: String/byte conversions without memory
-  allocation using `unsafe.String` and `unsafe.StringData`
-- **Cache-Line Optimization**: 64-byte aligned struct with hot path fields in
-  first cache line
-- **Compiler Optimizations**: `//go:inline` directives on hot paths, bounds
-  check elimination (BCE) hints
-- **Memory Pooling**: 21 size classes from 64B to 1MB with sync.Pool
+  allocation
+- **Cache-Line Optimization**: Struct layout aligned for optimal CPU cache
+  performance
+- **Compiler Optimizations**: Aggressive inlining with `//go:inline` and
+  `//go:nosplit` directives
+- **Memory Pooling**: Reusable buffer pools to minimize GC pressure
 - **Thread-Safe Pool**: Safe concurrent access to buffer pools
-- **Safety**: All unsafe operations protected by explicit bounds checks
+- **Comprehensive Safety**: Strict bounds checking despite unsafe operations
 
 ## Installation
 

@@ -39,25 +39,6 @@ build:debug --@rules_go//go/config:race
 build:release --compilation_mode=opt
 build:release --strip=always
 
-# Performance optimized configuration for production builds
-build:perf --compilation_mode=opt
-build:perf --@rules_go//go/config:pure
-build:perf --@rules_go//go/config:static
-build:perf --strip=always
-# Go linker optimizations (strip debug info)
-build:perf --@rules_go//go/config:gc_linkopts=-s
-build:perf --@rules_go//go/config:gc_linkopts=-w
-# Enable compiler optimizations
-build:perf --copt=-O2
-
-# SDK build configuration (for library distribution)
-build:sdk --compilation_mode=opt
-build:sdk --@rules_go//go/config:pure
-# Keep debug symbols for better stack traces
-build:sdk --strip=never
-# Standard optimizations
-build:sdk --copt=-O2
-
 # Remote cache (uncomment and configure if needed)
 # build --remote_cache=grpc://cache.example.com:9092
 # build --remote_download_minimal
