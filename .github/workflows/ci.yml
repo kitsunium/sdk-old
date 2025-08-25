@@ -162,9 +162,9 @@ jobs:
           
           # Extract test statistics from bazel output
           TOTAL_TESTS=$(grep -E "^Executed [0-9]+ out of [0-9]+ test" test-output.txt | grep -oE "Executed [0-9]+" | grep -oE "[0-9]+" || echo "0")
-          PASSED_TESTS=$(grep -cE "^//.*\s+PASSED" test-output.txt || echo "0")
-          FAILED_TESTS=$(grep -cE "^//.*\s+FAILED" test-output.txt || echo "0")
-          FLAKY_TESTS=$(grep -cE "^//.*\s+FLAKY" test-output.txt || echo "0")
+          PASSED_TESTS=$(grep -cE "^//.*[[:space:]]+PASSED" test-output.txt || echo "0")
+          FAILED_TESTS=$(grep -cE "^//.*[[:space:]]+FAILED" test-output.txt || echo "0")
+          FLAKY_TESTS=$(grep -cE "^//.*[[:space:]]+FLAKY" test-output.txt || echo "0")
           
           # Save outputs for later use
           echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
