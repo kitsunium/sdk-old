@@ -24,12 +24,12 @@ bazel build //cmd/myapp
 bazel build --config=perf //cmd/myapp
 ```
 
-This enables:
-- Maximum compiler optimizations (-O3)
-- CPU-specific optimizations (march=native)
-- Function inlining (level 4)
-- Stripped binaries (smaller size)
-- Static linking
+This enables (from `.bazelrc`):
+- Compiler optimizations (`--copt=-O2`)
+- Pure Go builds (`--@rules_go//go/config:pure`)
+- Static linking (`--@rules_go//go/config:static`)
+- Stripped debug symbols (`--@rules_go//go/config:gc_linkopts=-s,-w`)
+- Optimized compilation mode (`--compilation_mode=opt`)
 
 #### SDK Library Build (Balanced)
 ```bash
@@ -37,10 +37,10 @@ bazel build --config=sdk //pkg/...
 ```
 
 This provides:
-- Good optimizations (-O2)
-- Debug symbols retained
-- Bounds checking enabled (safety)
-- Aggressive inlining (level 3)
+- Standard optimizations (`--copt=-O2`)
+- Debug symbols retained (`--strip=never`)
+- All runtime safety checks preserved
+- Pure Go builds for compatibility
 
 ## Performance Features
 
@@ -105,25 +105,32 @@ bazel build --config=debug //cmd/yourapp
 
 ### Go Compiler Optimizations
 
-- `-l=4`: Maximum inlining (4 is most aggressive)
-- `-m=2`: Print optimization decisions
-- `-B`: Disable bounds checking (use with caution)
-- `-s -w`: Strip debug symbols (linker flags)
+**Note**: The `-l` flag (via `-gcflags`) actually **disables** inlining when present, not enables it. There is no numeric level support for `-l`.
+
+- `-gcflags="-l"`: Disable inlining (useful for debugging)
+- `-gcflags="-m"`: Print optimization decisions
+- `-ldflags="-s -w"`: Strip debug symbols and DWARF info (reduces binary size)
+
+**Important**: There is no supported public build flag to disable bounds checks globally. The Go compiler automatically applies bounds check elimination (BCE) where it can prove safety.
 
 ### C Compiler Optimizations
 
-- `-O3`: Maximum optimization level
-- `-march=native`: Use CPU-specific instructions
-- `-mtune=native`: Tune for current CPU
+- `-O2`: Standard optimization level (balanced performance/size)
+- `-O3`: Maximum optimization (may increase binary size)
 
 ## Safety Considerations
 
-The `perf` configuration disables bounds checking (`-B` flag). Use only for:
+The `perf` configuration achieves optimizations through:
+- **Bounds Check Elimination (BCE)**: The Go compiler automatically eliminates bounds checks where it can prove safety
+- **Carefully scoped `unsafe` operations**: Used only with explicit bounds validation
+- **Object pooling**: Reduces allocations and GC pressure
+
+The `perf` configuration is recommended for:
 - Production binaries after thorough testing
 - Performance-critical paths
 - When you're confident about code correctness
 
-For library distribution, use `--config=sdk` which keeps bounds checking enabled.
+For library distribution, use `--config=sdk` which retains all runtime safety checks while still providing good optimizations.
 
 ## Monitoring Performance
 
