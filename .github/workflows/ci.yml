@@ -118,6 +118,11 @@ jobs:
     name: 🧪 Test
     runs-on: ubuntu-latest
     needs: lint
+    outputs:
+      total_tests: ${{ steps.run-tests.outputs.total_tests }}
+      passed_tests: ${{ steps.run-tests.outputs.passed_tests }}
+      failed_tests: ${{ steps.run-tests.outputs.failed_tests }}
+      flaky_tests: ${{ steps.run-tests.outputs.flaky_tests }}
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v5
@@ -142,19 +147,61 @@ jobs:
           repository-cache: true
 
       - name: 🧪 Run all tests
+        id: run-tests
         run: |
           echo "🧪 Running all unit tests..."
-          # Run all tests with coverage
+          # Run all tests and capture results
+          set +e  # Don't exit immediately on failure
           bazel test //... \
             --test_output=errors \
             --test_size_filters=small,medium \
-            --nocache_test_results
-          echo "✅ All tests passed"
+            --nocache_test_results \
+            --test_summary=detailed 2>&1 | tee test-output.txt
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+
+          # Extract test statistics from bazel output
+          TOTAL_TESTS=$(grep -E "^Executed [0-9]+ out of [0-9]+ tests?" test-output.txt | grep -oE "Executed [0-9]+" | grep -oE "[0-9]+" || echo "0")
+          PASSED_TESTS=$(grep -cE "^//.*[[:space:]]+PASSED" test-output.txt || echo "0")
+          FAILED_TESTS=$(grep -cE "^//.*[[:space:]]+FAILED" test-output.txt || echo "0")
+          FLAKY_TESTS=$(grep -cE "^//.*[[:space:]]+FLAKY" test-output.txt || echo "0")
+
+          # Save outputs for later use
+          echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
+          echo "passed_tests=$PASSED_TESTS" >> $GITHUB_OUTPUT
+          echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
+          echo "flaky_tests=$FLAKY_TESTS" >> $GITHUB_OUTPUT
+
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "❌ Some tests failed"
+            exit $TEST_EXIT_CODE
+          else
+            echo "✅ All tests passed"
+          fi
 
       - name: 📊 Generate test report
         if: always()
         run: |
           echo "📊 Extracting test results..."
+          # Create test summary file for artifact
+          echo "# Test Results Summary" > test-summary.md
+          echo "" >> test-summary.md
+          echo "| Metric | Count |" >> test-summary.md
+          echo "|--------|-------|" >> test-summary.md
+          echo "| Total Tests | ${{ steps.run-tests.outputs.total_tests || '0' }} |" >> test-summary.md
+          echo "| ✅ Passed | ${{ steps.run-tests.outputs.passed_tests || '0' }} |" >> test-summary.md
+          echo "| ❌ Failed | ${{ steps.run-tests.outputs.failed_tests || '0' }} |" >> test-summary.md
+          echo "| 🔄 Flaky | ${{ steps.run-tests.outputs.flaky_tests || '0' }} |" >> test-summary.md
+
+          # Extract failed tests if any
+          if [ "${{ steps.run-tests.outputs.failed_tests }}" -gt "0" ]; then
+            echo "" >> test-summary.md
+            echo "## Failed Tests" >> test-summary.md
+            echo '```' >> test-summary.md
+            grep -E "^//.*\s+FAILED" test-output.txt | head -10 >> test-summary.md || true
+            echo '```' >> test-summary.md
+          fi
+
           # Bazel already generates XML test results
           find bazel-testlogs -name "test.xml" -type f > test-files.txt || true
           # Count test results
@@ -171,6 +218,8 @@ jobs:
             bazel-testlogs/**/*.log
             bazel-testlogs/**/*.xml
             test-report.txt
+            test-summary.md
+            test-output.txt
             test-targets.txt
           retention-days: 1
           if-no-files-found: ignore
@@ -365,6 +414,16 @@ jobs:
 
           echo "✅ Benchmarks database ready"
 
+      - name: 🏷️ Update BENCH tag
+        run: |
+          # Delete the existing BENCH tag if it exists (both locally and remotely)
+          git tag -d BENCH 2>/dev/null || true
+          git push origin :refs/tags/BENCH 2>/dev/null || true
+
+          # Create new BENCH tag at current commit
+          git tag BENCH
+          git push origin BENCH
+
       - name: 🚀 Create/Update BENCH Release
         uses: ncipollo/release-action@2c591bcc8ecdcd2db72b97d6147f871fcd833ba5 # v1.14.0
         with:
@@ -423,7 +482,13 @@ jobs:
           fi
 
           if [ "${{ needs.test.result }}" = "success" ]; then
-            echo "| 🧪 Test | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            TOTAL="${{ needs.test.outputs.total_tests }}"
+            PASSED="${{ needs.test.outputs.passed_tests }}"
+            if [ -n "$TOTAL" ] && [ "$TOTAL" != "0" ]; then
+              echo "| 🧪 Test | ✅ Success ($PASSED/$TOTAL passed) |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 🧪 Test | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "| 🧪 Test | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
@@ -448,6 +513,30 @@ jobs:
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Add test details if available
+          if [ "${{ needs.test.result }}" = "success" ]; then
+            TOTAL="${{ needs.test.outputs.total_tests }}"
+            PASSED="${{ needs.test.outputs.passed_tests }}"
+            FAILED="${{ needs.test.outputs.failed_tests }}"
+            FLAKY="${{ needs.test.outputs.flaky_tests }}"
+            
+            if [ -n "$TOTAL" ] && [ "$TOTAL" != "0" ]; then
+              echo "## 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| Total Tests | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+              echo "| ✅ Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+              if [ -n "$FAILED" ] && [ "$FAILED" != "0" ]; then
+                echo "| ❌ Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+              fi
+              if [ -n "$FLAKY" ] && [ "$FLAKY" != "0" ]; then
+                echo "| 🔄 Flaky | $FLAKY |" >> $GITHUB_STEP_SUMMARY
+              fi
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
 
           # Add coverage details if available
           if [ "${{ needs.coverage.result }}" = "success" ]; then
