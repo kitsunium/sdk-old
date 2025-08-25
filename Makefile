@@ -130,8 +130,9 @@ bench:
 	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		COMMIT="$(filter-out $@,$(MAKECMDGOALS))"; \
 		echo "$(YELLOW)▶ Checking out commit $$COMMIT...$(NC)"; \
-		STASH_OUTPUT=$$(git stash push -m "bench: auto-stash before checkout" --include-untracked 2>&1); \
-		STASHED=$$?; \
+		STASH_COUNT_BEFORE=$$(git stash list | wc -l); \
+		git stash push -m "bench: auto-stash before checkout" --include-untracked >/dev/null 2>&1; \
+		STASH_COUNT_AFTER=$$(git stash list | wc -l); \
 		git checkout $$COMMIT || exit 1; \
 		echo "$(YELLOW)▶ Running stable benchmarks for commit $$COMMIT...$(NC)"; \
 		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
@@ -141,7 +142,7 @@ bench:
 			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
 			python3 scripts/bench_manager.py save --stdin; \
 		git checkout - >/dev/null 2>&1; \
-		if [ $$STASHED -eq 0 ] && echo "$$STASH_OUTPUT" | grep -q "Saved"; then \
+		if [ $$STASH_COUNT_AFTER -gt $$STASH_COUNT_BEFORE ]; then \
 			git stash pop --quiet 2>/dev/null || echo "$(YELLOW)Note: Could not restore stashed changes$(NC)"; \
 		fi; \
 	else \
