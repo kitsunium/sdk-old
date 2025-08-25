@@ -207,6 +207,23 @@ bench/compare:
 bench/list:
 	@python3 scripts/bench_manager.py list
 
+## bench/stable: run benchmarks with stable configuration (slower but more reliable)
+# This runs benchmarks with:
+# - Single CPU core (GOMAXPROCS=1)
+# - Longer benchmark time (10s)
+# - Optimized build
+# - No test result caching
+.PHONY: bench/stable
+bench/stable:
+	@echo "$(YELLOW)▶ Running stable benchmarks (single-core, 10s per test)...$(NC)"
+	@echo "$(CYAN)ℹ This will take longer but provide more reliable results$(NC)"
+	@bazel test --config=benchmark \
+		//pkg/kernel/kbuffer:kbuffer_bench_test \
+		//pkg/kernel/kcache:kcache_bench_test \
+		//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+		python3 scripts/bench_manager.py save --stdin
+	@echo "$(GREEN)✓ Stable benchmark results saved$(NC)"
+
 # Catch-all rule for positional arguments to bench and bench/compare
 %:
 	@:
