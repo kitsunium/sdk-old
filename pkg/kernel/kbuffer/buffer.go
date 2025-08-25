@@ -77,10 +77,8 @@ func (b *Buffer) Write(p []byte) (int, error) {
 		return 0, ErrBufferOverflow
 	}
 
-	// Use unsafe for zero-copy operation
-	// SAFETY: Bounds checked above (available = cap - pos), prevents overflow
-	dst := unsafe.Slice(&b.data[b.pos], available)
-	copy(dst, p)
+	// Direct copy without extra slice creation
+	copy(b.data[b.pos:b.pos+int32(n)], p)
 	b.pos += int32(n)
 	return n, nil
 }
@@ -102,10 +100,7 @@ func (b *Buffer) WriteString(s string) (int, error) {
 	}
 
 	// Zero-allocation string write using unsafe
-	// SAFETY: String length n and buffer available space checked above
-	src := unsafe.Slice(unsafe.StringData(s), n)
-	dst := unsafe.Slice(&b.data[b.pos], available)
-	copy(dst, src)
+	copy(b.data[b.pos:], unsafe.Slice(unsafe.StringData(s), n))
 	b.pos += int32(n)
 	return n, nil
 }
@@ -179,7 +174,7 @@ func (b *Buffer) String() string {
 	if b.pos == 0 {
 		return ""
 	}
-	// SAFETY: pos is bounded by buffer capacity, data[0:pos] is valid
+	// Zero-allocation conversion using unsafe
 	return unsafe.String(&b.data[0], int(b.pos))
 }
 

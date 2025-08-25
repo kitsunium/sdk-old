@@ -363,14 +363,14 @@ class BenchmarkManager:
             if package != current_package:
                 if current_package is not None and table_data:
                     # Print the table for the previous package
-                    headers = ["Test", "Base (ns/op)", "Current (ns/op)", "Change", "MB/s", "Allocs"]
-                    print(tabulate(table_data, headers=headers, tablefmt="simple", floatfmt=".2f"))
+                    headers = ["Test", "Base (ns/op)", "Current (ns/op)", "Change", "MB/s", "Allocs/op"]
+                    print(tabulate(table_data, headers=headers, tablefmt="simple"))
                     print()
                     table_data = []
                 
                 # Print new package header
                 print(f"\n{CYAN}Package: {package}{NC}")
-                print("-" * 100)
+                print("-" * 120)
                 current_package = package
             
             # Get benchmark results
@@ -382,30 +382,48 @@ class BenchmarkManager:
                 base_ns, base_mb, base_bytes, base_allocs = base_result
                 curr_ns, curr_mb, curr_bytes, curr_allocs = current_result
                 
+                # Format base and current values with colors
+                base_ns_str = f"{CYAN}{base_ns:.2f}{NC}"
+                curr_ns_str = f"{YELLOW}{curr_ns:.2f}{NC}"
+                
                 # Calculate change
                 ns_change = ((curr_ns - base_ns) / base_ns) * 100 if base_ns else 0
-                change_color = GREEN if ns_change < 0 else RED if ns_change > 0 else ""
-                change_symbol = "↓" if ns_change < 0 else "↑" if ns_change > 0 else "="
+                if ns_change < -5:
+                    change_color = GREEN
+                    change_symbol = "↓"
+                elif ns_change > 5:
+                    change_color = RED
+                    change_symbol = "↑"
+                else:
+                    change_color = ""
+                    change_symbol = "="
                 change_str = f"{change_color}{change_symbol}{abs(ns_change):.1f}%{NC}"
                 
-                # Format MB/s
+                # Format MB/s with both values
                 mb_str = ""
                 if base_mb and curr_mb:
                     mb_change = ((curr_mb - base_mb) / base_mb) * 100
-                    mb_color = GREEN if mb_change > 0 else RED if mb_change < 0 else ""
+                    mb_color = GREEN if mb_change > 5 else RED if mb_change < -5 else ""
                     mb_symbol = "↑" if mb_change > 0 else "↓" if mb_change < 0 else "="
-                    mb_str = f"{curr_mb:.1f} MB/s {mb_color}{mb_symbol}{abs(mb_change):.1f}%{NC}"
+                    mb_str = f"{CYAN}{base_mb:.1f}{NC} → {YELLOW}{curr_mb:.1f}{NC} {mb_color}{mb_symbol}{abs(mb_change):.1f}%{NC}"
+                elif curr_mb:
+                    mb_str = f"- → {YELLOW}{curr_mb:.1f}{NC}"
                 
-                # Format allocations
+                # Format allocations with both values
                 alloc_str = ""
-                if base_allocs != curr_allocs:
-                    alloc_color = GREEN if curr_allocs < base_allocs else RED
-                    alloc_str = f"{alloc_color}{base_allocs}→{curr_allocs}{NC}"
-                elif curr_allocs > 0:
-                    alloc_str = f"{curr_allocs}"
+                if base_allocs > 0 or curr_allocs > 0:
+                    if base_allocs != curr_allocs:
+                        alloc_color = GREEN if curr_allocs < base_allocs else RED if curr_allocs > base_allocs else ""
+                        alloc_str = f"{CYAN}{base_allocs}{NC} → {YELLOW}{curr_allocs}{NC}"
+                        if base_allocs > 0:
+                            alloc_change = ((curr_allocs - base_allocs) / base_allocs) * 100
+                            alloc_symbol = "↑" if alloc_change > 0 else "↓" if alloc_change < 0 else "="
+                            alloc_str += f" {alloc_color}{alloc_symbol}{abs(alloc_change):.1f}%{NC}"
+                    else:
+                        alloc_str = f"{curr_allocs}"
                 
                 test_display = test_name_base.replace('Benchmark', '')
-                table_data.append([test_display, base_ns, curr_ns, change_str, mb_str, alloc_str])
+                table_data.append([test_display, base_ns_str, curr_ns_str, change_str, mb_str, alloc_str])
             
             elif base_result and not current_result:
                 test_display = test_name_base.replace('Benchmark', '')
@@ -420,8 +438,8 @@ class BenchmarkManager:
         
         # Print the last package's table
         if table_data:
-            headers = ["Test", "Base (ns/op)", "Current (ns/op)", "Change", "MB/s", "Allocs"]
-            print(tabulate(table_data, headers=headers, tablefmt="simple", floatfmt=".2f"))
+            headers = ["Test", "Base (ns/op)", "Current (ns/op)", "Change", "MB/s", "Allocs/op"]
+            print(tabulate(table_data, headers=headers, tablefmt="simple"))
 
     def _get_all_tests(self, cursor, base_full: str, current_full: str) -> List[Tuple[str, str]]:
         """Get all test names from both commits, normalized without CPU suffix."""

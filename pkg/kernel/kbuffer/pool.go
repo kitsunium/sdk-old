@@ -72,22 +72,31 @@ func newPool() *BufferPool {
 // The returned buffer may be larger than requested.
 //
 //go:nosplit
+//go:nocheckptr
 func (p *BufferPool) Get(size int) []byte {
 	if size <= 0 {
 		return nil
 	}
 
-	// Fast path for common sizes
+	// Fast path for common sizes with direct pointer access
 	if size <= 256 {
-		var bufPtr *[]byte
-		if size <= 64 {
-			bufPtr = p.pools[0].Get().(*[]byte)
-		} else if size <= 128 {
-			bufPtr = p.pools[1].Get().(*[]byte)
-		} else {
-			bufPtr = p.pools[2].Get().(*[]byte)
+		var poolIdx int
+		switch {
+		case size <= 64:
+			poolIdx = 0
+		case size <= 128:
+			poolIdx = 1
+		default:
+			poolIdx = 2
 		}
-		return (*bufPtr)[:size]
+
+		// Use unsafe for direct access
+		if obj := p.pools[poolIdx].Get(); obj != nil {
+			bufPtr := obj.(*[]byte)
+			return (*bufPtr)[:size]
+		}
+		// Fallback to allocation if pool is empty
+		return make([]byte, 1<<(poolIdx+6))[:size]
 	}
 
 	// Direct allocation for oversized buffers
@@ -95,7 +104,7 @@ func (p *BufferPool) Get(size int) []byte {
 		return make([]byte, size)
 	}
 
-	// Calculate size class
+	// Calculate size class using optimized bit operations
 	class := sizeClass(size)
 	poolIdx := class - 6
 
@@ -103,9 +112,14 @@ func (p *BufferPool) Get(size int) []byte {
 		return make([]byte, size)
 	}
 
-	// Get from pool
-	bufPtr := p.pools[poolIdx].Get().(*[]byte)
-	return (*bufPtr)[:size]
+	// Get from pool with unsafe optimization
+	if obj := p.pools[poolIdx].Get(); obj != nil {
+		bufPtr := obj.(*[]byte)
+		return (*bufPtr)[:size]
+	}
+
+	// Fallback to allocation
+	return make([]byte, 1<<class)[:size]
 }
 
 // Put returns a buffer to the pool for reuse.
