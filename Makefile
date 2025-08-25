@@ -182,13 +182,14 @@ bench/update:
 bench/compare:
 	@echo "$(YELLOW)▶ Comparing benchmarks...$(NC)"
 	@args="$(filter-out $@,$(MAKECMDGOALS))"; \
-	if [ -z "$$args" ]; then \
+	num_args=$$(echo "$$args" | tr -s ' ' | wc -w | tr -d ' '); \
+	if [ -z "$$args" ] || [ "$$num_args" = "0" ]; then \
 		echo "$(CYAN)→ Comparing current commit with main branch$(NC)"; \
 		python3 scripts/bench_manager.py compare; \
-	elif [ "$$(echo $$args | wc -w)" = "1" ]; then \
+	elif [ "$$num_args" = "1" ]; then \
 		echo "$(CYAN)→ Comparing current commit with $$args$(NC)"; \
 		python3 scripts/bench_manager.py compare $$args; \
-	elif [ "$$(echo $$args | wc -w)" = "2" ]; then \
+	elif [ "$$num_args" = "2" ]; then \
 		arg1=$$(echo $$args | cut -d' ' -f1); \
 		arg2=$$(echo $$args | cut -d' ' -f2); \
 		echo "$(CYAN)→ Comparing $$arg1 with $$arg2$(NC)"; \
