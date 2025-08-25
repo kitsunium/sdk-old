@@ -123,6 +123,7 @@ bazel build --config=debug //cmd/yourapp
   - `-l=2-4`: Increasingly aggressive inlining
 
 Other optimization flags:
+
 - `-gcflags="-m"`: Print optimization decisions
 - `-ldflags="-s -w"`: Strip debug symbols and DWARF info (reduces binary size)
 
