@@ -400,8 +400,19 @@ jobs:
       - name: 📊 Download baseline benchmarks
         run: |
           echo "📊 Downloading baseline benchmarks from BENCH release..."
-          curl -sL https://github.com/${{ github.repository }}/releases/download/BENCH/benchmarks.sqlite \
-            -o benchmarks.sqlite || echo "No baseline found"
+          # Try to download the baseline benchmarks
+          if curl -sL https://github.com/${{ github.repository }}/releases/download/BENCH/benchmarks.sqlite \
+            -o benchmarks.sqlite; then
+            # Verify it's a valid SQLite database
+            if file benchmarks.sqlite | grep -q "SQLite"; then
+              echo "✅ Valid baseline benchmarks downloaded"
+            else
+              echo "⚠️ Downloaded file is not a valid SQLite database, removing..."
+              rm -f benchmarks.sqlite
+            fi
+          else
+            echo "⚠️ No baseline benchmarks found (BENCH release may not exist yet)"
+          fi
 
       - name: ⚡ Run current benchmarks
         run: |
@@ -412,17 +423,21 @@ jobs:
         id: compare
         run: |
           echo "📊 Comparing benchmarks with main branch..."
-          # Generate comparison
-          python3 scripts/bench_manager.py compare main current > comparison.txt 2>&1 || true
-          
-          # Extract meaningful comparison data
-          if grep -q "Benchmark Comparison" comparison.txt; then
-            # Save comparison for summary
-            echo "comparison<<EOF" >> $GITHUB_OUTPUT
-            cat comparison.txt >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+          # Check if we have both baseline and current benchmarks
+          if [ -f benchmarks.sqlite ] && sqlite3 benchmarks.sqlite "SELECT COUNT(*) FROM benchmarks WHERE commit_hash = 'main'" 2>/dev/null | grep -q "[1-9]"; then
+            # Generate comparison
+            python3 scripts/bench_manager.py compare main current > comparison.txt 2>&1 || true
+
+            # Extract meaningful comparison data
+            if grep -q "Benchmark Comparison" comparison.txt; then
+              echo "✅ Benchmark comparison generated"
+            else
+              echo "⚠️ No benchmark comparison data available"
+              echo "No benchmark comparison available - baseline may be missing" > comparison.txt
+            fi
           else
-            echo "comparison=No benchmark comparison available" >> $GITHUB_OUTPUT
+            echo "⚠️ No baseline benchmarks available for comparison"
+            echo "No baseline benchmarks available - this may be the first PR with benchmarks" > comparison.txt
           fi
 
       - name: 📤 Upload benchmark results
