@@ -15,8 +15,7 @@ applications with a focus on efficiency, reliability, and developer experience.
 
 #### 🔧 **Kernel Components**
 
-- **kbuffer**: High-performance buffer pool management with zero-allocation
-  optimization
+- **kbuffer**: Buffer pool management with zero-allocation operations
 - **kcache**: Advanced caching with LRU, sharded, and atomic cache
   implementations
 - **kerror**: Comprehensive error handling with stack traces and error registry
