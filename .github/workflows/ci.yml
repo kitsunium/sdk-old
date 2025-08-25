@@ -419,35 +419,42 @@ jobs:
           echo "⚡ Running benchmarks for current PR..."
           python3 scripts/bench_manager.py save
 
-      - name: 📊 Compare benchmarks
-        id: compare
+      - name: 📊 Compare benchmarks and display in summary
         run: |
           echo "📊 Comparing benchmarks with main branch..."
+
+          # Initialize summary section
+          echo "## ⚡ Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
           # Check if we have both baseline and current benchmarks
           if [ -f benchmarks.sqlite ] && sqlite3 benchmarks.sqlite "SELECT COUNT(*) FROM benchmarks WHERE commit_hash = 'main'" 2>/dev/null | grep -q "[1-9]"; then
             # Generate comparison
             python3 scripts/bench_manager.py compare main current > comparison.txt 2>&1 || true
-
+            
             # Extract meaningful comparison data
             if grep -q "Benchmark Comparison" comparison.txt; then
               echo "✅ Benchmark comparison generated"
+              
+              # Add comparison to GitHub summary
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              # Extract the comparison section and format it
+              sed -n '/Benchmark Comparison/,/Comparison complete/p' comparison.txt | head -100 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
             else
               echo "⚠️ No benchmark comparison data available"
-              echo "No benchmark comparison available - baseline may be missing" > comparison.txt
+              echo "_No benchmark comparison available - baseline may be missing_" >> $GITHUB_STEP_SUMMARY
             fi
           else
             echo "⚠️ No baseline benchmarks available for comparison"
-            echo "No baseline benchmarks available - this may be the first PR with benchmarks" > comparison.txt
+            echo "_No baseline benchmarks available - this may be the first PR with benchmarks_" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "After merging this PR, future PRs will show benchmark comparisons." >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: 📤 Upload benchmark results
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-comparison
-          path: |
-            comparison.txt
-            benchmarks.sqlite
-          retention-days: 7
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "_Benchmarks are compared against the main branch baseline_" >> $GITHUB_STEP_SUMMARY
 
   # Job 7: Benchmarks (only on main after merge)
   benchmarks:
@@ -639,27 +646,13 @@ jobs:
             fi
           fi
 
-          # Add benchmark comparison if available (for PRs)
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # Check if benchmark-compare artifacts exist
-            if [ -d "artifacts/benchmark-comparison" ] && [ -f "artifacts/benchmark-comparison/comparison.txt" ]; then
-              echo "## ⚡ Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
-              grep -A 1000 "Benchmark Comparison" artifacts/benchmark-comparison/comparison.txt | head -50 >> $GITHUB_STEP_SUMMARY || true
-              echo '```' >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            fi
-          fi
+          # Note: Benchmark comparison is now displayed directly in the benchmark-compare job
 
           echo "## 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "The following artifacts were generated:" >> $GITHUB_STEP_SUMMARY
           echo "- Test results" >> $GITHUB_STEP_SUMMARY
           echo "- Coverage reports" >> $GITHUB_STEP_SUMMARY
           echo "- Lint results" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "- Benchmark comparison" >> $GITHUB_STEP_SUMMARY
-          fi
 
       - name: ✅ Check overall status
         if: |
