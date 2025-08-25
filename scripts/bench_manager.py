@@ -10,6 +10,14 @@ import sys
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+try:
+    from tabulate import tabulate
+    HAS_TABULATE = True
+except ImportError:
+    HAS_TABULATE = False
+    print("Warning: tabulate not installed. Install with: pip install tabulate")
+    print("Falling back to basic formatting.\n")
+
 # ANSI color codes
 RED = "\033[0;31m"
 GREEN = "\033[0;32m"
@@ -121,12 +129,12 @@ class BenchmarkManager:
     def _get_benchmark_pattern(self) -> re.Pattern:
         """Get regex pattern for parsing benchmark output."""
         return re.compile(
-            r'^(Benchmark\S+)(?:-(\d+))?\s+'  # Benchmark name and optional CPU count
-            r'(\d+)\s+'                        # Iterations
-            r'([\d.]+)\s+ns/op'               # Nanoseconds per operation
-            r'(?:\s+([\d.]+)\s+MB/s)?'        # Optional MB/s
-            r'(?:\s+(\d+)\s+B/op)?'           # Optional bytes per operation
-            r'(?:\s+(\d+)\s+allocs/op)?'      # Optional allocations per operation
+            r'^(Benchmark\S+?)(?:-(\d+))?\s+'  # Benchmark name and optional CPU count (non-greedy)
+            r'(\d+)\s+'                         # Iterations
+            r'([\d.]+)\s+ns/op'                # Nanoseconds per operation
+            r'(?:\s+([\d.]+)\s+MB/s)?'         # Optional MB/s
+            r'(?:\s+(\d+)\s+B/op)?'            # Optional bytes per operation
+            r'(?:\s+(\d+)\s+allocs/op)?'       # Optional allocations per operation
         )
 
     def _extract_benchmark_data(self, match: re.Match, package: str, line: str) -> Dict:
@@ -184,7 +192,7 @@ class BenchmarkManager:
         try:
             return subprocess.check_output(
                 [
-                    "bazel", "run", target, "--",
+                    "bazel", "run", "--config=perf", target, "--",
                     "-test.bench=.", "-test.benchmem",
                     "-test.benchtime=10ms", "-test.run=^$"
                 ],
@@ -210,13 +218,19 @@ class BenchmarkManager:
         return '\n'.join(filtered_lines)
 
     def save_results(self, results: Dict[str, str], commit_hash: str, 
-                    branch: str, is_dirty: bool = False):
+                    branch: str, is_dirty: bool = False, preserve_history: bool = False):
         """Save benchmark results to database."""
         cursor = self.conn.cursor()
         
         save_hash = "current" if is_dirty else commit_hash
         
-        self._delete_existing_results(cursor, save_hash, is_dirty)
+        # Only delete existing results if not preserving history
+        if not preserve_history:
+            self._delete_existing_results(cursor, save_hash, is_dirty)
+        else:
+            # In preserve_history mode, only delete 'current' entries
+            cursor.execute("DELETE FROM benchmarks WHERE commit_hash = 'current'")
+        
         self._insert_new_results(cursor, results, save_hash, branch)
         
         self.conn.commit()
@@ -286,8 +300,8 @@ class BenchmarkManager:
         self._check_single_commit(cursor, base_commit, "Base")
         self._check_single_commit(cursor, current_commit, "Current")
         
-        print(f"\n{YELLOW}Run 'make bench-list' to see available commits{NC}")
-        print(f"{YELLOW}Run 'make bench-save' to save current benchmark results{NC}")
+        print(f"\n{YELLOW}Run 'make bench/list' to see available commits{NC}")
+        print(f"{YELLOW}Run 'make bench/save' to save current benchmark results{NC}")
         sys.exit(1)
 
     def _check_single_commit(self, cursor, commit: str, label: str):
@@ -330,22 +344,122 @@ class BenchmarkManager:
         all_tests = self._get_all_tests(cursor, base_full, current_full)
         current_package = None
         
+        if HAS_TABULATE:
+            self._compare_with_tabulate(cursor, base_full, current_full, all_tests)
+        else:
+            for package, test_name in all_tests:
+                if package != current_package:
+                    self._print_package_header(package, current_package)
+                    current_package = package
+                
+                self._compare_single_benchmark(cursor, base_full, current_full, package, test_name)
+    
+    def _compare_with_tabulate(self, cursor, base_full: str, current_full: str, all_tests):
+        """Compare benchmarks using tabulate for better formatting."""
+        current_package = None
+        table_data = []
+        
         for package, test_name in all_tests:
             if package != current_package:
-                self._print_package_header(package, current_package)
+                if current_package is not None and table_data:
+                    # Print the table for the previous package
+                    headers = ["Test", "Base (ns/op)", "Current (ns/op)", "Change", "MB/s", "Allocs/op"]
+                    print(tabulate(table_data, headers=headers, tablefmt="simple"))
+                    print()
+                    table_data = []
+                
+                # Print new package header
+                print(f"\n{CYAN}Package: {package}{NC}")
+                print("-" * 120)
                 current_package = package
             
-            self._compare_single_benchmark(cursor, base_full, current_full, package, test_name)
+            # Get benchmark results
+            test_name_base = re.sub(r'-\d+$', '', test_name)
+            base_result = self._get_benchmark_result_flexible(cursor, base_full, package, test_name_base)
+            current_result = self._get_benchmark_result_flexible(cursor, current_full, package, test_name_base)
+            
+            if base_result and current_result:
+                base_ns, base_mb, base_bytes, base_allocs = base_result
+                curr_ns, curr_mb, curr_bytes, curr_allocs = current_result
+                
+                # Format base and current values with colors
+                base_ns_str = f"{CYAN}{base_ns:.2f}{NC}"
+                curr_ns_str = f"{YELLOW}{curr_ns:.2f}{NC}"
+                
+                # Calculate change
+                ns_change = ((curr_ns - base_ns) / base_ns) * 100 if base_ns else 0
+                if ns_change < -5:
+                    change_color = GREEN
+                    change_symbol = "↓"
+                elif ns_change > 5:
+                    change_color = RED
+                    change_symbol = "↑"
+                else:
+                    change_color = ""
+                    change_symbol = "="
+                change_str = f"{change_color}{change_symbol}{abs(ns_change):.1f}%{NC}"
+                
+                # Format MB/s with both values
+                mb_str = ""
+                if base_mb and curr_mb:
+                    mb_change = ((curr_mb - base_mb) / base_mb) * 100
+                    mb_color = GREEN if mb_change > 5 else RED if mb_change < -5 else ""
+                    mb_symbol = "↑" if mb_change > 0 else "↓" if mb_change < 0 else "="
+                    mb_str = f"{CYAN}{base_mb:.1f}{NC} → {YELLOW}{curr_mb:.1f}{NC} {mb_color}{mb_symbol}{abs(mb_change):.1f}%{NC}"
+                elif curr_mb:
+                    mb_str = f"- → {YELLOW}{curr_mb:.1f}{NC}"
+                
+                # Format allocations with both values
+                alloc_str = ""
+                if base_allocs > 0 or curr_allocs > 0:
+                    if base_allocs != curr_allocs:
+                        alloc_color = GREEN if curr_allocs < base_allocs else RED if curr_allocs > base_allocs else ""
+                        alloc_str = f"{CYAN}{base_allocs}{NC} → {YELLOW}{curr_allocs}{NC}"
+                        if base_allocs > 0:
+                            alloc_change = ((curr_allocs - base_allocs) / base_allocs) * 100
+                            alloc_symbol = "↑" if alloc_change > 0 else "↓" if alloc_change < 0 else "="
+                            alloc_str += f" {alloc_color}{alloc_symbol}{abs(alloc_change):.1f}%{NC}"
+                    else:
+                        alloc_str = f"{curr_allocs}"
+                
+                test_display = test_name_base.replace('Benchmark', '')
+                table_data.append([test_display, base_ns_str, curr_ns_str, change_str, mb_str, alloc_str])
+            
+            elif base_result and not current_result:
+                test_display = test_name_base.replace('Benchmark', '')
+                table_data.append([test_display, base_result[0], "-", f"{RED}[REMOVED]{NC}", "", ""])
+            
+            elif not base_result and current_result:
+                test_display = test_name_base.replace('Benchmark', '')
+                curr_ns, curr_mb, curr_bytes, curr_allocs = current_result
+                mb_str = f"{curr_mb:.1f} MB/s" if curr_mb else ""
+                alloc_str = f"{curr_allocs} allocs" if curr_allocs else ""
+                table_data.append([test_display, "-", curr_ns, f"{YELLOW}[NEW]{NC}", mb_str, alloc_str])
+        
+        # Print the last package's table
+        if table_data:
+            headers = ["Test", "Base (ns/op)", "Current (ns/op)", "Change", "MB/s", "Allocs/op"]
+            print(tabulate(table_data, headers=headers, tablefmt="simple"))
 
     def _get_all_tests(self, cursor, base_full: str, current_full: str) -> List[Tuple[str, str]]:
-        """Get all test names from both commits."""
+        """Get all test names from both commits, normalized without CPU suffix."""
         cursor.execute("""
             SELECT DISTINCT package, test_name
             FROM benchmarks
             WHERE commit_hash IN (?, ?)
-            ORDER BY package, test_name
         """, (base_full, current_full))
-        return cursor.fetchall()
+        
+        # Normalize test names by removing CPU suffix
+        normalized_tests = {}
+        for package, test_name in cursor.fetchall():
+            # Remove CPU suffix (e.g., -2, -4, -8, etc.)
+            normalized_name = re.sub(r'-\d+$', '', test_name)
+            key = (package, normalized_name)
+            if key not in normalized_tests:
+                normalized_tests[key] = True
+        
+        # Sort and return unique normalized tests
+        return sorted(normalized_tests.keys())
 
     def _print_package_header(self, package: str, current_package: Optional[str]):
         """Print package header when it changes."""
@@ -357,10 +471,14 @@ class BenchmarkManager:
     def _compare_single_benchmark(self, cursor, base_full: str, current_full: str, 
                                  package: str, test_name: str):
         """Compare a single benchmark between two commits."""
-        base_result = self._get_benchmark_result(cursor, base_full, package, test_name)
-        current_result = self._get_benchmark_result(cursor, current_full, package, test_name)
+        # Strip CPU suffix for comparison
+        test_name_base = re.sub(r'-\d+$', '', test_name)
         
-        test_display = self._format_test_name(test_name)
+        # Try to find matching benchmark with any CPU count
+        base_result = self._get_benchmark_result_flexible(cursor, base_full, package, test_name_base)
+        current_result = self._get_benchmark_result_flexible(cursor, current_full, package, test_name_base)
+        
+        test_display = self._format_test_name(test_name_base)
         print(f"  {test_display:35}", end=" ")
         
         if base_result and current_result:
@@ -382,6 +500,36 @@ class BenchmarkManager:
             LIMIT 1
         """, (commit, package, test_name))
         return cursor.fetchone()
+    
+    def _get_benchmark_result_flexible(self, cursor, commit: str, package: str, test_name_base: str) -> Optional[Tuple]:
+        """Get benchmark result for a test, ignoring CPU suffix."""
+        # First try exact match
+        cursor.execute("""
+            SELECT ns_per_op, mb_per_sec, bytes_per_op, allocs_per_op, test_name
+            FROM benchmarks
+            WHERE commit_hash = ? AND package = ? AND test_name = ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """, (commit, package, test_name_base))
+        result = cursor.fetchone()
+        
+        if result:
+            return result[:-1]  # Return without test_name
+        
+        # Try with any CPU suffix
+        cursor.execute("""
+            SELECT ns_per_op, mb_per_sec, bytes_per_op, allocs_per_op, test_name
+            FROM benchmarks
+            WHERE commit_hash = ? AND package = ? AND (test_name = ? OR test_name LIKE ?)
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """, (commit, package, test_name_base, test_name_base + '-%'))
+        result = cursor.fetchone()
+        
+        if result:
+            return result[:-1]  # Return without test_name
+        
+        return None
 
     def _format_test_name(self, test_name: str) -> str:
         """Format test name for display."""
@@ -449,9 +597,52 @@ class BenchmarkManager:
             self._print_no_results_message()
             return
         
-        self._print_commits_header(rows, limit)
-        self._print_commits_table(rows)
+        if HAS_TABULATE:
+            self._print_commits_with_tabulate(rows, limit)
+        else:
+            self._print_commits_header(rows, limit)
+            self._print_commits_table(rows)
+        
         self._print_usage_hint(rows)
+    
+    def _print_commits_with_tabulate(self, rows: List[Tuple], limit: int):
+        """Print commits list using tabulate."""
+        print(f"\n{BLUE}{'='*80}{NC}")
+        print(f"{BLUE}Saved Benchmark Results (Last {min(len(rows), limit)} commits){NC}")
+        print(f"{BLUE}{'='*80}{NC}\n")
+        
+        table_data = []
+        for i, row in enumerate(rows):
+            commit, branch, timestamp, count, packages = row
+            dt = datetime.fromisoformat(timestamp)
+            
+            # Format commit
+            if commit == "current":
+                commit_display = f"{YELLOW}current{NC}"
+            else:
+                color = GREEN if i == 0 else CYAN if i < 5 else ""
+                commit_display = f"{color}{commit[:8]}{NC}"
+            
+            # Format branch
+            branch_display = branch[:18] + "..." if len(branch) > 18 else branch
+            
+            # Format packages
+            pkg_list = packages.split(',') if packages else []
+            pkg_display = ', '.join([p.split('/')[-1] for p in pkg_list[:3]])
+            if len(pkg_list) > 3:
+                pkg_display += f" (+{len(pkg_list)-3} more)"
+            
+            table_data.append([
+                commit_display,
+                branch_display,
+                dt.strftime('%Y-%m-%d'),
+                dt.strftime('%H:%M'),
+                count,
+                pkg_display
+            ])
+        
+        headers = ["Commit", "Branch", "Date", "Time", "Tests", "Packages"]
+        print(tabulate(table_data, headers=headers, tablefmt="simple"))
 
     def _get_commits_list(self, cursor, limit: int) -> List[Tuple]:
         """Get list of commits with benchmarks."""
@@ -472,7 +663,7 @@ class BenchmarkManager:
     def _print_no_results_message(self):
         """Print message when no results found."""
         print(f"{RED}❌ No benchmark results found{NC}")
-        print(f"{YELLOW}Run 'make bench-save' to save benchmark results{NC}")
+        print(f"{YELLOW}Run 'make bench/save' to save benchmark results{NC}")
 
     def _print_commits_header(self, rows: List[Tuple], limit: int):
         """Print commits list header."""
@@ -551,6 +742,8 @@ def create_parser() -> argparse.ArgumentParser:
     # Save command
     save_parser = subparsers.add_parser('save', help='Run benchmarks and save results')
     save_parser.add_argument('--targets', nargs='*', help='Specific targets to benchmark')
+    save_parser.add_argument('--preserve-history', action='store_true', 
+                           help='Preserve existing benchmark history (for CI/CD)')
     
     # Compare command  
     compare_parser = subparsers.add_parser('compare', help='Compare benchmark results')
@@ -576,10 +769,14 @@ def handle_save_command(manager: BenchmarkManager, args):
     else:
         print(f"{YELLOW}▶ Running benchmarks for commit: {commit_hash[:8]} ({branch}){NC}")
     
+    if args.preserve_history:
+        print(f"{CYAN}ℹ Preserving benchmark history (CI/CD mode){NC}")
+    
     results = manager.run_benchmarks(args.targets)
     
     if results:
-        manager.save_results(results, commit_hash, branch, is_dirty)
+        manager.save_results(results, commit_hash, branch, is_dirty, 
+                           preserve_history=args.preserve_history)
     else:
         print(f"{RED}No benchmark results collected{NC}")
 
