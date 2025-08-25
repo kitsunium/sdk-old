@@ -132,15 +132,25 @@ bench:
 		STASH_OUTPUT=$$(git stash push -m "bench: auto-stash before checkout" --include-untracked 2>&1); \
 		STASHED=$$?; \
 		git checkout $$COMMIT || exit 1; \
-		echo "$(YELLOW)▶ Running benchmarks for commit $$COMMIT...$(NC)"; \
-		python3 scripts/bench_manager.py save; \
+		echo "$(YELLOW)▶ Running stable benchmarks for commit $$COMMIT...$(NC)"; \
+		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
+		bazel test --config=benchmark \
+			//pkg/kernel/kbuffer:kbuffer_bench_test \
+			//pkg/kernel/kcache:kcache_bench_test \
+			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+			python3 scripts/bench_manager.py save --stdin; \
 		git checkout - >/dev/null 2>&1; \
 		if [ $$STASHED -eq 0 ] && echo "$$STASH_OUTPUT" | grep -q "Saved"; then \
 			git stash pop --quiet 2>/dev/null || echo "$(YELLOW)Note: Could not restore stashed changes$(NC)"; \
 		fi; \
 	else \
-		echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"; \
-		python3 scripts/bench_manager.py save; \
+		echo "$(YELLOW)▶ Running stable benchmarks...$(NC)"; \
+		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
+		bazel test --config=benchmark \
+			//pkg/kernel/kbuffer:kbuffer_bench_test \
+			//pkg/kernel/kcache:kcache_bench_test \
+			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+			python3 scripts/bench_manager.py save --stdin; \
 	fi
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
