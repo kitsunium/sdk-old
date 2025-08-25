@@ -1,7 +1,10 @@
 # Benchmark Stabilization Guide
 
 ## Problème identifié
-Les benchmarks montrent des variations importantes (jusqu'à 300%) entre deux exécutions du même code, notamment sur:
+
+Les benchmarks montrent des variations importantes (jusqu'à 300%) entre deux
+exécutions du même code, notamment sur:
+
 - `Buffer_Concurrent`: 0.43ns vs 1.77ns (↑316%)
 - `Workload_SmallWrites`: 138.1ns vs 272.2ns (↑97%)
 - Tests concurrents en général
@@ -9,13 +12,17 @@ Les benchmarks montrent des variations importantes (jusqu'à 300%) entre deux ex
 ## Causes principales
 
 ### 1. **Tests concurrents instables**
-Les benchmarks concurrents (`BenchmarkBuffer_Concurrent`, `LRU_ConcurrentGet`) sont très sensibles:
+
+Les benchmarks concurrents (`BenchmarkBuffer_Concurrent`, `LRU_ConcurrentGet`)
+sont très sensibles:
+
 - Scheduling du CPU
 - Garbage collection
 - Contention entre goroutines
 - État du système
 
 ### 2. **Configuration système**
+
 - Multiple CPU cores actifs
 - Throttling thermique
 - Autres processus en arrière-plan
@@ -31,13 +38,13 @@ func BenchmarkBuffer_Concurrent(b *testing.B) {
     // Forcer un seul CPU pour la stabilité
     runtime.GOMAXPROCS(1)
     defer runtime.GOMAXPROCS(runtime.NumCPU())
-    
+
     // Forcer GC avant le benchmark
     runtime.GC()
-    
+
     // Augmenter le temps minimum d'exécution
     b.SetParallelism(1)  // Limiter le parallélisme
-    
+
     b.RunParallel(func(pb *testing.PB) {
         // ... benchmark code
     })
@@ -47,6 +54,7 @@ func BenchmarkBuffer_Concurrent(b *testing.B) {
 ### 2. **Configuration Bazel pour benchmarks stables**
 
 Créer `.bazelrc.benchmark`:
+
 ```bash
 # Configuration pour benchmarks stables
 build:benchmark --test_output=all
@@ -70,7 +78,7 @@ def run_benchmark_stable(self, target: str, runs: int = 5) -> Dict:
         output = self.run_single_benchmark(target)
         if output:
             results.append(self.parse_benchmark_output(output))
-    
+
     # Calculer la médiane pour chaque métrique
     return self.compute_median_results(results)
 ```
@@ -110,7 +118,8 @@ sudo nice -n -20 make bench/stable
    - Ajouter des warmup runs avant les mesures
 
 3. **Long terme** (idéal):
-   - Séparer benchmarks "micro" (performance pure) et "macro" (comportement réel)
+   - Séparer benchmarks "micro" (performance pure) et "macro" (comportement
+     réel)
    - Utiliser des benchmarks statistiques avec intervalles de confiance
    - CI dédié pour benchmarks sur machine isolée
 

@@ -99,6 +99,39 @@ class BenchmarkManager:
         except subprocess.CalledProcessError:
             return True
     
+    def parse_stdin_benchmarks(self, output: str) -> Dict[str, str]:
+        """Parse benchmark results from stdin (bazel test output)."""
+        results = {}
+        current_package = None
+        current_lines = []
+        
+        for line in output.split('\n'):
+            # Detect package from bazel target
+            if '//pkg/' in line and ':' in line and 'Running' not in line:
+                # Save previous package results
+                if current_package and current_lines:
+                    filtered = self._filter_benchmark_output('\n'.join(current_lines))
+                    if filtered:
+                        results[current_package] = filtered
+                
+                # Extract new package name
+                try:
+                    pkg_part = line.split('//pkg/')[1].split(':')[0]
+                    current_package = f"pkg/{pkg_part.replace('/', '.')}"
+                    current_lines = []
+                except (IndexError, AttributeError):
+                    pass
+            elif line.strip().startswith('Benchmark') and current_package:
+                current_lines.append(line.strip())
+        
+        # Save last package
+        if current_package and current_lines:
+            filtered = self._filter_benchmark_output('\n'.join(current_lines))
+            if filtered:
+                results[current_package] = filtered
+        
+        return results
+    
     def get_main_commit(self) -> Optional[str]:
         """Get the most recent commit hash from main branch with saved benchmarks."""
         cursor = self.conn.cursor()
@@ -744,6 +777,8 @@ def create_parser() -> argparse.ArgumentParser:
     save_parser.add_argument('--targets', nargs='*', help='Specific targets to benchmark')
     save_parser.add_argument('--preserve-history', action='store_true', 
                            help='Preserve existing benchmark history (for CI/CD)')
+    save_parser.add_argument('--stdin', action='store_true',
+                           help='Read benchmark results from stdin instead of running bazel')
     
     # Compare command  
     compare_parser = subparsers.add_parser('compare', help='Compare benchmark results')
@@ -772,7 +807,12 @@ def handle_save_command(manager: BenchmarkManager, args):
     if args.preserve_history:
         print(f"{CYAN}ℹ Preserving benchmark history (CI/CD mode){NC}")
     
-    results = manager.run_benchmarks(args.targets)
+    if args.stdin:
+        # Read benchmark output from stdin (pre-run by bazel)
+        import sys
+        results = manager.parse_stdin_benchmarks(sys.stdin.read())
+    else:
+        results = manager.run_benchmarks(args.targets)
     
     if results:
         manager.save_results(results, commit_hash, branch, is_dirty, 
