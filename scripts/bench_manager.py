@@ -218,13 +218,19 @@ class BenchmarkManager:
         return '\n'.join(filtered_lines)
 
     def save_results(self, results: Dict[str, str], commit_hash: str, 
-                    branch: str, is_dirty: bool = False):
+                    branch: str, is_dirty: bool = False, preserve_history: bool = False):
         """Save benchmark results to database."""
         cursor = self.conn.cursor()
         
         save_hash = "current" if is_dirty else commit_hash
         
-        self._delete_existing_results(cursor, save_hash, is_dirty)
+        # Only delete existing results if not preserving history
+        if not preserve_history:
+            self._delete_existing_results(cursor, save_hash, is_dirty)
+        else:
+            # In preserve_history mode, only delete 'current' entries
+            cursor.execute("DELETE FROM benchmarks WHERE commit_hash = 'current'")
+        
         self._insert_new_results(cursor, results, save_hash, branch)
         
         self.conn.commit()
@@ -718,6 +724,8 @@ def create_parser() -> argparse.ArgumentParser:
     # Save command
     save_parser = subparsers.add_parser('save', help='Run benchmarks and save results')
     save_parser.add_argument('--targets', nargs='*', help='Specific targets to benchmark')
+    save_parser.add_argument('--preserve-history', action='store_true', 
+                           help='Preserve existing benchmark history (for CI/CD)')
     
     # Compare command  
     compare_parser = subparsers.add_parser('compare', help='Compare benchmark results')
@@ -743,10 +751,14 @@ def handle_save_command(manager: BenchmarkManager, args):
     else:
         print(f"{YELLOW}▶ Running benchmarks for commit: {commit_hash[:8]} ({branch}){NC}")
     
+    if args.preserve_history:
+        print(f"{CYAN}ℹ Preserving benchmark history (CI/CD mode){NC}")
+    
     results = manager.run_benchmarks(args.targets)
     
     if results:
-        manager.save_results(results, commit_hash, branch, is_dirty)
+        manager.save_results(results, commit_hash, branch, is_dirty, 
+                           preserve_history=args.preserve_history)
     else:
         print(f"{RED}No benchmark results collected{NC}")
 
