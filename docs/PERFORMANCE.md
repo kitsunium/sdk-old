@@ -105,9 +105,15 @@ bazel build --config=debug //cmd/yourapp
 
 ### Go Compiler Optimizations
 
-**Note**: The `-l` flag (via `-gcflags`) actually **disables** inlining when present, not enables it. There is no numeric level support for `-l`.
+**Note about inlining**: 
+- No `-l` flag: Default inlining behavior (recommended)
+- `-gcflags="-l"`: Disable inlining completely (useful for debugging)
+- `-gcflags="-l=N"`: Control inlining level where N is 0-4 (higher = more aggressive)
+  - `-l=0`: Disable inlining
+  - `-l=1`: Default level
+  - `-l=2-4`: Increasingly aggressive inlining
 
-- `-gcflags="-l"`: Disable inlining (useful for debugging)
+Other optimization flags:
 - `-gcflags="-m"`: Print optimization decisions
 - `-ldflags="-s -w"`: Strip debug symbols and DWARF info (reduces binary size)
 
