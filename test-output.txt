@@ -1,0 +1,26 @@
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: 18 targets (0 packages loaded, 0 targets configured)
+Analyzing: 18 targets (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed 18 targets (0 packages loaded, 8 targets configured).
+[89 / 91] 6 / 8 tests; Testing //pkg/kernel/kerror:kerror_test; 0s linux-sandbox ... (2 actions running)
+[163 / 165] 6 / 8 tests; Testing //pkg/kernel/kerror:kerror_test; 2s linux-sandbox ... (2 actions running)
+[163 / 165] 7 / 8 tests; Testing //pkg/kernel/kerror:kerror_test; 3s linux-sandbox ... (2 actions running)
+[164 / 165] 7 / 8 tests; Testing //pkg/kernel/kcache:kcache_test; 4s linux-sandbox
+INFO: Found 10 targets and 8 test targets...
+INFO: Elapsed time: 6.443s, Critical Path: 4.99s
+INFO: 9 processes: 72 action cache hit, 1 internal, 8 linux-sandbox.
+INFO: Build completed successfully, 9 total actions
+//pkg/core/config/normalize:normalize_test                               PASSED in 0.1s
+//pkg/core/config/parser:parser_test                                     PASSED in 0.1s
+//pkg/kernel/fs:fs_test                                                  PASSED in 0.1s
+//pkg/kernel/kbuffer:kbuffer_test                                        PASSED in 0.1s
+//pkg/kernel/kcache:kcache_test                                          PASSED in 5.0s
+//pkg/kernel/kerror:kerror_test                                          PASSED in 3.4s
+//pkg/lib/pointer:pointer_test                                           PASSED in 0.1s
+//pkg/lib/value:value_test                                               PASSED in 0.1s
+Test cases: finished with 0 passing, 0 skipped and 0 failing out of 0 test cases
+
+Executed 8 out of 8 tests: 8 tests pass.
