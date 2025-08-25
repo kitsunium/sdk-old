@@ -63,9 +63,6 @@ func NewBuffer(capacity int) *Buffer {
 
 // Write appends bytes to the buffer.
 // Returns the number of bytes written and ErrBufferOverflow if insufficient space.
-// This method is optimized for hot paths with nosplit directive.
-//
-//go:nosplit
 func (b *Buffer) Write(p []byte) (int, error) {
 	n := len(p)
 	if n == 0 {
@@ -86,8 +83,6 @@ func (b *Buffer) Write(p []byte) (int, error) {
 // WriteString appends a string to the buffer without allocation.
 // Uses unsafe conversion to avoid string-to-bytes allocation, making it
 // ideal for high-frequency string concatenation in performance-critical code.
-//
-//go:nosplit
 func (b *Buffer) WriteString(s string) (int, error) {
 	n := len(s)
 	if n == 0 {
@@ -122,8 +117,6 @@ func (b *Buffer) WriteByte(c byte) error {
 // WriteAt writes bytes at a specific offset without changing the current write position.
 // Performs strict bounds checking to prevent buffer overflows.
 // Returns the number of bytes written, which may be less than len(p) if near capacity.
-//
-//go:nosplit
 func (b *Buffer) WriteAt(p []byte, offset int64) (int, error) {
 	if offset < 0 || offset >= int64(b.cap) {
 		return 0, ErrInvalidOffset
@@ -144,7 +137,6 @@ func (b *Buffer) WriteAt(p []byte, offset int64) (int, error) {
 // This method is ideal for tight loops where error handling overhead should be avoided.
 //
 //go:inline
-//go:nosplit
 func (b *Buffer) TryWrite(p []byte) bool {
 	n := len(p)
 	if int(b.cap-b.pos) < n {
@@ -168,8 +160,6 @@ func (b *Buffer) Bytes() []byte {
 // String returns the buffer contents as a string using zero-allocation conversion.
 // Uses unsafe.String for maximum performance, avoiding the allocation that would
 // occur with a normal string([]byte) conversion.
-//
-//go:nosplit
 func (b *Buffer) String() string {
 	if b.pos == 0 {
 		return ""
