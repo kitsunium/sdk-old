@@ -1,0 +1,2 @@
+# sdk
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/bd4a81d502cf41f6856e2e2b713de4c3)](https://app.codacy.com/gh/kitsunium/sdk?utm_source=github.com&utm_medium=referral&utm_content=kitsunium/sdk&utm_campaign=Badge_Grade)
