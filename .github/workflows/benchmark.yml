@@ -55,8 +55,8 @@ jobs:
           # Create results directory
           mkdir -p benchmark-results
 
-          # Run benchmarks with Bazel
-          bazel test //... \
+          # Run benchmarks with Bazel using performance configuration
+          bazel test --config=perf //... \
             --test_arg=-test.bench="${BENCH_FILTER}" \
             --test_arg=-test.benchmem \
             --test_arg=-test.benchtime="${BENCH_TIME}" \
@@ -93,8 +93,8 @@ jobs:
 
           echo "⚡ Running benchmarks on main branch..."
 
-          # Run benchmarks on comparison branch
-          bazel test //... \
+          # Run benchmarks on comparison branch with performance configuration
+          bazel test --config=perf //... \
             --test_arg=-test.bench="${BENCH_FILTER}" \
             --test_arg=-test.benchmem \
             --test_arg=-test.benchtime="${BENCH_TIME}" \

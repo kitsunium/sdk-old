@@ -192,7 +192,7 @@ class BenchmarkManager:
         try:
             return subprocess.check_output(
                 [
-                    "bazel", "run", target, "--",
+                    "bazel", "run", "--config=perf", target, "--",
                     "-test.bench=.", "-test.benchmem",
                     "-test.benchtime=10ms", "-test.run=^$"
                 ],
