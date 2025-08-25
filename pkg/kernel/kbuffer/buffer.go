@@ -74,9 +74,11 @@ func (b *Buffer) Write(p []byte) (int, error) {
 		return 0, ErrBufferOverflow
 	}
 
-	// Direct copy without extra slice creation
-	copy(b.data[b.pos:b.pos+int32(n)], p)
-	b.pos += int32(n)
+	// Optimized copy with bounds check elimination
+	pos := int(b.pos)
+	_ = b.data[pos+n-1] // bounds check elimination hint
+	copy(b.data[pos:], p)
+	b.pos = int32(pos + n)
 	return n, nil
 }
 
@@ -101,16 +103,16 @@ func (b *Buffer) WriteString(s string) (int, error) {
 }
 
 // WriteByte appends a single byte to the buffer.
-// Optimized for single-byte writes with inline and nosplit directives.
+// Optimized for single-byte writes with inline directive.
 //
 //go:inline
-//go:nosplit
 func (b *Buffer) WriteByte(c byte) error {
-	if b.pos >= b.cap {
+	pos := b.pos
+	if pos >= b.cap {
 		return ErrBufferOverflow
 	}
-	b.data[b.pos] = c
-	b.pos++
+	b.data[pos] = c
+	b.pos = pos + 1
 	return nil
 }
 
@@ -139,11 +141,14 @@ func (b *Buffer) WriteAt(p []byte, offset int64) (int, error) {
 //go:inline
 func (b *Buffer) TryWrite(p []byte) bool {
 	n := len(p)
-	if int(b.cap-b.pos) < n {
+	pos := int(b.pos)
+	if int(b.cap)-pos < n {
 		return false
 	}
-	copy(b.data[b.pos:], p)
-	b.pos += int32(n)
+	// Bounds check elimination
+	_ = b.data[pos+n-1]
+	copy(b.data[pos:], p)
+	b.pos = int32(pos + n)
 	return true
 }
 
