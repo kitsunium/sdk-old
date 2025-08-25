@@ -47,8 +47,7 @@ help:
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
 	@echo ''
 	@echo 'Benchmarks:'
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks (output only)"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/save" "run and save benchmark results"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run and save benchmark results"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/compare" "compare two benchmark commits"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/list" "list saved benchmark results"
 	@echo ''
@@ -116,24 +115,27 @@ test/coverage:
 	@$(BAZEL) coverage //... --combined_report=lcov
 	@echo "$(GREEN)✓ Coverage report generated$(NC)"
 
-## bench: run benchmarks for all packages
+## bench: run benchmarks and save results to SQLite database
+# Usage:
+#   make bench                   - run benchmarks for current commit
+#   make bench <hash>            - checkout commit and run benchmarks
 .PHONY: bench
-bench:
-	@echo "$(YELLOW)▶ Running benchmarks...$(NC)"
-	@for target in $$($(BAZEL) query 'attr(tags, "bench", //...)' 2>/dev/null); do \
-		pkg_dir=$$(echo $$target | sed 's|//||' | sed 's|:.*||'); \
-		echo "$(CYAN)  Benchmarking $$pkg_dir...$(NC)"; \
-		set -o pipefail; \
-		$(BAZEL) run $$target --test_output=streamed -- -test.bench=. -test.benchmem -test.benchtime=1s -test.run=^$$ 2>&1 | grep -v "^exec " | grep -v "^Executing tests" | grep -v "^---" | tee $$pkg_dir/result_bench || exit $$?; \
-	done
-	@echo "$(GREEN)✓ Benchmarks complete$(NC)"
-
-## bench/save: run benchmarks and save results to SQLite database
-.PHONY: bench/save
-bench/save: bench/update
-	@echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"
-	@python3 scripts/bench_manager.py save
+bench: bench/update
+	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		COMMIT="$(filter-out $@,$(MAKECMDGOALS))"; \
+		echo "$(YELLOW)▶ Checking out commit $$COMMIT...$(NC)"; \
+		git stash push -m "bench: auto-stash before checkout" --include-untracked 2>/dev/null || true; \
+		git checkout $$COMMIT || exit 1; \
+		echo "$(YELLOW)▶ Running benchmarks for commit $$COMMIT...$(NC)"; \
+		python3 scripts/bench_manager.py save; \
+		git checkout - >/dev/null 2>&1; \
+		git stash pop 2>/dev/null || true; \
+	else \
+		echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"; \
+		python3 scripts/bench_manager.py save; \
+	fi
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
+
 
 ## bench/update: fetch benchmark database from BENCH release
 .PHONY: bench/update
@@ -159,31 +161,39 @@ bench/update:
 ## bench/compare: compare benchmark results
 # Usage:
 #   make bench/compare                    - compare current with main
-#   make bench/compare COMMIT             - compare current with COMMIT
-#   make bench/compare COMMIT1 COMMIT2    - compare COMMIT1 with COMMIT2
+#   make bench/compare <commit>           - compare current with <commit>
+#   make bench/compare <commit1> <commit2> - compare <commit1> with <commit2>
 .PHONY: bench/compare
 bench/compare:
 	@echo "$(YELLOW)▶ Comparing benchmarks...$(NC)"
-	@if [ -z "$(word 2,$(MAKECMDGOALS))" ]; then \
+	@args="$(filter-out $@,$(MAKECMDGOALS))"; \
+	if [ -z "$$args" ]; then \
 		echo "$(CYAN)→ Comparing current commit with main branch$(NC)"; \
 		python3 scripts/bench_manager.py compare; \
-	elif [ -z "$(word 3,$(MAKECMDGOALS))" ]; then \
-		echo "$(CYAN)→ Comparing current commit with $(word 2,$(MAKECMDGOALS))$(NC)"; \
-		python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)); \
+	elif [ "$$(echo $$args | wc -w)" = "1" ]; then \
+		echo "$(CYAN)→ Comparing current commit with $$args$(NC)"; \
+		python3 scripts/bench_manager.py compare $$args; \
+	elif [ "$$(echo $$args | wc -w)" = "2" ]; then \
+		arg1=$$(echo $$args | cut -d' ' -f1); \
+		arg2=$$(echo $$args | cut -d' ' -f2); \
+		echo "$(CYAN)→ Comparing $$arg1 with $$arg2$(NC)"; \
+		python3 scripts/bench_manager.py compare $$arg1 $$arg2; \
 	else \
-		echo "$(CYAN)→ Comparing $(word 2,$(MAKECMDGOALS)) with $(word 3,$(MAKECMDGOALS))$(NC)"; \
-		python3 scripts/bench_manager.py compare $(word 2,$(MAKECMDGOALS)) $(word 3,$(MAKECMDGOALS)); \
+		echo "$(RED)❌ Invalid arguments. Usage:$(NC)"; \
+		echo "  make bench/compare                    - compare current with main"; \
+		echo "  make bench/compare <commit>           - compare current with <commit>"; \
+		echo "  make bench/compare <commit1> <commit2> - compare <commit1> with <commit2>"; \
+		exit 1; \
 	fi
-	@echo "$(GREEN)✓ Benchmark comparison complete$(NC)"
-
-# Catch the commit arguments for bench/compare
-%:
-	@:
 
 ## bench/list: list all saved benchmark results
 .PHONY: bench/list
 bench/list:
 	@python3 scripts/bench_manager.py list
+
+# Catch-all rule for positional arguments to bench and bench/compare
+%:
+	@:
 
 ## deps: download and verify dependencies
 .PHONY: deps
