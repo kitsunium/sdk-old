@@ -39,8 +39,10 @@ jobs:
       - name: 🔄 Generate cache keys
         id: cache-keys
         run: |
-          echo "go-cache=${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}" >> $GITHUB_OUTPUT
-          echo "bazel-cache=${{ runner.os }}-bazel-${{ hashFiles('**/BUILD.bazel', 'WORKSPACE', 'MODULE.bazel') }}" >> $GITHUB_OUTPUT
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "go-cache=${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}" >> $GITHUB_OUTPUT
+            echo "bazel-cache=${{ runner.os }}-bazel-${{ hashFiles('**/BUILD.bazel', 'WORKSPACE', 'MODULE.bazel') }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: 🐹 Setup Go
         uses: actions/setup-go@v5
@@ -168,10 +170,19 @@ jobs:
           FLAKY_TESTS=$(grep -cE "^//.*[[:space:]]+FLAKY" test-output.txt || echo "0")
 
           # Save outputs for later use
-          echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
-          echo "passed_tests=$PASSED_TESTS" >> $GITHUB_OUTPUT
-          echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
-          echo "flaky_tests=$FLAKY_TESTS" >> $GITHUB_OUTPUT
+          # Write to a file to avoid GITHUB_OUTPUT issues
+          echo "$TOTAL_TESTS" > /tmp/total_tests
+          echo "$PASSED_TESTS" > /tmp/passed_tests
+          echo "$FAILED_TESTS" > /tmp/failed_tests
+          echo "$FLAKY_TESTS" > /tmp/flaky_tests
+          
+          # Try to write to GITHUB_OUTPUT if it exists and is writable
+          if [ -n "${GITHUB_OUTPUT:-}" ] && [ -w "${GITHUB_OUTPUT:-/dev/null}" ] 2>/dev/null; then
+            echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
+            echo "passed_tests=$PASSED_TESTS" >> $GITHUB_OUTPUT
+            echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
+            echo "flaky_tests=$FLAKY_TESTS" >> $GITHUB_OUTPUT
+          fi
 
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "❌ Some tests failed"
@@ -184,18 +195,38 @@ jobs:
         if: always()
         run: |
           echo "📊 Extracting test results..."
+          # Read from files if outputs are not available
+          TOTAL_TESTS="${{ steps.run-tests.outputs.total_tests }}"
+          PASSED_TESTS="${{ steps.run-tests.outputs.passed_tests }}"
+          FAILED_TESTS="${{ steps.run-tests.outputs.failed_tests }}"
+          FLAKY_TESTS="${{ steps.run-tests.outputs.flaky_tests }}"
+          
+          # Fallback to reading from temp files if outputs are empty
+          if [ -z "$TOTAL_TESTS" ] && [ -f /tmp/total_tests ]; then
+            TOTAL_TESTS=$(cat /tmp/total_tests)
+          fi
+          if [ -z "$PASSED_TESTS" ] && [ -f /tmp/passed_tests ]; then
+            PASSED_TESTS=$(cat /tmp/passed_tests)
+          fi
+          if [ -z "$FAILED_TESTS" ] && [ -f /tmp/failed_tests ]; then
+            FAILED_TESTS=$(cat /tmp/failed_tests)
+          fi
+          if [ -z "$FLAKY_TESTS" ] && [ -f /tmp/flaky_tests ]; then
+            FLAKY_TESTS=$(cat /tmp/flaky_tests)
+          fi
+          
           # Create test summary file for artifact
           echo "# Test Results Summary" > test-summary.md
           echo "" >> test-summary.md
           echo "| Metric | Count |" >> test-summary.md
           echo "|--------|-------|" >> test-summary.md
-          echo "| Total Tests | ${{ steps.run-tests.outputs.total_tests || '0' }} |" >> test-summary.md
-          echo "| ✅ Passed | ${{ steps.run-tests.outputs.passed_tests || '0' }} |" >> test-summary.md
-          echo "| ❌ Failed | ${{ steps.run-tests.outputs.failed_tests || '0' }} |" >> test-summary.md
-          echo "| 🔄 Flaky | ${{ steps.run-tests.outputs.flaky_tests || '0' }} |" >> test-summary.md
+          echo "| Total Tests | ${TOTAL_TESTS:-0} |" >> test-summary.md
+          echo "| ✅ Passed | ${PASSED_TESTS:-0} |" >> test-summary.md
+          echo "| ❌ Failed | ${FAILED_TESTS:-0} |" >> test-summary.md
+          echo "| 🔄 Flaky | ${FLAKY_TESTS:-0} |" >> test-summary.md
 
           # Extract failed tests if any
-          if [ "${{ steps.run-tests.outputs.failed_tests }}" -gt "0" ]; then
+          if [ "${FAILED_TESTS:-0}" -gt "0" ]; then
             echo "" >> test-summary.md
             echo "## Failed Tests" >> test-summary.md
             echo '```' >> test-summary.md
@@ -331,10 +362,14 @@ jobs:
               LINES_HIT=$(grep -o '^LH:[0-9]*' coverage.lcov | cut -d: -f2 | awk '{sum += $1} END {print sum}')
               if [ -n "$LINES_FOUND" ] && [ "$LINES_FOUND" -gt 0 ]; then
                 COVERAGE_PCT=$(awk "BEGIN {printf \"%.1f\", ($LINES_HIT / $LINES_FOUND) * 100}")
-                echo "percentage=$COVERAGE_PCT" >> $GITHUB_OUTPUT
+                if [ -n "${GITHUB_OUTPUT:-}" ]; then
+                  echo "percentage=$COVERAGE_PCT" >> $GITHUB_OUTPUT
+                fi
                 echo "📊 Coverage: ${COVERAGE_PCT}%"
               else
-                echo "percentage=0.0" >> $GITHUB_OUTPUT
+                if [ -n "${GITHUB_OUTPUT:-}" ]; then
+                  echo "percentage=0.0" >> $GITHUB_OUTPUT
+                fi
               fi
             else
               echo "percentage=0.0" >> $GITHUB_OUTPUT
