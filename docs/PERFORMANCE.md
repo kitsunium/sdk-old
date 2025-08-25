@@ -6,7 +6,8 @@ The SDK provides several build configurations optimized for different use cases:
 
 ### For SDK Users
 
-When importing the SDK as a library, the optimizations are automatically applied. No special configuration needed.
+When importing the SDK as a library, the optimizations are automatically
+applied. No special configuration needed.
 
 ```go
 import "github.com/kitsunium/sdk/pkg/kernel/kbuffer"
@@ -15,16 +16,19 @@ import "github.com/kitsunium/sdk/pkg/kernel/kbuffer"
 ### For Building Applications
 
 #### Development Build
+
 ```bash
 bazel build //cmd/myapp
 ```
 
 #### Production Build (Maximum Performance)
+
 ```bash
 bazel build --config=perf //cmd/myapp
 ```
 
 This enables (from `.bazelrc`):
+
 - Compiler optimizations (`--copt=-O2`)
 - Pure Go builds (`--@rules_go//go/config:pure`)
 - Static linking (`--@rules_go//go/config:static`)
@@ -32,11 +36,13 @@ This enables (from `.bazelrc`):
 - Optimized compilation mode (`--compilation_mode=opt`)
 
 #### SDK Library Build (Balanced)
+
 ```bash
 bazel build --config=sdk //pkg/...
 ```
 
 This provides:
+
 - Standard optimizations (`--copt=-O2`)
 - Debug symbols retained (`--strip=never`)
 - All runtime safety checks preserved
@@ -68,6 +74,7 @@ The `kbuffer` package is heavily optimized with:
 ## Benchmark Results
 
 Latest optimizations show:
+
 - **2x faster** than standard `bytes.Buffer`
 - **35% faster** WriteByte operations
 - **30-50% faster** Write operations
@@ -105,10 +112,12 @@ bazel build --config=debug //cmd/yourapp
 
 ### Go Compiler Optimizations
 
-**Note about inlining**: 
+**Note about inlining**:
+
 - No `-l` flag: Default inlining behavior (recommended)
 - `-gcflags="-l"`: Disable inlining completely (useful for debugging)
-- `-gcflags="-l=N"`: Control inlining level where N is 0-4 (higher = more aggressive)
+- `-gcflags="-l=N"`: Control inlining level where N is 0-4 (higher = more
+  aggressive)
   - `-l=0`: Disable inlining
   - `-l=1`: Default level
   - `-l=2-4`: Increasingly aggressive inlining
@@ -117,7 +126,9 @@ Other optimization flags:
 - `-gcflags="-m"`: Print optimization decisions
 - `-ldflags="-s -w"`: Strip debug symbols and DWARF info (reduces binary size)
 
-**Important**: There is no supported public build flag to disable bounds checks globally. The Go compiler automatically applies bounds check elimination (BCE) where it can prove safety.
+**Important**: There is no supported public build flag to disable bounds checks
+globally. The Go compiler automatically applies bounds check elimination (BCE)
+where it can prove safety.
 
 ### C Compiler Optimizations
 
@@ -127,16 +138,21 @@ Other optimization flags:
 ## Safety Considerations
 
 The `perf` configuration achieves optimizations through:
-- **Bounds Check Elimination (BCE)**: The Go compiler automatically eliminates bounds checks where it can prove safety
-- **Carefully scoped `unsafe` operations**: Used only with explicit bounds validation
+
+- **Bounds Check Elimination (BCE)**: The Go compiler automatically eliminates
+  bounds checks where it can prove safety
+- **Carefully scoped `unsafe` operations**: Used only with explicit bounds
+  validation
 - **Object pooling**: Reduces allocations and GC pressure
 
 The `perf` configuration is recommended for:
+
 - Production binaries after thorough testing
 - Performance-critical paths
 - When you're confident about code correctness
 
-For library distribution, use `--config=sdk` which retains all runtime safety checks while still providing good optimizations.
+For library distribution, use `--config=sdk` which retains all runtime safety
+checks while still providing good optimizations.
 
 ## Monitoring Performance
 

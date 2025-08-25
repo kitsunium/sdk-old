@@ -159,19 +159,19 @@ jobs:
             --test_summary=detailed 2>&1 | tee test-output.txt
           TEST_EXIT_CODE=${PIPESTATUS[0]}
           set -e
-          
+
           # Extract test statistics from bazel output
           TOTAL_TESTS=$(grep -E "^Executed [0-9]+ out of [0-9]+ test" test-output.txt | grep -oE "Executed [0-9]+" | grep -oE "[0-9]+" || echo "0")
           PASSED_TESTS=$(grep -cE "^//.*[[:space:]]+PASSED" test-output.txt || echo "0")
           FAILED_TESTS=$(grep -cE "^//.*[[:space:]]+FAILED" test-output.txt || echo "0")
           FLAKY_TESTS=$(grep -cE "^//.*[[:space:]]+FLAKY" test-output.txt || echo "0")
-          
+
           # Save outputs for later use
           echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
           echo "passed_tests=$PASSED_TESTS" >> $GITHUB_OUTPUT
           echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
           echo "flaky_tests=$FLAKY_TESTS" >> $GITHUB_OUTPUT
-          
+
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "❌ Some tests failed"
             exit $TEST_EXIT_CODE
@@ -192,7 +192,7 @@ jobs:
           echo "| ✅ Passed | ${{ steps.run-tests.outputs.passed_tests || '0' }} |" >> test-summary.md
           echo "| ❌ Failed | ${{ steps.run-tests.outputs.failed_tests || '0' }} |" >> test-summary.md
           echo "| 🔄 Flaky | ${{ steps.run-tests.outputs.flaky_tests || '0' }} |" >> test-summary.md
-          
+
           # Extract failed tests if any
           if [ "${{ steps.run-tests.outputs.failed_tests }}" -gt "0" ]; then
             echo "" >> test-summary.md
@@ -201,7 +201,7 @@ jobs:
             grep -E "^//.*\s+FAILED" test-output.txt | head -10 >> test-summary.md || true
             echo '```' >> test-summary.md
           fi
-          
+
           # Bazel already generates XML test results
           find bazel-testlogs -name "test.xml" -type f > test-files.txt || true
           # Count test results
