@@ -175,7 +175,7 @@ jobs:
           echo "$PASSED_TESTS" > /tmp/passed_tests
           echo "$FAILED_TESTS" > /tmp/failed_tests
           echo "$FLAKY_TESTS" > /tmp/flaky_tests
-          
+
           # Try to write to GITHUB_OUTPUT if it exists and is writable
           if [ -n "${GITHUB_OUTPUT:-}" ] && [ -w "${GITHUB_OUTPUT:-/dev/null}" ] 2>/dev/null; then
             echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
@@ -200,7 +200,7 @@ jobs:
           PASSED_TESTS="${{ steps.run-tests.outputs.passed_tests }}"
           FAILED_TESTS="${{ steps.run-tests.outputs.failed_tests }}"
           FLAKY_TESTS="${{ steps.run-tests.outputs.flaky_tests }}"
-          
+
           # Fallback to reading from temp files if outputs are empty
           if [ -z "$TOTAL_TESTS" ] && [ -f /tmp/total_tests ]; then
             TOTAL_TESTS=$(cat /tmp/total_tests)
@@ -214,7 +214,7 @@ jobs:
           if [ -z "$FLAKY_TESTS" ] && [ -f /tmp/flaky_tests ]; then
             FLAKY_TESTS=$(cat /tmp/flaky_tests)
           fi
-          
+
           # Create test summary file for artifact
           echo "# Test Results Summary" > test-summary.md
           echo "" >> test-summary.md
@@ -372,12 +372,16 @@ jobs:
                 fi
               fi
             else
-              echo "percentage=0.0" >> $GITHUB_OUTPUT
+              if [ -n "${GITHUB_OUTPUT:-}" ]; then
+                echo "percentage=0.0" >> $GITHUB_OUTPUT
+              fi
             fi
           else
             echo "⚠️ No coverage report generated"
             touch coverage.lcov
-            echo "percentage=0.0" >> $GITHUB_OUTPUT
+            if [ -n "${GITHUB_OUTPUT:-}" ]; then
+              echo "percentage=0.0" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: 📤 Upload coverage artifact
