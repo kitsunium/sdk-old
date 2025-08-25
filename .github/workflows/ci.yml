@@ -365,6 +365,16 @@ jobs:
 
           echo "✅ Benchmarks database ready"
 
+      - name: 🏷️ Update BENCH tag
+        run: |
+          # Delete the existing BENCH tag if it exists (both locally and remotely)
+          git tag -d BENCH 2>/dev/null || true
+          git push origin :refs/tags/BENCH 2>/dev/null || true
+
+          # Create new BENCH tag at current commit
+          git tag BENCH
+          git push origin BENCH
+
       - name: 🚀 Create/Update BENCH Release
         uses: ncipollo/release-action@2c591bcc8ecdcd2db72b97d6147f871fcd833ba5 # v1.14.0
         with:
