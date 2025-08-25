@@ -129,12 +129,15 @@ bench:
 	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		COMMIT="$(filter-out $@,$(MAKECMDGOALS))"; \
 		echo "$(YELLOW)▶ Checking out commit $$COMMIT...$(NC)"; \
-		git stash push -m "bench: auto-stash before checkout" --include-untracked 2>/dev/null || true; \
+		STASH_OUTPUT=$$(git stash push -m "bench: auto-stash before checkout" --include-untracked 2>&1); \
+		STASHED=$$?; \
 		git checkout $$COMMIT || exit 1; \
 		echo "$(YELLOW)▶ Running benchmarks for commit $$COMMIT...$(NC)"; \
 		python3 scripts/bench_manager.py save; \
 		git checkout - >/dev/null 2>&1; \
-		git stash pop 2>/dev/null || true; \
+		if [ $$STASHED -eq 0 ] && echo "$$STASH_OUTPUT" | grep -q "Saved"; then \
+			git stash pop --quiet 2>/dev/null || echo "$(YELLOW)Note: Could not restore stashed changes$(NC)"; \
+		fi; \
 	else \
 		echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"; \
 		python3 scripts/bench_manager.py save; \
