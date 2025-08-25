@@ -416,8 +416,13 @@ jobs:
 
       - name: ⚡ Run current benchmarks
         run: |
-          echo "⚡ Running benchmarks for current PR..."
-          python3 scripts/bench_manager.py save
+          echo "⚡ Running stable benchmarks for current PR (single-core, optimized)..."
+          echo "ℹ️ Using stable configuration for consistent results"
+          bazel test --config=benchmark \
+            //pkg/kernel/kbuffer:kbuffer_bench_test \
+            //pkg/kernel/kcache:kcache_bench_test \
+            //pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+            python3 scripts/bench_manager.py save --stdin
 
       - name: 📊 Compare benchmarks and display in summary
         run: |
@@ -501,7 +506,7 @@ jobs:
           echo "📊 Updating benchmark database from BENCH tag..."
           make bench/update || echo "No existing BENCH tag found"
 
-          echo "⚡ Running benchmarks..."
+          echo "⚡ Running stable benchmarks (single-core, optimized)..."
           make bench/save
 
           # Check if benchmarks.sqlite exists
