@@ -502,12 +502,13 @@ jobs:
       - name: 📊 Update and save benchmarks
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: true
         run: |
           echo "📊 Updating benchmark database from BENCH tag..."
           make bench/update || echo "No existing BENCH tag found"
 
           echo "⚡ Running stable benchmarks (single-core, optimized)..."
-          make bench/save
+          make bench
 
           # Check if benchmarks.sqlite exists
           if [ ! -f benchmarks.sqlite ]; then
