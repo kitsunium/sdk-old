@@ -48,6 +48,7 @@ help:
 	@echo ''
 	@echo 'Benchmarks:'
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run and save benchmark results"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/update" "download latest benchmark database"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/compare" "compare two benchmark commits"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/list" "list saved benchmark results"
 	@echo ''
@@ -120,7 +121,11 @@ test/coverage:
 #   make bench                   - run benchmarks for current commit
 #   make bench <hash>            - checkout commit and run benchmarks
 .PHONY: bench
-bench: bench/update
+bench:
+	@if [ ! -f benchmarks.sqlite ]; then \
+		echo "$(YELLOW)▶ No local benchmark database found, downloading from BENCH release...$(NC)"; \
+		$(MAKE) bench/update; \
+	fi
 	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		COMMIT="$(filter-out $@,$(MAKECMDGOALS))"; \
 		echo "$(YELLOW)▶ Checking out commit $$COMMIT...$(NC)"; \
