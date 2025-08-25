@@ -294,8 +294,8 @@ class BenchmarkManager:
         self._check_single_commit(cursor, base_commit, "Base")
         self._check_single_commit(cursor, current_commit, "Current")
         
-        print(f"\n{YELLOW}Run 'make bench-list' to see available commits{NC}")
-        print(f"{YELLOW}Run 'make bench-save' to save current benchmark results{NC}")
+        print(f"\n{YELLOW}Run 'make bench/list' to see available commits{NC}")
+        print(f"{YELLOW}Run 'make bench/save' to save current benchmark results{NC}")
         sys.exit(1)
 
     def _check_single_commit(self, cursor, commit: str, label: str):
@@ -639,7 +639,7 @@ class BenchmarkManager:
     def _print_no_results_message(self):
         """Print message when no results found."""
         print(f"{RED}❌ No benchmark results found{NC}")
-        print(f"{YELLOW}Run 'make bench-save' to save benchmark results{NC}")
+        print(f"{YELLOW}Run 'make bench/save' to save benchmark results{NC}")
 
     def _print_commits_header(self, rows: List[Tuple], limit: int):
         """Print commits list header."""
