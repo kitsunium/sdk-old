@@ -70,8 +70,6 @@ func newPool() *BufferPool {
 
 // Get retrieves a buffer of at least the requested size.
 // The returned buffer may be larger than requested.
-//
-//go:nosplit
 func (p *BufferPool) Get(size int) []byte {
 	if size <= 0 {
 		return nil
@@ -110,8 +108,6 @@ func (p *BufferPool) Get(size int) []byte {
 
 // Put returns a buffer to the pool for reuse.
 // The buffer capacity must be a power of 2.
-//
-//go:nosplit
 func (p *BufferPool) Put(buf []byte) {
 	if buf == nil {
 		return
