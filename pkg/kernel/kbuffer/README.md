@@ -12,10 +12,10 @@ allocations must be avoided.
 
 - **Zero-Allocation Operations**: String/byte conversions without memory
   allocation using `unsafe.String` and `unsafe.StringData`
-- **Cache-Line Optimization**: 64-byte aligned struct with hot path fields
-  in first cache line
-- **Compiler Optimizations**: `//go:inline` directives on hot paths,
-  bounds check elimination (BCE) hints
+- **Cache-Line Optimization**: 64-byte aligned struct with hot path fields in
+  first cache line
+- **Compiler Optimizations**: `//go:inline` directives on hot paths, bounds
+  check elimination (BCE) hints
 - **Memory Pooling**: 21 size classes from 64B to 1MB with sync.Pool
 - **Thread-Safe Pool**: Safe concurrent access to buffer pools
 - **Safety**: All unsafe operations protected by explicit bounds checks
@@ -196,7 +196,7 @@ type Buffer struct {
 Strategic use of compiler directives for optimization:
 
 - `//go:inline` - Forces inlining for small functions
-- `//go:nosplit` - Prevents stack growth checks  
+- `//go:nosplit` - Prevents stack growth checks
 - `//go:noescape` - Prevents heap escape (internal use)
 
 ## Use Cases
