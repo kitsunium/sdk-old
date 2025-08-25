@@ -1,0 +1,27 @@
+# Benchmark configuration for stable and reproducible results
+# Usage: bazel test --config=benchmark //pkg/...
+
+# Force single-threaded execution for stability
+build:benchmark --local_test_jobs=1
+build:benchmark --jobs=1
+
+# Benchmark-specific test arguments
+build:benchmark --test_arg=-test.bench=.
+build:benchmark --test_arg=-test.run=^$
+build:benchmark --test_arg=-test.benchtime=10s
+build:benchmark --test_arg=-test.cpu=1
+
+# Environment variables for consistent behavior
+build:benchmark --test_env=GOMAXPROCS=1
+build:benchmark --test_env=GOGC=off
+
+# Output configuration
+build:benchmark --test_output=all
+build:benchmark --test_timeout=600
+
+# Disable test caching for benchmarks
+build:benchmark --nocache_test_results
+
+# Performance settings
+build:benchmark --compilation_mode=opt
+build:benchmark --copt=-O3
