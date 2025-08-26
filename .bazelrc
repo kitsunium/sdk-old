@@ -48,6 +48,16 @@ build:perf --strip=always
 build:perf --@rules_go//go/config:gc_linkopts=-s
 build:perf --@rules_go//go/config:gc_linkopts=-w
 # Enable compiler optimizations
+
+# Benchmark configuration for stable and reproducible results
+test:benchmark --test_arg=-test.bench=.
+test:benchmark --test_arg=-test.benchtime=10s
+test:benchmark --test_arg=-test.cpu=1
+test:benchmark --compilation_mode=opt
+test:benchmark --@rules_go//go/config:pure
+test:benchmark --cpu=1
+test:benchmark --test_output=all
+test:benchmark --nocache_test_results
 build:perf --copt=-O2
 
 # SDK build configuration (for library distribution)

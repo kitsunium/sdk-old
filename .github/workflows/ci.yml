@@ -494,6 +494,10 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: 📦 Install Python dependencies
+        run: |
+          pip install tabulate
+
       - name: 🔧 Configure Git
         run: |
           git config --global user.name 'github-actions[bot]'
@@ -507,7 +511,14 @@ jobs:
           make bench/update || echo "No existing BENCH tag found"
 
           echo "⚡ Running stable benchmarks (single-core, optimized)..."
-          make bench PRESERVE=true
+          echo "ℹ️ Using stable configuration for consistent results"
+          
+          # Run benchmarks and capture output directly
+          bazel test --config=benchmark \
+            //pkg/kernel/kbuffer:kbuffer_bench_test \
+            //pkg/kernel/kcache:kcache_bench_test \
+            //pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+            python3 scripts/bench_manager.py save --stdin --preserve-history
 
           # Check if benchmarks.sqlite exists
           if [ ! -f benchmarks.sqlite ]; then
