@@ -13,12 +13,15 @@ build --guard_against_concurrent_changes
 build --@rules_go//go/config:pure
 # race disabled by default if not specified
 
-# Test configuration
+# Test configuration (optimized for speed)
 test --test_output=errors
 test --test_verbose_timeout_warnings
 test --cache_test_results=yes
 # Default size for Go tests
 test --test_size_filters=small,medium
+# Use all available CPU cores for faster execution
+test --local_test_jobs=auto
+test --jobs=auto
 
 # Coverage configuration
 coverage --combined_report=lcov
@@ -49,15 +52,8 @@ build:perf --@rules_go//go/config:gc_linkopts=-s
 build:perf --@rules_go//go/config:gc_linkopts=-w
 # Enable compiler optimizations
 
-# Benchmark configuration for stable and reproducible results
-test:benchmark --test_arg=-test.bench=.
-test:benchmark --test_arg=-test.benchtime=10s
-test:benchmark --test_arg=-test.cpu=1
-test:benchmark --compilation_mode=opt
-test:benchmark --@rules_go//go/config:pure
-test:benchmark --cpu=1
-test:benchmark --test_output=all
-test:benchmark --nocache_test_results
+# Import benchmark configuration
+import .bazelrc.benchmark
 build:perf --copt=-O2
 
 # SDK build configuration (for library distribution)

@@ -418,10 +418,15 @@ jobs:
         run: |
           echo "⚡ Running stable benchmarks for current PR (single-core, optimized)..."
           echo "ℹ️ Using stable configuration for consistent results"
-          bazel test --config=benchmark \
-            //pkg/kernel/kbuffer:kbuffer_bench_test \
-            //pkg/kernel/kcache:kcache_bench_test \
-            //pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+
+          # Discover and run all benchmark targets
+          BENCH_TARGETS=$(bazel query 'filter(".*_bench_test$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' ')
+          if [ -z "$BENCH_TARGETS" ]; then
+            echo "❌ No benchmark targets found"
+            exit 1
+          fi
+
+          bazel test --config=benchmark $BENCH_TARGETS 2>&1 | \
             python3 scripts/bench_manager.py save --stdin
 
       - name: 📊 Compare benchmarks and display in summary
@@ -512,12 +517,19 @@ jobs:
 
           echo "⚡ Running stable benchmarks (single-core, optimized)..."
           echo "ℹ️ Using stable configuration for consistent results"
-          
+
+          # Discover and run all benchmark targets
+          BENCH_TARGETS=$(bazel query 'filter(".*_bench_test$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' ')
+          if [ -z "$BENCH_TARGETS" ]; then
+            echo "❌ No benchmark targets found"
+            exit 1
+          fi
+
+          TOTAL=$(echo "$BENCH_TARGETS" | wc -w)
+          echo "📊 Found $TOTAL benchmark packages to run"
+
           # Run benchmarks and capture output directly
-          bazel test --config=benchmark \
-            //pkg/kernel/kbuffer:kbuffer_bench_test \
-            //pkg/kernel/kcache:kcache_bench_test \
-            //pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+          bazel test --config=benchmark $BENCH_TARGETS 2>&1 | \
             python3 scripts/bench_manager.py save --stdin --preserve-history
 
           # Check if benchmarks.sqlite exists

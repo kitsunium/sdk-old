@@ -136,23 +136,67 @@ bench:
 		git checkout $$COMMIT || exit 1; \
 		echo "$(YELLOW)▶ Running stable benchmarks for commit $$COMMIT...$(NC)"; \
 		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
-		bazel test --config=benchmark \
-			//pkg/kernel/kbuffer:kbuffer_bench_test \
-			//pkg/kernel/kcache:kcache_bench_test \
-			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+		BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
+		if [ -z "$$BENCH_TARGETS" ]; then \
+			echo "$(RED)❌ No benchmark targets found$(NC)"; \
+			exit 1; \
+		fi; \
+		bazel test --config=benchmark $$BENCH_TARGETS 2>&1 | \
 			python3 scripts/bench_manager.py save --stdin; \
 		git checkout - >/dev/null 2>&1; \
 		if [ $$STASH_COUNT_AFTER -gt $$STASH_COUNT_BEFORE ]; then \
 			git stash pop --quiet 2>/dev/null || echo "$(YELLOW)Note: Could not restore stashed changes$(NC)"; \
 		fi; \
 	else \
-		echo "$(YELLOW)▶ Running stable benchmarks...$(NC)"; \
-		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
-		bazel test --config=benchmark \
-			//pkg/kernel/kbuffer:kbuffer_bench_test \
-			//pkg/kernel/kcache:kcache_bench_test \
-			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
-			python3 scripts/bench_manager.py save --stdin $(if $(PRESERVE),--preserve-history); \
+		echo "$(YELLOW)▶ Running benchmarks (single-core and multi-core)...$(NC)"; \
+		BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
+		if [ -z "$$BENCH_TARGETS" ]; then \
+			echo "$(RED)❌ No benchmark targets found$(NC)"; \
+			exit 1; \
+		fi; \
+		TOTAL=$$(echo "$$BENCH_TARGETS" | wc -w); \
+		NUM_CORES=$$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); \
+		BENCH_TIME=$$(grep -E "test:benchmark.*benchtime=" .bazelrc.benchmark 2>/dev/null | head -1 | sed 's/.*benchtime=//' | cut -d' ' -f1 || echo "1s"); \
+		echo "$(BLUE)→ Found $$TOTAL benchmark packages ($$BENCH_TIME per test, $$NUM_CORES CPU cores detected)$(NC)"; \
+		echo ""; \
+		echo "$(CYAN)━━━ Single-Core Benchmarks ━━━$(NC)"; \
+		echo "$(CYAN)→ Running with GOMAXPROCS=1 for consistent baseline$(NC)"; \
+		COUNTER=1; \
+		for TARGET in $$BENCH_TARGETS; do \
+			PKG_NAME=$$(echo $$TARGET | sed 's|//||' | sed 's|:.*||' | sed 's|.*/||'); \
+			echo "  $(CYAN)[$$COUNTER/$$TOTAL]$(NC) Running $$PKG_NAME (single-core)..."; \
+			START_TIME=$$(date +%s); \
+			bazel test --config=benchmark $$TARGET 2>&1 | \
+				tee /tmp/bench_single_$$COUNTER.out | grep -E "^Benchmark" | head -5; \
+			END_TIME=$$(date +%s); \
+			DURATION=$$((END_TIME - START_TIME)); \
+			BENCH_COUNT=$$(grep -c "^Benchmark" /tmp/bench_single_$$COUNTER.out 2>/dev/null || echo 0); \
+			echo "  $(GREEN)✓$(NC) $$PKG_NAME complete ($$BENCH_COUNT benchmarks, $$DURATION seconds)"; \
+			echo ""; \
+			COUNTER=$$((COUNTER + 1)); \
+		done; \
+		echo "$(CYAN)━━━ Multi-Core Benchmarks ━━━$(NC)"; \
+		echo "$(CYAN)→ Running with GOMAXPROCS=$$NUM_CORES for parallel performance$(NC)"; \
+		COUNTER=1; \
+		for TARGET in $$BENCH_TARGETS; do \
+			PKG_NAME=$$(echo $$TARGET | sed 's|//||' | sed 's|:.*||' | sed 's|.*/||'); \
+			echo "  $(CYAN)[$$COUNTER/$$TOTAL]$(NC) Running $$PKG_NAME ($$NUM_CORES cores)..."; \
+			START_TIME=$$(date +%s); \
+			bazel test --config=benchmark-multi $$TARGET 2>&1 | \
+				tee /tmp/bench_multi_$$COUNTER.out | grep -E "^Benchmark" | head -5; \
+			END_TIME=$$(date +%s); \
+			DURATION=$$((END_TIME - START_TIME)); \
+			BENCH_COUNT=$$(grep -c "^Benchmark" /tmp/bench_multi_$$COUNTER.out 2>/dev/null || echo 0); \
+			echo "  $(GREEN)✓$(NC) $$PKG_NAME complete ($$BENCH_COUNT benchmarks, $$DURATION seconds)"; \
+			echo ""; \
+			COUNTER=$$((COUNTER + 1)); \
+		done; \
+		echo "$(BLUE)→ Processing and saving results...$(NC)"; \
+		cat /tmp/bench_single_*.out 2>/dev/null | \
+			python3 scripts/bench_manager.py save --stdin --mode single $(if $(PRESERVE),--preserve-history); \
+		cat /tmp/bench_multi_*.out 2>/dev/null | \
+			python3 scripts/bench_manager.py save --stdin --mode multi --cores $$NUM_CORES $(if $(PRESERVE),--preserve-history); \
+		rm -f /tmp/bench_*.out; \
 	fi
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 

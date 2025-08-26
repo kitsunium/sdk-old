@@ -40,6 +40,7 @@ class BenchmarkManager:
         
         self._create_tables(cursor)
         self._create_indexes(cursor)
+        self._migrate_schema(cursor)
         self.conn.commit()
 
     def _create_tables(self, cursor):
@@ -57,7 +58,9 @@ class BenchmarkManager:
                 mb_per_sec REAL,
                 bytes_per_op INTEGER,
                 allocs_per_op INTEGER,
-                raw_output TEXT
+                raw_output TEXT,
+                mode TEXT DEFAULT 'single',
+                num_cores INTEGER DEFAULT 1
             )
         """)
 
@@ -67,6 +70,20 @@ class BenchmarkManager:
             CREATE INDEX IF NOT EXISTS idx_benchmark_lookup 
             ON benchmarks(package, test_name, commit_hash)
         """)
+    
+    def _migrate_schema(self, cursor):
+        """Migrate existing database schema to add new columns."""
+        # Check if 'mode' column exists
+        cursor.execute("PRAGMA table_info(benchmarks)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'mode' not in columns:
+            print(f"{YELLOW}→ Migrating database schema: adding 'mode' column{NC}")
+            cursor.execute("ALTER TABLE benchmarks ADD COLUMN mode TEXT DEFAULT 'single'")
+        
+        if 'num_cores' not in columns:
+            print(f"{YELLOW}→ Migrating database schema: adding 'num_cores' column{NC}")
+            cursor.execute("ALTER TABLE benchmarks ADD COLUMN num_cores INTEGER DEFAULT 1")
 
     def get_current_commit(self) -> Tuple[str, str, bool]:
         """Get current git commit hash, branch, and dirty status."""
@@ -251,7 +268,8 @@ class BenchmarkManager:
         return '\n'.join(filtered_lines)
 
     def save_results(self, results: Dict[str, str], commit_hash: str, 
-                    branch: str, is_dirty: bool = False, preserve_history: bool = False):
+                    branch: str, is_dirty: bool = False, preserve_history: bool = False,
+                    mode: str = 'single', num_cores: int = 1):
         """Save benchmark results to database."""
         cursor = self.conn.cursor()
         
@@ -259,25 +277,25 @@ class BenchmarkManager:
         
         # Only delete existing results if not preserving history
         if not preserve_history:
-            self._delete_existing_results(cursor, save_hash, is_dirty)
+            self._delete_existing_results(cursor, save_hash, is_dirty, mode)
         else:
-            # In preserve_history mode, only delete 'current' entries
-            cursor.execute("DELETE FROM benchmarks WHERE commit_hash = 'current'")
+            # In preserve_history mode, only delete 'current' entries for this mode
+            cursor.execute("DELETE FROM benchmarks WHERE commit_hash = 'current' AND mode = ?", (mode,))
         
-        self._insert_new_results(cursor, results, save_hash, branch)
+        self._insert_new_results(cursor, results, save_hash, branch, mode, num_cores)
         
         self.conn.commit()
-        print(f"{GREEN}✓ Results saved to {self.db_path}{NC}")
+        print(f"{GREEN}✓ Results saved to {self.db_path} ({mode} mode){NC}")
 
-    def _delete_existing_results(self, cursor, save_hash: str, is_dirty: bool):
-        """Delete existing results for this commit."""
-        cursor.execute("DELETE FROM benchmarks WHERE commit_hash = ?", (save_hash,))
+    def _delete_existing_results(self, cursor, save_hash: str, is_dirty: bool, mode: str = 'single'):
+        """Delete existing results for this commit and mode."""
+        cursor.execute("DELETE FROM benchmarks WHERE commit_hash = ? AND mode = ?", (save_hash, mode))
         
         if not is_dirty:
-            cursor.execute("DELETE FROM benchmarks WHERE commit_hash = 'current'")
+            cursor.execute("DELETE FROM benchmarks WHERE commit_hash = 'current' AND mode = ?", (mode,))
 
     def _insert_new_results(self, cursor, results: Dict[str, str], 
-                           save_hash: str, branch: str):
+                           save_hash: str, branch: str, mode: str = 'single', num_cores: int = 1):
         """Insert new benchmark results into database."""
         for package, output in results.items():
             if not output:
@@ -286,16 +304,21 @@ class BenchmarkManager:
             parsed_results = self.parse_benchmark_output(output, package)
             
             for result in parsed_results:
+                # Store raw ns_per_op - we'll calculate efficiency during comparison
+                ns_per_op = result['ns_per_op']
+                
                 cursor.execute("""
                     INSERT INTO benchmarks (
                         commit_hash, branch, package, test_name,
                         iterations, ns_per_op, mb_per_sec, 
-                        bytes_per_op, allocs_per_op, raw_output
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        bytes_per_op, allocs_per_op, raw_output,
+                        mode, num_cores
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     save_hash, branch, result['package'], result['test_name'],
-                    result['iterations'], result['ns_per_op'], result['mb_per_sec'],
-                    result['bytes_per_op'], result['allocs_per_op'], result['raw_output']
+                    result['iterations'], ns_per_op, result['mb_per_sec'],
+                    result['bytes_per_op'], result['allocs_per_op'], result['raw_output'],
+                    mode, num_cores
                 ))
 
     def compare_commits(self, base_commit: str, current_commit: str):
@@ -374,18 +397,39 @@ class BenchmarkManager:
 
     def _compare_all_benchmarks(self, cursor, base_full: str, current_full: str):
         """Compare all benchmarks between two commits."""
-        all_tests = self._get_all_tests(cursor, base_full, current_full)
-        current_package = None
+        # Check which modes are available
+        cursor.execute("""
+            SELECT DISTINCT mode, num_cores FROM benchmarks 
+            WHERE commit_hash IN (?, ?)
+            ORDER BY mode
+        """, (base_full, current_full))
+        mode_info = cursor.fetchall()
         
-        if HAS_TABULATE:
-            self._compare_with_tabulate(cursor, base_full, current_full, all_tests)
-        else:
-            for package, test_name in all_tests:
-                if package != current_package:
-                    self._print_package_header(package, current_package)
-                    current_package = package
-                
-                self._compare_single_benchmark(cursor, base_full, current_full, package, test_name)
+        # Check if we have both single and multi-core results
+        has_single = any(m[0] == 'single' for m in mode_info)
+        has_multi = any(m[0] == 'multi' for m in mode_info)
+        num_cores = next((m[1] for m in mode_info if m[0] == 'multi'), 1)
+        
+        if has_single and has_multi:
+            # Show combined comparison with efficiency metrics
+            print(f"\n{CYAN}━━━ Performance Comparison (Single-Core vs Multi-Core with {num_cores} cores) ━━━{NC}")
+            self._compare_with_efficiency(cursor, base_full, current_full, num_cores)
+        elif has_single:
+            # Only single-core results
+            print(f"\n{CYAN}━━━ Single-Core Results ━━━{NC}")
+            all_tests = self._get_all_tests_by_mode(cursor, base_full, current_full, 'single')
+            if HAS_TABULATE:
+                self._compare_with_tabulate_by_mode(cursor, base_full, current_full, all_tests, 'single')
+            else:
+                self._compare_benchmarks_simple(cursor, base_full, current_full, all_tests, 'single')
+        elif has_multi:
+            # Only multi-core results
+            print(f"\n{CYAN}━━━ Multi-Core Results ({num_cores} cores) ━━━{NC}")
+            all_tests = self._get_all_tests_by_mode(cursor, base_full, current_full, 'multi')
+            if HAS_TABULATE:
+                self._compare_with_tabulate_by_mode(cursor, base_full, current_full, all_tests, 'multi')
+            else:
+                self._compare_benchmarks_simple(cursor, base_full, current_full, all_tests, 'multi')
     
     def _compare_with_tabulate(self, cursor, base_full: str, current_full: str, all_tests):
         """Compare benchmarks using tabulate for better formatting."""
@@ -481,6 +525,26 @@ class BenchmarkManager:
             FROM benchmarks
             WHERE commit_hash IN (?, ?)
         """, (base_full, current_full))
+        
+        # Normalize test names by removing CPU suffix
+        normalized_tests = {}
+        for package, test_name in cursor.fetchall():
+            # Remove CPU suffix (e.g., -2, -4, -8, etc.)
+            normalized_name = re.sub(r'-\d+$', '', test_name)
+            key = (package, normalized_name)
+            if key not in normalized_tests:
+                normalized_tests[key] = True
+        
+        # Sort and return unique normalized tests
+        return sorted(normalized_tests.keys())
+    
+    def _get_all_tests_by_mode(self, cursor, base_full: str, current_full: str, mode: str) -> List[Tuple[str, str]]:
+        """Get all test names from both commits for a specific mode."""
+        cursor.execute("""
+            SELECT DISTINCT package, test_name
+            FROM benchmarks
+            WHERE commit_hash IN (?, ?) AND mode = ?
+        """, (base_full, current_full, mode))
         
         # Normalize test names by removing CPU suffix
         normalized_tests = {}
@@ -761,6 +825,199 @@ class BenchmarkManager:
         if len(rows) >= 2:
             print(f"{CYAN}Example: make bench/compare {rows[-1][0][:8]} {rows[0][0][:8]}{NC}\n")
 
+    def _compare_with_efficiency(self, cursor, base_full: str, current_full: str, num_cores: int):
+        """Compare benchmarks showing parallel efficiency."""
+        all_tests = self._get_all_tests_by_mode(cursor, base_full, current_full, 'single')
+        current_package = None
+        
+        if HAS_TABULATE:
+            table_data = []
+            for package, test_name in all_tests:
+                if package != current_package:
+                    if current_package is not None and table_data:
+                        # Print the table for the previous package
+                        headers = ["Test", "Single-Core", "Multi-Core", "Single Throughput", "Multi Throughput", "Efficiency", "Scaling"]
+                        print(f"\n{YELLOW}Package: {current_package}{NC}")
+                        print(tabulate(table_data, headers=headers, tablefmt="simple"))
+                        table_data = []
+                    current_package = package
+                
+                # Get single and multi-core results
+                single_result = self._get_benchmark_result_by_mode(cursor, current_full, package, test_name, 'single')
+                multi_result = self._get_benchmark_result_by_mode(cursor, current_full, package, test_name, 'multi')
+                
+                if single_result and multi_result:
+                    single_ns = single_result[0]
+                    multi_ns = multi_result[0]
+                    single_mb = single_result[1] if single_result[1] else 0
+                    multi_mb = multi_result[1] if multi_result[1] else 0
+                    
+                    # For throughput: ops/sec = 1e9 / ns_per_op
+                    single_ops_sec = 1e9 / single_ns if single_ns > 0 else 0
+                    multi_ops_sec = 1e9 / multi_ns if multi_ns > 0 else 0
+                    
+                    # Efficiency based on throughput increase
+                    # Perfect scaling: multi_ops should be num_cores × single_ops
+                    expected_ops = single_ops_sec * num_cores
+                    efficiency = (multi_ops_sec / expected_ops * 100) if expected_ops > 0 else 0
+                    
+                    # Determine scaling quality
+                    if efficiency >= 95:
+                        scaling = f"{GREEN}Perfect{NC}"
+                    elif efficiency >= 80:
+                        scaling = f"{CYAN}Good{NC}"
+                    elif efficiency >= 60:
+                        scaling = f"{YELLOW}Fair{NC}"
+                    else:
+                        scaling = f"{RED}Poor{NC}"
+                    
+                    test_display = self._format_test_name(test_name)
+                    row = [
+                        test_display,
+                        f"{single_ns:.2f} ns/op",
+                        f"{multi_ns:.2f} ns/op",
+                        f"{single_ops_sec/1e6:.1f}M ops/s",
+                        f"{multi_ops_sec/1e6:.1f}M ops/s",
+                        f"{efficiency:.1f}%",
+                        scaling
+                    ]
+                    table_data.append(row)
+            
+            # Print last package
+            if table_data:
+                print(f"\n{YELLOW}Package: {current_package}{NC}")
+                headers = ["Test", "Single-Core", "Multi-Core", "Single Throughput", "Multi Throughput", "Efficiency", "Scaling"]
+                print(tabulate(table_data, headers=headers, tablefmt="simple"))
+                
+            # Print legend
+            print(f"\n{CYAN}Legend:{NC}")
+            print(f"  Throughput = Operations per second (higher is better)")
+            print(f"  Efficiency = (Multi-Core Throughput) / (Single-Core Throughput × {num_cores}) × 100%")
+            print(f"  Scaling: {GREEN}Perfect{NC} (≥95%) | {CYAN}Good{NC} (≥80%) | {YELLOW}Fair{NC} (≥60%) | {RED}Poor{NC} (<60%)")
+        else:
+            # Non-tabulate version
+            for package, test_name in all_tests:
+                if package != current_package:
+                    self._print_package_header(package, current_package)
+                    current_package = package
+                
+                self._compare_single_with_efficiency(cursor, current_full, package, test_name, num_cores)
+    
+    def _compare_single_with_efficiency(self, cursor, commit: str, package: str, test_name: str, num_cores: int):
+        """Compare single test showing efficiency."""
+        single_result = self._get_benchmark_result_by_mode(cursor, commit, package, test_name, 'single')
+        multi_result = self._get_benchmark_result_by_mode(cursor, commit, package, test_name, 'multi')
+        
+        test_display = self._format_test_name(test_name)
+        print(f"  {test_display:30}", end=" ")
+        
+        if single_result and multi_result:
+            single_ns = single_result[0]
+            multi_ns = multi_result[0]
+            normalized_multi = multi_ns * num_cores
+            efficiency = (single_ns / normalized_multi * 100) if normalized_multi > 0 else 0
+            
+            print(f"Single: {single_ns:8.2f} ns/op  Multi: {multi_ns:8.2f} ns/op  ", end="")
+            print(f"Efficiency: {efficiency:5.1f}%", end="")
+            
+            if efficiency >= 95:
+                print(f" {GREEN}[Perfect scaling]{NC}")
+            elif efficiency >= 80:
+                print(f" {CYAN}[Good scaling]{NC}")
+            elif efficiency >= 60:
+                print(f" {YELLOW}[Fair scaling]{NC}")
+            else:
+                print(f" {RED}[Poor scaling]{NC}")
+        elif single_result:
+            print(f"{YELLOW}[No multi-core data]{NC}")
+        elif multi_result:
+            print(f"{YELLOW}[No single-core data]{NC}")
+        else:
+            print(f"{RED}[No data]{NC}")
+    
+    def _compare_benchmarks_simple(self, cursor, base_full: str, current_full: str, all_tests, mode: str):
+        """Simple comparison for a single mode."""
+        current_package = None
+        for package, test_name in all_tests:
+            if package != current_package:
+                self._print_package_header(package, current_package)
+                current_package = package
+            self._compare_single_benchmark_by_mode(cursor, base_full, current_full, package, test_name, mode)
+    
+    def _compare_with_tabulate_by_mode(self, cursor, base_full: str, current_full: str, all_tests, mode: str):
+        """Compare benchmarks using tabulate for better formatting with mode."""
+        current_package = None
+        table_data = []
+        
+        for package, test_name in all_tests:
+            if package != current_package:
+                if current_package is not None and table_data:
+                    # Print the table for the previous package
+                    headers = ["Test", "Base (ns/op)", "Current (ns/op)", "Change", "MB/s", "Allocs/op"]
+                    print(tabulate(table_data, headers=headers, tablefmt="simple"))
+                    table_data = []
+                    print()  # Empty line between packages
+                
+                print(f"\n{YELLOW}Package: {package}{NC}")
+                current_package = package
+            
+            # Get benchmark results for both commits
+            base_result = self._get_benchmark_result_by_mode(cursor, base_full, package, test_name, mode)
+            current_result = self._get_benchmark_result_by_mode(cursor, current_full, package, test_name, mode)
+            
+            row = self._create_comparison_row(test_name, base_result, current_result)
+            if row:
+                table_data.append(row)
+        
+        # Print the last table
+        if table_data:
+            headers = ["Test", "Base (ns/op)", "Current (ns/op)", "Change", "MB/s", "Allocs/op"]
+            print(tabulate(table_data, headers=headers, tablefmt="simple"))
+    
+    def _compare_single_benchmark_by_mode(self, cursor, base_full: str, current_full: str, 
+                                          package: str, test_name: str, mode: str):
+        """Compare a single benchmark between two commits for a specific mode."""
+        base_result = self._get_benchmark_result_by_mode(cursor, base_full, package, test_name, mode)
+        current_result = self._get_benchmark_result_by_mode(cursor, current_full, package, test_name, mode)
+        
+        # Format test name with padding
+        test_display = self._format_test_name(test_name)
+        print(f"  {test_display:35}", end=" ")
+        
+        # Compare and print results
+        if base_result is None and current_result is None:
+            print(f"{YELLOW}[NO DATA]{NC}")
+        elif base_result is None:
+            self._print_new_test(current_result)
+        elif current_result is None:
+            self._print_removed_test(base_result)
+        else:
+            self._print_comparison(base_result, current_result)
+        print()  # New line after each test
+    
+    def _get_benchmark_result_by_mode(self, cursor, commit_hash: str, package: str, test_name: str, mode: str) -> Optional[Tuple]:
+        """Get benchmark result for a specific test and mode."""
+        # First try exact match
+        cursor.execute("""
+            SELECT ns_per_op, mb_per_sec, bytes_per_op, allocs_per_op
+            FROM benchmarks
+            WHERE commit_hash = ? AND package = ? AND test_name = ? AND mode = ?
+            LIMIT 1
+        """, (commit_hash, package, test_name, mode))
+        result = cursor.fetchone()
+        
+        if not result:
+            # Try with wildcard for CPU suffix
+            cursor.execute("""
+                SELECT ns_per_op, mb_per_sec, bytes_per_op, allocs_per_op
+                FROM benchmarks
+                WHERE commit_hash = ? AND package = ? AND test_name LIKE ? AND mode = ?
+                LIMIT 1
+            """, (commit_hash, package, test_name + '%', mode))
+            result = cursor.fetchone()
+        
+        return result
+    
     def close(self):
         """Close database connection."""
         if self.conn:
@@ -779,6 +1036,10 @@ def create_parser() -> argparse.ArgumentParser:
                            help='Preserve existing benchmark history (for CI/CD)')
     save_parser.add_argument('--stdin', action='store_true',
                            help='Read benchmark results from stdin instead of running bazel')
+    save_parser.add_argument('--mode', choices=['single', 'multi'], default='single',
+                           help='Benchmark mode: single-core or multi-core')
+    save_parser.add_argument('--cores', type=int, default=1,
+                           help='Number of CPU cores (for multi-core mode)')
     
     # Compare command  
     compare_parser = subparsers.add_parser('compare', help='Compare benchmark results')
@@ -816,7 +1077,8 @@ def handle_save_command(manager: BenchmarkManager, args):
     
     if results:
         manager.save_results(results, commit_hash, branch, is_dirty, 
-                           preserve_history=args.preserve_history)
+                           preserve_history=args.preserve_history,
+                           mode=args.mode, num_cores=args.cores)
     else:
         print(f"{RED}No benchmark results collected{NC}")
 

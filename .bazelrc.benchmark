@@ -1,27 +1,33 @@
 # Benchmark configuration for stable and reproducible results
-# Usage: bazel test --config=benchmark //pkg/...
+# This file is imported by .bazelrc
 
-# Force single-threaded execution for stability
-build:benchmark --local_test_jobs=1
-build:benchmark --jobs=1
+# Single-core benchmark configuration
+test:benchmark --test_arg=-test.bench=.
+test:benchmark --test_arg=-test.run=^$
+test:benchmark --test_arg=-test.benchtime=100x
+test:benchmark --test_arg=-test.cpu=1
+test:benchmark --test_arg=-test.benchmem
+test:benchmark --compilation_mode=opt
+test:benchmark --@rules_go//go/config:pure
+test:benchmark --test_output=all
+test:benchmark --nocache_test_results
+test:benchmark --test_timeout=600
+test:benchmark --local_test_jobs=1
+test:benchmark --jobs=1
+test:benchmark --test_env=GOMAXPROCS=1
 
-# Benchmark-specific test arguments
-build:benchmark --test_arg=-test.bench=.
-build:benchmark --test_arg=-test.run=^$
-build:benchmark --test_arg=-test.benchtime=10s
-build:benchmark --test_arg=-test.cpu=1
-
-# Environment variables for consistent behavior
-build:benchmark --test_env=GOMAXPROCS=1
-build:benchmark --test_env=GOGC=off
-
-# Output configuration
-build:benchmark --test_output=all
-build:benchmark --test_timeout=600
-
-# Disable test caching for benchmarks
-build:benchmark --nocache_test_results
-
-# Performance settings
-build:benchmark --compilation_mode=opt
-build:benchmark --copt=-O3
+# Multi-core benchmark configuration
+test:benchmark-multi --test_arg=-test.bench=.
+test:benchmark-multi --test_arg=-test.run=^$
+test:benchmark-multi --test_arg=-test.benchtime=100x
+test:benchmark-multi --test_arg=-test.benchmem
+test:benchmark-multi --compilation_mode=opt
+test:benchmark-multi --@rules_go//go/config:pure
+test:benchmark-multi --test_output=all
+test:benchmark-multi --nocache_test_results
+test:benchmark-multi --test_timeout=600
+# Use all available CPU cores
+test:benchmark-multi --local_test_jobs=auto
+test:benchmark-multi --jobs=auto
+# Let Go use all available cores
+test:benchmark-multi --test_env=GOMAXPROCS=0
