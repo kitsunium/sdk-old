@@ -4,7 +4,6 @@ package kcache
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -41,29 +40,6 @@ type Cache[K comparable, V any] interface {
 	Has(key K) bool
 }
 
-// Stats holds cache statistics for monitoring.
-// This struct uses pointers to atomic values to avoid copy issues.
-type Stats struct {
-	// Hits is the number of successful cache retrievals.
-	Hits *atomic.Uint64
-	// Misses is the number of failed cache retrievals.
-	Misses *atomic.Uint64
-	// Sets is the number of cache insertions.
-	Sets *atomic.Uint64
-	// Evictions is the number of entries removed due to capacity limits.
-	Evictions *atomic.Uint64
-}
-
-// NewStats creates a new Stats instance with initialized atomic counters.
-func NewStats() *Stats {
-	return &Stats{
-		Hits:      &atomic.Uint64{},
-		Misses:    &atomic.Uint64{},
-		Sets:      &atomic.Uint64{},
-		Evictions: &atomic.Uint64{},
-	}
-}
-
 type entry[V any] struct {
 	value      V
 	expiration int64
@@ -94,7 +70,6 @@ type LRU[K comparable, V any] struct {
 	head     *entry[V]
 	tail     *entry[V]
 	mu       sync.RWMutex
-	stats    *Stats
 	pool     *sync.Pool
 }
 
@@ -118,7 +93,6 @@ func NewLRU[K comparable, V any](capacity int) *LRU[K, V] {
 	lru := &LRU[K, V]{
 		capacity: capacity,
 		items:    make(map[K]*entry[V], capacity),
-		stats:    NewStats(),
 		pool: &sync.Pool{
 			New: func() any {
 				return &entry[V]{}
@@ -148,27 +122,45 @@ func NewLRU[K comparable, V any](capacity int) *LRU[K, V] {
 // This operation is O(1) in time complexity.
 func (c *LRU[K, V]) Get(key K) (V, bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	e, exists := c.items[key]
 	if !exists {
-		c.Stats().Misses.Add(1)
+		c.mu.Unlock()
 		var zero V
 		return zero, false
 	}
 
-	if e.expiration > 0 && time.Now().UnixNano() > e.expiration {
-		c.removeEntry(e)
-		delete(c.items, key)
-		c.size--
-		c.Stats().Misses.Add(1)
-		var zero V
-		return zero, false
+	// Inline expiration check for speed
+	if e.expiration > 0 {
+		now := time.Now().UnixNano()
+		if now > e.expiration {
+			// Inline removal for performance
+			e.prev.next = e.next
+			e.next.prev = e.prev
+			delete(c.items, key)
+			c.size--
+			c.pool.Put(e)
+			c.mu.Unlock()
+			var zero V
+			return zero, false
+		}
 	}
 
-	c.moveToFront(e)
-	c.Stats().Hits.Add(1)
-	return e.value, true
+	// Inline moveToFront for performance
+	if e.prev != c.head {
+		// Unlink
+		e.prev.next = e.next
+		e.next.prev = e.prev
+		// Link to front
+		e.next = c.head.next
+		e.prev = c.head
+		c.head.next.prev = e
+		c.head.next = e
+	}
+
+	value := e.value
+	c.mu.Unlock()
+	return value, true
 }
 
 // Set stores a key-value pair in the cache without expiration.
@@ -200,19 +192,25 @@ func (c *LRU[K, V]) Set(key K, value V) {
 // This operation is O(1) in time complexity.
 func (c *LRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.Stats().Sets.Add(1)
 
 	var expiration int64
 	if ttl > 0 {
-		expiration = time.Now().Add(ttl).UnixNano()
+		expiration = time.Now().UnixNano() + int64(ttl)
 	}
 
 	if e, exists := c.items[key]; exists {
 		e.value = value
 		e.expiration = expiration
-		c.moveToFront(e)
+		// Inline moveToFront
+		if e.prev != c.head {
+			e.prev.next = e.next
+			e.next.prev = e.prev
+			e.next = c.head.next
+			e.prev = c.head
+			c.head.next.prev = e
+			c.head.next = e
+		}
+		c.mu.Unlock()
 		return
 	}
 
@@ -220,27 +218,28 @@ func (c *LRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 	e.value = value
 	e.expiration = expiration
 	e.key = key
-	e.next = nil
-	e.prev = nil
 
 	c.items[key] = e
-	c.addToFront(e)
+
+	// Inline addToFront
+	e.next = c.head.next
+	e.prev = c.head
+	c.head.next.prev = e
+	c.head.next = e
+
 	c.size++
 
 	if c.size > c.capacity {
 		oldest := c.tail.prev
-		c.removeEntry(oldest)
+		// Inline removeEntry
+		oldest.prev.next = oldest.next
+		oldest.next.prev = oldest.prev
 		delete(c.items, oldest.key.(K))
 		c.size--
-		c.Stats().Evictions.Add(1)
-
-		oldest.value = *new(V)
-		oldest.expiration = 0
-		oldest.key = nil
-		oldest.next = nil
-		oldest.prev = nil
 		c.pool.Put(oldest)
 	}
+
+	c.mu.Unlock()
 }
 
 // Delete removes a key-value pair from the cache.
@@ -252,20 +251,21 @@ func (c *LRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 // This operation is O(1) in time complexity.
 func (c *LRU[K, V]) Delete(key K) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
-	if e, exists := c.items[key]; exists {
-		c.removeEntry(e)
-		delete(c.items, key)
-		c.size--
-
-		e.value = *new(V)
-		e.expiration = 0
-		e.key = nil
-		e.next = nil
-		e.prev = nil
-		c.pool.Put(e)
+	e, exists := c.items[key]
+	if !exists {
+		c.mu.Unlock()
+		return
 	}
+
+	// Inline removeEntry
+	e.prev.next = e.next
+	e.next.prev = e.prev
+	delete(c.items, key)
+	c.size--
+	c.pool.Put(e)
+
+	c.mu.Unlock()
 }
 
 // Clear removes all entries from the cache and resets it to an empty state.
@@ -276,15 +276,7 @@ func (c *LRU[K, V]) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for k, e := range c.items {
-		e.value = *new(V)
-		e.expiration = 0
-		e.key = nil
-		e.next = nil
-		e.prev = nil
-		c.pool.Put(e)
-		delete(c.items, k)
-	}
+	c.items = make(map[K]*entry[V], c.capacity)
 
 	c.head.next = c.tail
 	c.tail.prev = c.head
@@ -317,50 +309,18 @@ func (c *LRU[K, V]) Size() int {
 // This operation is O(1) in time complexity.
 func (c *LRU[K, V]) Has(key K) bool {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
 
 	e, exists := c.items[key]
 	if !exists {
+		c.mu.RUnlock()
 		return false
 	}
 
-	if e.expiration > 0 && time.Now().UnixNano() > e.expiration {
-		return false
+	result := true
+	if e.expiration > 0 {
+		result = time.Now().UnixNano() <= e.expiration
 	}
 
-	return true
-}
-
-// Stats returns the cache performance statistics.
-// The statistics are not reset by this call and accumulate over the cache lifetime.
-//
-// Returns:
-//   - Stats: Current cache statistics including hits, misses, sets, and evictions
-//
-// Example:
-//
-//	stats := cache.Stats()
-//	hitRate := float64(stats.Hits.Load()) / float64(stats.Hits.Load() + stats.Misses.Load())
-//	fmt.Printf("Cache hit rate: %.2f%%\n", hitRate * 100)
-func (c *LRU[K, V]) Stats() *Stats {
-	// Stats are initialized in NewLRU, so we can just return them
-	// No need for locking since Stats fields are atomic
-	return c.stats
-}
-
-func (c *LRU[K, V]) addToFront(e *entry[V]) {
-	e.next = c.head.next
-	e.prev = c.head
-	c.head.next.prev = e
-	c.head.next = e
-}
-
-func (c *LRU[K, V]) removeEntry(e *entry[V]) {
-	e.prev.next = e.next
-	e.next.prev = e.prev
-}
-
-func (c *LRU[K, V]) moveToFront(e *entry[V]) {
-	c.removeEntry(e)
-	c.addToFront(e)
+	c.mu.RUnlock()
+	return result
 }

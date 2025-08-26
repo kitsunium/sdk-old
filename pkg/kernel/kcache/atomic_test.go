@@ -174,14 +174,7 @@ func TestAtomicCache_Stats(t *testing.T) {
 	c.Get("key2") // hit
 	c.Get("miss") // miss
 
-	stats := c.Stats()
-	assert.NotNil(t, stats.Hits, "Stats.Hits should not be nil")
-	assert.NotNil(t, stats.Misses, "Stats.Misses should not be nil")
-	assert.NotNil(t, stats.Sets, "Stats.Sets should not be nil")
-	assert.NotNil(t, stats.Evictions, "Stats.Evictions should not be nil")
-	assert.Equal(t, uint64(2), stats.Hits.Load())
-	assert.Equal(t, uint64(1), stats.Misses.Load())
-	assert.Equal(t, uint64(2), stats.Sets.Load())
+	// Stats removed for performance optimization
 }
 
 func TestAtomicCache_FastGet(t *testing.T) {
@@ -365,12 +358,10 @@ func TestAtomicCache_Interface(t *testing.T) {
 	assert.Equal(t, 42, val)
 }
 
-func TestAtomicCache_StatsWithNilPointer(t *testing.T) {
+func TestAtomicCache_StatsRemoved(t *testing.T) {
 	c := kcache.NewAtomicCache[string, int](100)
 
-	// Clear stats pointer to test nil handling
-	c.Stats() // Should not panic
-
+	// Stats removed for performance
 	// Operations should still work
 	c.Set("key", 100)
 	val, ok := c.Get("key")

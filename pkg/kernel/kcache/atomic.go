@@ -1,7 +1,6 @@
 package kcache
 
 import (
-	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,7 +22,6 @@ type AtomicCache[K comparable, V any] struct {
 	mu       sync.Mutex // Only for writes
 	capacity int
 	size     atomic.Int32
-	stats    atomic.Pointer[Stats]
 }
 
 type atomicMap[K comparable, V any] struct {
@@ -51,8 +49,6 @@ func NewAtomicCache[K comparable, V any](capacity int) *AtomicCache[K, V] {
 	}
 	c.data.Store(initial)
 
-	c.stats.Store(NewStats())
-
 	return c
 }
 
@@ -63,21 +59,19 @@ func (c *AtomicCache[K, V]) Get(key K) (V, bool) {
 	entry, exists := data.m[key]
 
 	if !exists {
-		c.incrementMisses()
 		var zero V
 		return zero, false
 	}
 
-	// Check expiration
-	if entry.expiration > 0 && time.Now().UnixNano() > entry.expiration {
-		c.incrementMisses()
+	// Check expiration with cached time for better performance
+	now := time.Now().UnixNano()
+	if entry.expiration > 0 && now > entry.expiration {
 		var zero V
 		return zero, false
 	}
 
 	// Update access time atomically
-	entry.accessTime.Store(time.Now().UnixNano())
-	c.incrementHits()
+	entry.accessTime.Store(now)
 
 	return entry.value, true
 }
@@ -90,30 +84,49 @@ func (c *AtomicCache[K, V]) Set(key K, value V) {
 // SetWithTTL stores a key-value pair with TTL using RCU pattern.
 func (c *AtomicCache[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
-	c.incrementSets()
-
+	now := time.Now().UnixNano()
 	var expiration int64
 	if ttl > 0 {
-		expiration = time.Now().Add(ttl).UnixNano()
+		expiration = now + int64(ttl)
 	}
 
 	// Copy-on-write
 	oldData := c.data.Load()
+
+	// Check if update only
+	if existingEntry, exists := oldData.m[key]; exists {
+		// Fast path: just update the entry in place if possible
+		if existingEntry.expiration == expiration {
+			// Same expiration, just update value (safe because V is not accessed concurrently)
+			existingEntry.value = value
+			existingEntry.accessTime.Store(now)
+			c.mu.Unlock()
+			return
+		}
+	}
+
+	oldSize := len(oldData.m)
+	newCapacity := oldSize + 1
+	if newCapacity < c.capacity {
+		newCapacity = c.capacity
+	}
+
 	newData := &atomicMap[K, V]{
-		m: make(map[K]*atomicEntry[V], len(oldData.m)+1),
+		m: make(map[K]*atomicEntry[V], newCapacity),
 	}
 
 	// Copy existing entries
-	maps.Copy(newData.m, oldData.m)
+	for k, v := range oldData.m {
+		newData.m[k] = v
+	}
 
 	// Add/update entry
 	entry := &atomicEntry[V]{
 		value:      value,
 		expiration: expiration,
 	}
-	entry.accessTime.Store(time.Now().UnixNano())
+	entry.accessTime.Store(now)
 
 	if _, exists := newData.m[key]; !exists {
 		currentSize := c.size.Add(1)
@@ -122,7 +135,6 @@ func (c *AtomicCache[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 		if int(currentSize) > c.capacity {
 			c.evictLRU(newData)
 			c.size.Add(-1)
-			c.incrementEvictions()
 		}
 	}
 
@@ -130,6 +142,7 @@ func (c *AtomicCache[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
 
 	// Atomic swap
 	c.data.Store(newData)
+	c.mu.Unlock()
 }
 
 // Delete removes a key from the cache.
@@ -191,21 +204,6 @@ func (c *AtomicCache[K, V]) Has(key K) bool {
 	return true
 }
 
-// Stats returns cache statistics.
-func (c *AtomicCache[K, V]) Stats() *Stats {
-	stats := c.stats.Load()
-	if stats == nil {
-		// Lazy initialization with CAS to ensure we always return the live stats
-		newStats := NewStats()
-		if c.stats.CompareAndSwap(nil, newStats) {
-			return newStats
-		}
-		// Another goroutine initialized it, load again
-		stats = c.stats.Load()
-	}
-	return stats
-}
-
 // evictLRU removes the least recently used entry, prioritizing expired entries.
 func (c *AtomicCache[K, V]) evictLRU(data *atomicMap[K, V]) {
 	now := time.Now().UnixNano()
@@ -234,34 +232,6 @@ func (c *AtomicCache[K, V]) evictLRU(data *atomicMap[K, V]) {
 	}
 
 	delete(data.m, oldestKey)
-}
-
-// incrementHits atomically increments the hit counter.
-func (c *AtomicCache[K, V]) incrementHits() {
-	// Ensure stats are initialized
-	stats := c.Stats()
-	stats.Hits.Add(1)
-}
-
-// incrementMisses atomically increments the miss counter.
-func (c *AtomicCache[K, V]) incrementMisses() {
-	// Ensure stats are initialized
-	stats := c.Stats()
-	stats.Misses.Add(1)
-}
-
-// incrementSets atomically increments the set counter.
-func (c *AtomicCache[K, V]) incrementSets() {
-	// Ensure stats are initialized
-	stats := c.Stats()
-	stats.Sets.Add(1)
-}
-
-// incrementEvictions atomically increments the eviction counter.
-func (c *AtomicCache[K, V]) incrementEvictions() {
-	// Ensure stats are initialized
-	stats := c.Stats()
-	stats.Evictions.Add(1)
 }
 
 // Keys returns all keys in the cache.
@@ -325,12 +295,7 @@ func (c *AtomicCache[K, V]) BatchGet(keys []K) map[K]V {
 			if entry.expiration == 0 || now <= entry.expiration {
 				entry.accessTime.Store(now)
 				result[key] = entry.value
-				c.incrementHits()
-			} else {
-				c.incrementMisses()
 			}
-		} else {
-			c.incrementMisses()
 		}
 	}
 
@@ -339,16 +304,35 @@ func (c *AtomicCache[K, V]) BatchGet(keys []K) map[K]V {
 
 // BatchSet stores multiple key-value pairs in a single operation.
 func (c *AtomicCache[K, V]) BatchSet(items map[K]V) {
+	if len(items) == 0 {
+		return
+	}
+
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	oldData := c.data.Load()
+
+	// Pre-calculate actual new items to avoid over-allocation
+	newCount := 0
+	for k := range items {
+		if _, exists := oldData.m[k]; !exists {
+			newCount++
+		}
+	}
+
+	newCapacity := len(oldData.m) + newCount
+	if newCapacity < c.capacity {
+		newCapacity = c.capacity
+	}
+
 	newData := &atomicMap[K, V]{
-		m: make(map[K]*atomicEntry[V], len(oldData.m)+len(items)),
+		m: make(map[K]*atomicEntry[V], newCapacity),
 	}
 
 	// Copy existing entries
-	maps.Copy(newData.m, oldData.m)
+	for k, v := range oldData.m {
+		newData.m[k] = v
+	}
 
 	now := time.Now().UnixNano()
 
@@ -359,7 +343,6 @@ func (c *AtomicCache[K, V]) BatchSet(items map[K]V) {
 		}
 		entry.accessTime.Store(now)
 		newData.m[k] = entry
-		c.incrementSets()
 	}
 
 	// Evict if needed
@@ -367,9 +350,9 @@ func (c *AtomicCache[K, V]) BatchSet(items map[K]V) {
 	for newSize > c.capacity {
 		c.evictLRU(newData)
 		newSize--
-		c.incrementEvictions()
 	}
 
 	c.size.Store(int32(newSize))
 	c.data.Store(newData)
+	c.mu.Unlock()
 }

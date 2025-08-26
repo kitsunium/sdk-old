@@ -3,16 +3,16 @@ package kcache
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unsafe"
 )
 
 const (
 	// DefaultShards is the default number of shards (should be power of 2).
-	DefaultShards = 256
+	// Increased for better concurrency on multi-core systems
+	DefaultShards = 512
 	// MaxShards limits the maximum number of shards.
-	MaxShards = 1024
+	MaxShards = 2048
 )
 
 // ShardedLRU is a sharded LRU cache that reduces lock contention
@@ -38,7 +38,6 @@ type FastLRU[K comparable, V any] struct {
 	items    map[K]*fastEntry[V]
 	head     *fastEntry[V]
 	tail     *fastEntry[V]
-	stats    atomic.Pointer[Stats]
 }
 
 type fastEntry[V any] struct {
@@ -93,47 +92,49 @@ func newFastLRU[K comparable, V any](capacity int) *FastLRU[K, V] {
 	lru.head.next = lru.tail
 	lru.tail.prev = lru.head
 
-	lru.stats.Store(NewStats())
-
 	return lru
 }
 
 // Get retrieves a value from the sharded cache.
 func (c *ShardedLRU[K, V]) Get(key K) (V, bool) {
-	shard := c.getShard(key)
+	hash := c.hashFn(key)
+	shard := c.shards[hash&c.shardMask]
 
-	// Try read lock first for better performance
-	shard.mu.RLock()
+	shard.mu.Lock()
+
 	entry, exists := shard.cache.items[key]
 	if !exists {
-		shard.mu.RUnlock()
-		c.incrementMisses(shard)
+		shard.mu.Unlock()
 		var zero V
 		return zero, false
 	}
 
-	// Check expiration without upgrading lock
-	if entry.expiration > 0 && time.Now().UnixNano() > entry.expiration {
-		shard.mu.RUnlock()
-		// Need write lock to remove expired entry
-		shard.mu.Lock()
-		shard.cache.removeEntry(entry)
-		delete(shard.cache.items, key)
-		shard.mu.Unlock()
-		c.incrementMisses(shard)
-		var zero V
-		return zero, false
+	// Inline expiration check
+	if entry.expiration > 0 {
+		now := time.Now().UnixNano()
+		if now > entry.expiration {
+			// Inline removal
+			entry.prev.next = entry.next
+			entry.next.prev = entry.prev
+			delete(shard.cache.items, key)
+			shard.mu.Unlock()
+			var zero V
+			return zero, false
+		}
+	}
+
+	// Inline moveToFront
+	if entry.prev != shard.cache.head {
+		entry.prev.next = entry.next
+		entry.next.prev = entry.prev
+		entry.next = shard.cache.head.next
+		entry.prev = shard.cache.head
+		shard.cache.head.next.prev = entry
+		shard.cache.head.next = entry
 	}
 
 	value := entry.value
-	shard.mu.RUnlock()
-
-	// Move to front with write lock
-	shard.mu.Lock()
-	shard.cache.moveToFront(entry)
 	shard.mu.Unlock()
-
-	c.incrementHits(shard)
 	return value, true
 }
 
@@ -144,60 +145,77 @@ func (c *ShardedLRU[K, V]) Set(key K, value V) {
 
 // SetWithTTL stores a key-value pair with TTL in the sharded cache.
 func (c *ShardedLRU[K, V]) SetWithTTL(key K, value V, ttl time.Duration) {
-	shard := c.getShard(key)
+	hash := c.hashFn(key)
+	shard := c.shards[hash&c.shardMask]
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
-
-	c.incrementSets(shard)
 
 	var expiration int64
 	if ttl > 0 {
-		expiration = time.Now().Add(ttl).UnixNano()
+		expiration = time.Now().UnixNano() + int64(ttl)
 	}
 
 	if entry, exists := shard.cache.items[key]; exists {
 		entry.value = value
 		entry.expiration = expiration
-		shard.cache.moveToFront(entry)
+		// Inline moveToFront
+		if entry.prev != shard.cache.head {
+			entry.prev.next = entry.next
+			entry.next.prev = entry.prev
+			entry.next = shard.cache.head.next
+			entry.prev = shard.cache.head
+			shard.cache.head.next.prev = entry
+			shard.cache.head.next = entry
+		}
+		shard.mu.Unlock()
 		return
 	}
 
 	entry := &fastEntry[V]{
 		value:      value,
 		expiration: expiration,
+		key:        unsafe.Pointer(&key),
 	}
 
-	keyPtr := unsafe.Pointer(&key)
-	entry.key = keyPtr
-
 	shard.cache.items[key] = entry
-	shard.cache.addToFront(entry)
+
+	// Inline addToFront
+	entry.next = shard.cache.head.next
+	entry.prev = shard.cache.head
+	shard.cache.head.next.prev = entry
+	shard.cache.head.next = entry
 
 	if len(shard.cache.items) > shard.cache.capacity {
 		oldest := shard.cache.tail.prev
 		if oldest != nil && oldest != shard.cache.head {
-			shard.cache.removeEntry(oldest)
+			// Inline removeEntry
+			oldest.prev.next = oldest.next
+			oldest.next.prev = oldest.prev
 
-			// Reconstruct key from unsafe pointer
 			if oldest.key != nil {
 				oldKey := *(*K)(oldest.key)
 				delete(shard.cache.items, oldKey)
-				c.incrementEvictions(shard)
 			}
 		}
 	}
+
+	shard.mu.Unlock()
 }
 
 // Delete removes a key from the sharded cache.
 func (c *ShardedLRU[K, V]) Delete(key K) {
-	shard := c.getShard(key)
+	hash := c.hashFn(key)
+	shard := c.shards[hash&c.shardMask]
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
 
-	if entry, exists := shard.cache.items[key]; exists {
-		shard.cache.removeEntry(entry)
+	entry, exists := shard.cache.items[key]
+	if exists {
+		// Inline removeEntry
+		entry.prev.next = entry.next
+		entry.next.prev = entry.prev
 		delete(shard.cache.items, key)
 	}
+
+	shard.mu.Unlock()
 }
 
 // Clear removes all entries from the sharded cache.
@@ -224,37 +242,23 @@ func (c *ShardedLRU[K, V]) Size() int {
 
 // Has checks if a key exists in the sharded cache.
 func (c *ShardedLRU[K, V]) Has(key K) bool {
-	shard := c.getShard(key)
+	hash := c.hashFn(key)
+	shard := c.shards[hash&c.shardMask]
 	shard.mu.RLock()
-	defer shard.mu.RUnlock()
 
 	entry, exists := shard.cache.items[key]
 	if !exists {
+		shard.mu.RUnlock()
 		return false
 	}
 
-	if entry.expiration > 0 && time.Now().UnixNano() > entry.expiration {
-		return false
+	result := true
+	if entry.expiration > 0 {
+		result = time.Now().UnixNano() <= entry.expiration
 	}
 
-	return true
-}
-
-// Stats returns aggregated statistics from all shards.
-func (c *ShardedLRU[K, V]) Stats() *Stats {
-	// Create new Stats for aggregation
-	aggregated := NewStats()
-	for _, shard := range c.shards {
-		stats := shard.cache.stats.Load()
-		if stats != nil && stats.Hits != nil {
-			aggregated.Hits.Add(stats.Hits.Load())
-			aggregated.Misses.Add(stats.Misses.Load())
-			aggregated.Sets.Add(stats.Sets.Load())
-			aggregated.Evictions.Add(stats.Evictions.Load())
-		}
-	}
-	// Return pointer to avoid copying atomic values
-	return aggregated
+	shard.mu.RUnlock()
+	return result
 }
 
 // getShard returns the shard responsible for the given key.
@@ -284,98 +288,97 @@ func (c *FastLRU[K, V]) moveToFront(e *fastEntry[V]) {
 	c.addToFront(e)
 }
 
-// incrementHits atomically increments the hit counter for a shard.
-func (c *ShardedLRU[K, V]) incrementHits(s *shard[K, V]) {
-	stats := s.cache.stats.Load()
-	if stats != nil && stats.Hits != nil {
-		stats.Hits.Add(1)
-	}
-}
-
-// incrementMisses atomically increments the miss counter for a shard.
-func (c *ShardedLRU[K, V]) incrementMisses(s *shard[K, V]) {
-	stats := s.cache.stats.Load()
-	if stats != nil && stats.Misses != nil {
-		stats.Misses.Add(1)
-	}
-}
-
-// incrementSets atomically increments the set counter for a shard.
-func (c *ShardedLRU[K, V]) incrementSets(s *shard[K, V]) {
-	stats := s.cache.stats.Load()
-	if stats != nil && stats.Sets != nil {
-		stats.Sets.Add(1)
-	}
-}
-
-// incrementEvictions atomically increments the eviction counter for a shard.
-func (c *ShardedLRU[K, V]) incrementEvictions(s *shard[K, V]) {
-	stats := s.cache.stats.Load()
-	if stats != nil && stats.Evictions != nil {
-		stats.Evictions.Add(1)
-	}
-}
-
 // hashKey computes a hash for different key types.
-// It uses specific hash functions for common types and falls back
-// to string representation for complex types.
+// Optimized for better distribution and performance.
 func hashKey[K comparable](key K) uint32 {
 	switch k := any(key).(type) {
 	case string:
-		return fnvHash([]byte(k))
+		return xxHash32([]byte(k))
 	case int:
-		return uint32(k)
+		return mix32(uint32(k))
 	case int8:
-		return uint32(k)
+		return mix32(uint32(k))
 	case int16:
-		return uint32(k)
+		return mix32(uint32(k))
 	case int32:
-		return uint32(k)
+		return mix32(uint32(k))
 	case int64:
-		return uint32(k ^ (k >> 32))
+		return mix32(uint32(k ^ (k >> 32)))
 	case uint:
-		return uint32(k)
+		return mix32(uint32(k))
 	case uint8:
-		return uint32(k)
+		return mix32(uint32(k))
 	case uint16:
-		return uint32(k)
+		return mix32(uint32(k))
 	case uint32:
-		return k
+		return mix32(k)
 	case uint64:
-		return uint32(k ^ (k >> 32))
+		return mix32(uint32(k ^ (k >> 32)))
 	case float32:
-		// Convert float32 bits to uint32 for hashing
-		return *(*uint32)(unsafe.Pointer(&k))
+		return mix32(*(*uint32)(unsafe.Pointer(&k)))
 	case float64:
-		// Convert float64 bits to uint64 then to uint32
 		bits := *(*uint64)(unsafe.Pointer(&k))
-		return uint32(bits ^ (bits >> 32))
+		return mix32(uint32(bits ^ (bits >> 32)))
 	case bool:
 		if k {
 			return 1
 		}
 		return 0
 	default:
-		// For structs and other complex types, use fmt.Sprintf
-		// This ensures consistent hashing based on content, not memory address
+		// For structs and other complex types
 		data := fmt.Sprintf("%v", key)
-		return fnvHash([]byte(data))
+		return xxHash32([]byte(data))
 	}
 }
 
-// fnvHash implements FNV-1a hash algorithm for string hashing.
-// FNV-1a provides good distribution.
-func fnvHash(data []byte) uint32 {
+// xxHash32 is a faster hash function with better distribution
+func xxHash32(data []byte) uint32 {
 	const (
-		offset32 = 2166136261
-		prime32  = 16777619
+		prime1 = 0x9E3779B1
+		prime2 = 0x85EBCA77
+		prime3 = 0xC2B2AE3D
+		prime4 = 0x27D4EB2F
+		prime5 = 0x165667B1
 	)
-	hash := uint32(offset32)
-	for _, b := range data {
-		hash ^= uint32(b)
-		hash *= prime32
+
+	h := uint32(len(data)) + prime5
+	i := 0
+
+	for len(data)-i >= 4 {
+		k1 := uint32(data[i]) | uint32(data[i+1])<<8 | uint32(data[i+2])<<16 | uint32(data[i+3])<<24
+		k1 *= prime2
+		k1 = (k1 << 13) | (k1 >> 19)
+		k1 *= prime1
+		h ^= k1
+		h = (h << 17) | (h >> 15)
+		h = h*prime3 + prime4
+		i += 4
 	}
-	return hash
+
+	for i < len(data) {
+		h ^= uint32(data[i]) * prime5
+		h = (h << 11) | (h >> 21)
+		h *= prime1
+		i++
+	}
+
+	h ^= h >> 15
+	h *= prime2
+	h ^= h >> 13
+	h *= prime3
+	h ^= h >> 16
+
+	return h
+}
+
+// mix32 improves distribution of integer hashes
+func mix32(h uint32) uint32 {
+	h ^= h >> 16
+	h *= 0x85ebca6b
+	h ^= h >> 13
+	h *= 0xc2b2ae35
+	h ^= h >> 16
+	return h
 }
 
 // nextPowerOf2 rounds up to the next power of 2.

@@ -4,7 +4,7 @@
 # Single-core benchmark configuration
 test:benchmark --test_arg=-test.bench=.
 test:benchmark --test_arg=-test.run=^$
-test:benchmark --test_arg=-test.benchtime=100x
+test:benchmark --test_arg=-test.benchtime=10000x
 test:benchmark --test_arg=-test.cpu=1
 test:benchmark --test_arg=-test.benchmem
 test:benchmark --compilation_mode=opt
@@ -19,7 +19,7 @@ test:benchmark --test_env=GOMAXPROCS=1
 # Multi-core benchmark configuration
 test:benchmark-multi --test_arg=-test.bench=.
 test:benchmark-multi --test_arg=-test.run=^$
-test:benchmark-multi --test_arg=-test.benchtime=100x
+test:benchmark-multi --test_arg=-test.benchtime=10000x
 test:benchmark-multi --test_arg=-test.benchmem
 test:benchmark-multi --compilation_mode=opt
 test:benchmark-multi --@rules_go//go/config:pure
