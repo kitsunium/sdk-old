@@ -251,6 +251,33 @@ func BenchmarkConcurrentOperations(b *testing.B) {
 			}
 		})
 	})
+
+	b.Run("ConcurrentNewWithDetails", func(b *testing.B) {
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				_ = err.New().WithDetail("id", i).WithDetail("type", "test")
+				i++
+			}
+		})
+	})
+
+	b.Run("ConcurrentMixed", func(b *testing.B) {
+		cause := errors.New("cause")
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				if i%3 == 0 {
+					_ = err.New()
+				} else if i%3 == 1 {
+					_ = err.Wrap(cause)
+				} else {
+					_, _ = GetError(uint32(i%100 + 1))
+				}
+				i++
+			}
+		})
+	})
 }
 
 func BenchmarkErrorComparison(b *testing.B) {
@@ -322,6 +349,24 @@ func BenchmarkMemoryAllocation(b *testing.B) {
 			inst = inst.WithDetails(details)
 		}
 	})
+
+	b.Run("ParallelNew", func(b *testing.B) {
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				_ = err.New()
+			}
+		})
+	})
+
+	b.Run("ParallelNewWithDetails", func(b *testing.B) {
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				_ = err.New().WithDetails(map[string]any{"key1": "value1", "key2": "value2"})
+			}
+		})
+	})
 }
 
 func BenchmarkMetrics(b *testing.B) {
@@ -365,6 +410,19 @@ func BenchmarkLargeRegistry(b *testing.B) {
 			code := i % 100
 			_, _ = GetErrorByPackageCode(pkg, code)
 		}
+	})
+
+	b.Run("ParallelRandomLookup", func(b *testing.B) {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				pkg := packages[i%len(packages)]
+				code := i % 100
+				_, _ = GetErrorByPackageCode(pkg, code)
+				i++
+			}
+		})
 	})
 }
 

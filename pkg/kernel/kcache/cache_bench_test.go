@@ -2,9 +2,7 @@ package kcache
 
 import (
 	"fmt"
-	"math/rand"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 )
@@ -108,44 +106,55 @@ func BenchmarkLRU_Clear(b *testing.B) {
 }
 
 func BenchmarkLRU_ConcurrentSet(b *testing.B) {
-	concurrencies := []int{1, 10, 100}
 	cacheSize := 1000
-
-	for _, concurrency := range concurrencies {
-		b.Run(fmt.Sprintf("concurrency=%d", concurrency), func(b *testing.B) {
-			cache := NewLRU[string, int](cacheSize)
-			b.ResetTimer()
-			b.RunParallel(func(pb *testing.PB) {
-				i := 0
-				for pb.Next() {
-					cache.Set(strconv.Itoa(i), i)
-					i++
-				}
-			})
-		})
-	}
+	cache := NewLRU[string, int](cacheSize)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			cache.Set(strconv.Itoa(i), i)
+			i++
+		}
+	})
 }
 
 func BenchmarkLRU_ConcurrentGet(b *testing.B) {
-	concurrencies := []int{1, 10, 100}
 	cacheSize := 1000
-
-	for _, concurrency := range concurrencies {
-		b.Run(fmt.Sprintf("concurrency=%d", concurrency), func(b *testing.B) {
-			cache := NewLRU[string, int](cacheSize)
-			for i := 0; i < cacheSize; i++ {
-				cache.Set(strconv.Itoa(i), i)
-			}
-			b.ResetTimer()
-			b.RunParallel(func(pb *testing.PB) {
-				i := 0
-				for pb.Next() {
-					cache.Get(strconv.Itoa(i % cacheSize))
-					i++
-				}
-			})
-		})
+	cache := NewLRU[string, int](cacheSize)
+	for i := 0; i < cacheSize; i++ {
+		cache.Set(strconv.Itoa(i), i)
 	}
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			cache.Get(strconv.Itoa(i % cacheSize))
+			i++
+		}
+	})
+}
+
+func BenchmarkLRU_ParallelMixed(b *testing.B) {
+	cacheSize := 1000
+	cache := NewLRU[string, int](cacheSize)
+	// Pre-populate
+	for i := 0; i < cacheSize/2; i++ {
+		cache.Set(strconv.Itoa(i), i)
+	}
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			key := strconv.Itoa(i % cacheSize)
+			if i%2 == 0 {
+				cache.Set(key, i)
+			} else {
+				cache.Get(key)
+			}
+			i++
+		}
+	})
 }
 
 func BenchmarkLRU_MixedOperations(b *testing.B) {
@@ -307,20 +316,15 @@ func BenchmarkComparisonConcurrentReadHeavy(b *testing.B) {
 			cache.Set(keys[i], i)
 		}
 
-		var wg sync.WaitGroup
 		b.ResetTimer()
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(workerID int) {
-				defer wg.Done()
-				for j := 0; j < b.N/10; j++ {
-					idx := rand.Intn(numKeys)
-					cache.Get(keys[idx])
-				}
-			}(i)
-		}
-		wg.Wait()
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				idx := i % numKeys
+				cache.Get(keys[idx])
+				i++
+			}
+		})
 	})
 
 	b.Run("AtomicCache", func(b *testing.B) {
@@ -329,20 +333,15 @@ func BenchmarkComparisonConcurrentReadHeavy(b *testing.B) {
 			cache.Set(keys[i], i)
 		}
 
-		var wg sync.WaitGroup
 		b.ResetTimer()
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(workerID int) {
-				defer wg.Done()
-				for j := 0; j < b.N/10; j++ {
-					idx := rand.Intn(numKeys)
-					cache.Get(keys[idx])
-				}
-			}(i)
-		}
-		wg.Wait()
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				idx := i % numKeys
+				cache.Get(keys[idx])
+				i++
+			}
+		})
 	})
 
 	b.Run("ShardedCache", func(b *testing.B) {
@@ -351,20 +350,15 @@ func BenchmarkComparisonConcurrentReadHeavy(b *testing.B) {
 			cache.Set(keys[i], i)
 		}
 
-		var wg sync.WaitGroup
 		b.ResetTimer()
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(workerID int) {
-				defer wg.Done()
-				for j := 0; j < b.N/10; j++ {
-					idx := rand.Intn(numKeys)
-					cache.Get(keys[idx])
-				}
-			}(i)
-		}
-		wg.Wait()
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				idx := i % numKeys
+				cache.Get(keys[idx])
+				i++
+			}
+		})
 	})
 }
 
@@ -374,60 +368,42 @@ func BenchmarkComparisonConcurrentWriteHeavy(b *testing.B) {
 	b.Run("LRU", func(b *testing.B) {
 		cache := NewLRU[string, int](cacheSize)
 
-		var wg sync.WaitGroup
 		b.ResetTimer()
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(workerID int) {
-				defer wg.Done()
-				base := workerID * (b.N / 10)
-				for j := 0; j < b.N/10; j++ {
-					key := strconv.Itoa(base + j)
-					cache.Set(key, base+j)
-				}
-			}(i)
-		}
-		wg.Wait()
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				key := strconv.Itoa(i)
+				cache.Set(key, i)
+				i++
+			}
+		})
 	})
 
 	b.Run("AtomicCache", func(b *testing.B) {
 		cache := NewAtomicCache[string, int](cacheSize)
 
-		var wg sync.WaitGroup
 		b.ResetTimer()
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(workerID int) {
-				defer wg.Done()
-				base := workerID * (b.N / 10)
-				for j := 0; j < b.N/10; j++ {
-					key := strconv.Itoa(base + j)
-					cache.Set(key, base+j)
-				}
-			}(i)
-		}
-		wg.Wait()
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				key := strconv.Itoa(i)
+				cache.Set(key, i)
+				i++
+			}
+		})
 	})
 
 	b.Run("ShardedCache", func(b *testing.B) {
 		cache := NewShardedLRU[string, int](cacheSize, 16)
 
-		var wg sync.WaitGroup
 		b.ResetTimer()
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(workerID int) {
-				defer wg.Done()
-				base := workerID * (b.N / 10)
-				for j := 0; j < b.N/10; j++ {
-					key := strconv.Itoa(base + j)
-					cache.Set(key, base+j)
-				}
-			}(i)
-		}
-		wg.Wait()
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				key := strconv.Itoa(i)
+				cache.Set(key, i)
+				i++
+			}
+		})
 	})
 }

@@ -3,8 +3,6 @@ package kbuffer
 import (
 	"bytes"
 	"fmt"
-	"runtime"
-	"sync"
 	"testing"
 )
 
@@ -210,6 +208,24 @@ func BenchmarkPool_Concurrent(b *testing.B) {
 	})
 }
 
+func BenchmarkPool_ParallelGetPut(b *testing.B) {
+	sizes := []int{256, 1024, 4096}
+	p := newPool()
+
+	for _, size := range sizes {
+		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
+			b.SetBytes(int64(size))
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					buf := p.Get(size)
+					copy(buf[:min(10, size)], []byte("test data"))
+					p.Put(buf)
+				}
+			})
+		})
+	}
+}
+
 func BenchmarkBuffer_Concurrent(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		buf := NewBuffer(1024)
@@ -219,6 +235,51 @@ func BenchmarkBuffer_Concurrent(b *testing.B) {
 			buf.Reset()
 			buf.Write(data)
 			_ = buf.String()
+		}
+	})
+}
+
+func BenchmarkBuffer_ParallelWrite(b *testing.B) {
+	sizes := []int{64, 256, 1024}
+
+	for _, size := range sizes {
+		data := make([]byte, size)
+		for i := range data {
+			data[i] = byte(i)
+		}
+
+		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
+			b.SetBytes(int64(size))
+			b.RunParallel(func(pb *testing.PB) {
+				buf := NewBuffer(size * 2)
+				for pb.Next() {
+					buf.Reset()
+					buf.Write(data)
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkBuffer_ParallelMixed(b *testing.B) {
+	data := []byte("test data")
+	str := "string data"
+
+	b.RunParallel(func(pb *testing.PB) {
+		buf := NewBuffer(4096)
+		i := 0
+		for pb.Next() {
+			buf.Reset()
+			switch i % 3 {
+			case 0:
+				buf.Write(data)
+			case 1:
+				buf.WriteString(str)
+			case 2:
+				buf.WriteByte('x')
+			}
+			_ = buf.String()
+			i++
 		}
 	})
 }
@@ -324,22 +385,36 @@ func BenchmarkWorkload_PoolChurn(b *testing.B) {
 func BenchmarkPoolEfficiency(b *testing.B) {
 	p := newPool()
 
-	// Run workload
-	var wg sync.WaitGroup
-	workers := runtime.NumCPU()
-	opsPerWorker := b.N / workers
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			buf := p.Get(1024)
+			copy(buf[:4], []byte("test"))
+			p.Put(buf)
+		}
+	})
+}
 
-	wg.Add(workers)
-	for w := 0; w < workers; w++ {
-		go func() {
-			defer wg.Done()
-			for i := 0; i < opsPerWorker; i++ {
-				buf := p.Get(1024)
-				copy(buf, []byte("test"))
-				p.Put(buf)
+func BenchmarkPool_ParallelContention(b *testing.B) {
+	p := newPool()
+	sizes := []int{64, 256, 1024, 4096}
+
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			size := sizes[i%len(sizes)]
+			buf := p.Get(size)
+			for j := 0; j < min(10, size); j++ {
+				buf[j] = byte(j)
 			}
-		}()
-	}
+			p.Put(buf)
+			i++
+		}
+	})
+}
 
-	wg.Wait()
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
