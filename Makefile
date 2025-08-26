@@ -120,6 +120,7 @@ test/coverage:
 # Usage:
 #   make bench                   - run benchmarks for current commit
 #   make bench <hash>            - checkout commit and run benchmarks
+#   make bench PRESERVE=true     - preserve history (for CI/CD)
 .PHONY: bench
 bench:
 	@if [ ! -f benchmarks.sqlite ]; then \
@@ -129,25 +130,36 @@ bench:
 	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
 		COMMIT="$(filter-out $@,$(MAKECMDGOALS))"; \
 		echo "$(YELLOW)▶ Checking out commit $$COMMIT...$(NC)"; \
-		git stash push -m "bench: auto-stash before checkout" --include-untracked 2>/dev/null || true; \
+		STASH_COUNT_BEFORE=$$(git stash list | wc -l); \
+		git stash push -m "bench: auto-stash before checkout" --include-untracked >/dev/null 2>&1; \
+		STASH_COUNT_AFTER=$$(git stash list | wc -l); \
 		git checkout $$COMMIT || exit 1; \
-		echo "$(YELLOW)▶ Running benchmarks for commit $$COMMIT...$(NC)"; \
-		python3 scripts/bench_manager.py save; \
+		echo "$(YELLOW)▶ Running stable benchmarks for commit $$COMMIT...$(NC)"; \
+		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
+		bazel test --config=benchmark \
+			//pkg/kernel/kbuffer:kbuffer_bench_test \
+			//pkg/kernel/kcache:kcache_bench_test \
+			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+			python3 scripts/bench_manager.py save --stdin; \
 		git checkout - >/dev/null 2>&1; \
-		git stash pop 2>/dev/null || true; \
+		if [ $$STASH_COUNT_AFTER -gt $$STASH_COUNT_BEFORE ]; then \
+			git stash pop --quiet 2>/dev/null || echo "$(YELLOW)Note: Could not restore stashed changes$(NC)"; \
+		fi; \
 	else \
-		echo "$(YELLOW)▶ Running benchmarks and saving results...$(NC)"; \
-		python3 scripts/bench_manager.py save; \
+		echo "$(YELLOW)▶ Running stable benchmarks...$(NC)"; \
+		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
+		bazel test --config=benchmark \
+			//pkg/kernel/kbuffer:kbuffer_bench_test \
+			//pkg/kernel/kcache:kcache_bench_test \
+			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+			python3 scripts/bench_manager.py save --stdin $(if $(PRESERVE),--preserve-history); \
 	fi
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
 
-
-## bench/save: save benchmark results (CI mode - preserves history)
+# Alias for CI/CD (preserves history)
 .PHONY: bench/save
 bench/save:
-	@echo "$(YELLOW)▶ Running benchmarks and saving results (preserving history)...$(NC)"
-	@python3 scripts/bench_manager.py save --preserve-history
-	@echo "$(GREEN)✓ Benchmark results saved with history preserved$(NC)"
+	@$(MAKE) bench PRESERVE=true
 
 ## bench/update: fetch benchmark database from BENCH release
 .PHONY: bench/update
@@ -179,13 +191,14 @@ bench/update:
 bench/compare:
 	@echo "$(YELLOW)▶ Comparing benchmarks...$(NC)"
 	@args="$(filter-out $@,$(MAKECMDGOALS))"; \
-	if [ -z "$$args" ]; then \
+	num_args=$$(echo "$$args" | tr -s ' ' | wc -w | tr -d ' '); \
+	if [ -z "$$args" ] || [ "$$num_args" = "0" ]; then \
 		echo "$(CYAN)→ Comparing current commit with main branch$(NC)"; \
 		python3 scripts/bench_manager.py compare; \
-	elif [ "$$(echo $$args | wc -w)" = "1" ]; then \
+	elif [ "$$num_args" = "1" ]; then \
 		echo "$(CYAN)→ Comparing current commit with $$args$(NC)"; \
 		python3 scripts/bench_manager.py compare $$args; \
-	elif [ "$$(echo $$args | wc -w)" = "2" ]; then \
+	elif [ "$$num_args" = "2" ]; then \
 		arg1=$$(echo $$args | cut -d' ' -f1); \
 		arg2=$$(echo $$args | cut -d' ' -f2); \
 		echo "$(CYAN)→ Comparing $$arg1 with $$arg2$(NC)"; \
@@ -202,6 +215,7 @@ bench/compare:
 .PHONY: bench/list
 bench/list:
 	@python3 scripts/bench_manager.py list
+
 
 # Catch-all rule for positional arguments to bench and bench/compare
 %:
