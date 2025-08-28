@@ -121,8 +121,8 @@ To reproduce these benchmark results exactly:
 - **Benchmark Commands**:
   - Development: `go test -bench=. -benchmem -count=5`
   - Production: `go test -tags=unsafe_no_check -bench=. -benchmem -count=5`
-- **Date**: November 2024
-- **Commit**: 3bf8436 (feat/kbuffer branch)
+- **Date**: August 2025
+- **Commit**: ad9ce1e (feat/kbuffer branch)
 - **Number of Runs**: 5 iterations per benchmark
 
 ## Buffer Types
@@ -194,6 +194,8 @@ buf.WriteString("hello")
 data := buf.Bytes()
 
 // Direct memory access (unsafe)
+// WARNING: ptr becomes invalid after any Write/Reset/Clear operation!
+// The returned memory is NOT copied - use with extreme caution.
 ptr, len := buf.BytesUnsafe()
 ```
 

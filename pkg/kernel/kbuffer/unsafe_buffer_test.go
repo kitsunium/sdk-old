@@ -661,7 +661,7 @@ func TestUnsafeBufferPerformance(t *testing.T) {
 		t.Skip("Skipping performance test in short mode")
 	}
 
-	// Disable debug mode for performance testing
+	// Enable safety checks (testingSkipSafetyCheck=false enables checks)
 	oldDebugMode := testingSkipSafetyCheck
 	testingSkipSafetyCheck = false
 	defer func() { testingSkipSafetyCheck = oldDebugMode }()

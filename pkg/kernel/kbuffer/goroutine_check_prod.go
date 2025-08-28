@@ -15,5 +15,5 @@ func (g *goroutineChecker) checkSafety() {
 	// The compiler will inline this empty function
 }
 
-// testingSkipSafetyCheck is not used in production builds but needs to exist for tests to compile
-var testingSkipSafetyCheck bool
+// testingSkipSafetyCheck exists for compilation compatibility but is unused in production
+var testingSkipSafetyCheck bool //nolint:unused
