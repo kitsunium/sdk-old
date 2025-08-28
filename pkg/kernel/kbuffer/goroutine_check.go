@@ -1,3 +1,6 @@
+//go:build !unsafe_no_check
+// +build !unsafe_no_check
+
 package kbuffer
 
 import (
@@ -10,11 +13,22 @@ const (
 	sampleMask = uint32(511)
 )
 
+// testingSkipSafetyCheck is used only in tests to temporarily disable safety checks
+var testingSkipSafetyCheck bool
+
 // goroutineChecker tracks goroutine ID to detect concurrent access
 type goroutineChecker struct {
 	gid     atomic.Uint64 // Current goroutine ID (0 = unset)
 	writes  atomic.Uint64 // Write counter for detection
 	counter atomic.Uint32 // Sampling counter for amortized checks
+}
+
+// checkSafety performs goroutine safety checks in development builds
+func (g *goroutineChecker) checkSafety() {
+	// Allow tests to skip safety checks
+	if !testingSkipSafetyCheck {
+		g.checkGoroutineSafety()
+	}
 }
 
 // checkGoroutineSafety panics if called from different goroutine
@@ -61,7 +75,6 @@ func (g *goroutineChecker) checkGoroutineSafety() {
 }
 
 // getCurrentGID returns current goroutine ID for safety checking
-// Note: This function calls runtime.Stack and must not be marked nosplit
 func getCurrentGID() uint32 {
 	// Use runtime.Stack to get goroutine info
 	var buf [64]byte
@@ -78,12 +91,7 @@ func getCurrentGID() uint32 {
 }
 
 // getCurrentG returns a deterministic token for the current goroutine
-// Returns a uintptr-based token instead of an unsafe.Pointer to avoid GC issues
 func getCurrentG() uintptr {
-	// Get current goroutine ID and return as token
-	// This avoids unsafe pointer forging and global state mutation
 	goid := getCurrentGID()
-	// Return the ID directly as token - it's already unique per goroutine
-	// The multiplication could cause collisions due to overflow
 	return uintptr(goid)
 }

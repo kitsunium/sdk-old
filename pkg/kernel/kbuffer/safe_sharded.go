@@ -194,7 +194,7 @@ func (b *safeShardedBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 		if shardIdx >= int(b.shardCount) {
 			break
 		}
-		
+
 		localOffset := currentOffset % shardCapacity
 		spaceInShard := shardCapacity - localOffset
 		remaining := len(p) - bytesWritten
