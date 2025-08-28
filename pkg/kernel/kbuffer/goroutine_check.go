@@ -85,15 +85,6 @@ func getCurrentG() unsafe.Pointer {
 	return ptr
 }
 
-// debugMode controls goroutine safety checks
-// Set via build tag: -tags=unsafe_no_check for production builds
-var debugMode = true // Default: enabled for safety
-
-// checkSafety is a conditional check based on debug mode
-//
-//go:inline
-func (g *goroutineChecker) checkSafety() {
-	if debugMode {
-		g.checkGoroutineSafety()
-	}
-}
+// debugMode controls goroutine safety checks in dev builds
+// In production builds (unsafe_no_check), this is always false and checkSafety is a no-op
+var debugMode = true

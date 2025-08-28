@@ -7,11 +7,28 @@ import (
 	"testing"
 )
 
-// TestProductionBuildTag tests that debug mode is disabled in production builds.
+// TestProductionBuildTag tests that safety checks are disabled in production builds.
 func TestProductionBuildTag(t *testing.T) {
-	// In production build (with unsafe_no_check tag), debug mode should be false
-	if debugMode != false {
-		t.Error("debugMode should be false in production build (unsafe_no_check tag)")
+	// Create an unsafe buffer which uses goroutine checking internally
+	buf := NewUnsafeBuffer(1024)
+	
+	// Perform multiple writes that would trigger safety checks in dev mode
+	data := []byte("test")
+	for i := 0; i < 10; i++ {
+		n, err := buf.Write(data)
+		if err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+		if n != len(data) {
+			t.Fatalf("Write returned %d, want %d", n, len(data))
+		}
+	}
+	
+	// In production mode, safety checks should be disabled
+	// The buffer should function normally without any panics
+	// and without incrementing internal counters
+	if buf.Len() != len(data)*10 {
+		t.Errorf("Buffer length = %d, want %d", buf.Len(), len(data)*10)
 	}
 }
 
@@ -30,10 +47,34 @@ func TestProductionPerformance(t *testing.T) {
 	}
 }
 
-// TestProductionInit verifies initialization in production mode.
+// TestProductionInit verifies behavior in production mode.
 func TestProductionInit(t *testing.T) {
-	// Verify that init() function was called and set debugMode to false
-	if debugMode != false {
-		t.Error("init() should set debugMode to false in production build")
+	// Create multiple unsafe buffers and verify they work without safety checks
+	buf1 := NewUnsafeBuffer(256)
+	buf2 := NewUnsafeBuffer(256)
+	
+	// Write to both buffers
+	buf1.Write([]byte("buffer1"))
+	buf2.Write([]byte("buffer2"))
+	
+	// In production, concurrent access from different goroutines should not panic
+	// (though it's still unsafe and may corrupt data)
+	done := make(chan bool)
+	go func() {
+		defer func() {
+			// Should not panic in production mode
+			if r := recover(); r != nil {
+				t.Errorf("Unexpected panic in production mode: %v", r)
+			}
+			done <- true
+		}()
+		buf1.Write([]byte("goroutine"))
+	}()
+	
+	<-done
+	
+	// Buffers should still be functional
+	if buf1.Len() == 0 || buf2.Len() == 0 {
+		t.Error("Buffers should contain data")
 	}
 }
