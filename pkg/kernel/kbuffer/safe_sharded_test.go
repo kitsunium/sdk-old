@@ -451,18 +451,27 @@ func TestSafeShardedBufferTruncate(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		buf.WriteToShard(i, []byte("1234567890")) // 10 bytes each
 	}
-	buf.Truncate(15) // Should distribute as 4,4,4,3 across shards
+	buf.Truncate(15) // Should distribute total of 15 bytes across shards
 
 	totalLen := 0
+	maxShardSize := 0
 	for i := 0; i < 4; i++ {
 		shardLen := buf.shards[i].buffer.Len()
 		totalLen += shardLen
-		if i < 3 && shardLen > 4 {
-			t.Errorf("Shard %d has %d bytes, expected <= 4", i, shardLen)
+		if shardLen > maxShardSize {
+			maxShardSize = shardLen
 		}
-		if i == 3 && shardLen > 3 {
-			t.Errorf("Shard %d has %d bytes, expected <= 3", i, shardLen)
-		}
+	}
+
+	// Verify total length equals 15
+	if totalLen != 15 {
+		t.Errorf("Total length = %d, expected 15", totalLen)
+	}
+
+	// Verify no shard is unreasonably large (should be roughly 15/4 = ~4 bytes each)
+	expectedMaxPerShard := 15/4 + 1 // Allow for rounding
+	if maxShardSize > expectedMaxPerShard {
+		t.Errorf("Max shard size = %d, expected <= %d", maxShardSize, expectedMaxPerShard)
 	}
 
 	_ = originalLen // Avoid unused variable warning

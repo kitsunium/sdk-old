@@ -172,6 +172,9 @@ func (b *unsafeShardedBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 
 // WriteToShard writes directly to specific shard.
 func (b *unsafeShardedBuffer) WriteToShard(shardIdx int, p []byte) (int, error) {
+	// Check for concurrent access
+	b.checker.checkSafety()
+
 	if shardIdx < 0 || shardIdx >= int(b.shardCount) {
 		return 0, errShardOutOfBounds
 	}
@@ -185,6 +188,9 @@ func (b *unsafeShardedBuffer) WriteToShard(shardIdx int, p []byte) (int, error) 
 //go:inline
 //go:nosplit
 func (b *unsafeShardedBuffer) TryWrite(p []byte) bool {
+	// Check for concurrent access
+	b.checker.checkSafety()
+
 	for i := uint32(0); i < b.shardCount; i++ {
 		if b.shards[i].buffer.TryWrite(p) {
 			return true
@@ -270,6 +276,9 @@ func (b *unsafeShardedBuffer) Available() int {
 //
 //go:nosplit
 func (b *unsafeShardedBuffer) Reset() {
+	// Check for concurrent access
+	b.checker.checkSafety()
+
 	for i := uint32(0); i < b.shardCount; i++ {
 		b.shards[i].buffer.Reset()
 	}
@@ -277,13 +286,20 @@ func (b *unsafeShardedBuffer) Reset() {
 
 // Clear zeros and resets all shards.
 func (b *unsafeShardedBuffer) Clear() {
+	// Check for concurrent access
+	b.checker.checkSafety()
+
 	for i := uint32(0); i < b.shardCount; i++ {
 		b.shards[i].buffer.Clear()
 	}
 }
 
-// Truncate reduces all shards proportionally.
+// Truncate sets the total buffer length to exactly n bytes.
+// This is an absolute operation, not relative.
 func (b *unsafeShardedBuffer) Truncate(n int) {
+	// Check for concurrent access
+	b.checker.checkSafety()
+
 	if n <= 0 {
 		b.Reset()
 		return
@@ -317,6 +333,9 @@ func (b *unsafeShardedBuffer) Grow(n int) error {
 
 // Extend advances position in first available shard.
 func (b *unsafeShardedBuffer) Extend(n int) error {
+	// Check for concurrent access
+	b.checker.checkSafety()
+
 	for i := uint32(0); i < b.shardCount; i++ {
 		if err := b.shards[i].buffer.Extend(n); err == nil {
 			return nil
@@ -377,6 +396,9 @@ func (b *unsafeShardedBuffer) ShardCount() int {
 
 // Balance redistributes data across shards for better distribution.
 func (b *unsafeShardedBuffer) Balance() {
+	// Check for concurrent access
+	b.checker.checkSafety()
+
 	// Collect all data
 	allData := b.Bytes()
 	if len(allData) == 0 {
