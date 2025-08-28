@@ -25,6 +25,8 @@ import (
 
 // unsafeBuffer is the fastest possible buffer implementation.
 // NO synchronization - caller MUST ensure single-threaded access.
+// This implementation provides maximum performance through direct memory access
+// and elimination of all atomic operations and synchronization primitives.
 type unsafeBuffer struct {
 	// Cache line 1 (64 bytes) - Hot path fields
 	data unsafe.Pointer // Direct pointer to byte array (8 bytes)
@@ -42,6 +44,8 @@ type unsafeBuffer struct {
 
 // newUnsafeBuffer creates a new non-thread-safe buffer.
 // ⚠️ UNSAFE: No synchronization - single-threaded use only!
+// This function validates capacity bounds and allocates optimally aligned memory.
+// Capacity is normalized to valid bounds for safety and performance.
 //
 //go:nosplit
 func newUnsafeBuffer(capacity int, opts ...Option) Buffer {
@@ -80,7 +84,9 @@ func newUnsafeBuffer(capacity int, opts ...Option) Buffer {
 }
 
 // Write appends bytes with ZERO overhead.
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// This is the fastest possible write implementation using direct memory copy.
+// Returns number of bytes written and any error (typically errBufferFull).
 //
 //go:inline
 //go:nosplit
@@ -111,7 +117,9 @@ func (b *unsafeBuffer) Write(p []byte) (n int, err error) {
 }
 
 // WriteString with zero-copy and ZERO overhead.
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// Uses unsafe pointer operations to avoid string-to-bytes conversion.
+// Returns number of bytes written and any error.
 //
 //go:inline
 //go:nosplit
@@ -143,7 +151,9 @@ func (b *unsafeBuffer) WriteString(s string) (n int, err error) {
 }
 
 // WriteByte with minimal overhead.
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// Writes a single byte using direct pointer access for maximum speed.
+// Returns error only if buffer is full.
 //
 //go:inline
 //go:nosplit
@@ -166,7 +176,9 @@ func (b *unsafeBuffer) WriteByte(c byte) error {
 }
 
 // WriteAt writes at specific offset.
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// Writes data at the specified offset without changing the buffer length.
+// Returns number of bytes written, limited by available space from offset.
 func (b *unsafeBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 	// Check for concurrent access
 	b.checker.checkSafety()
@@ -189,7 +201,9 @@ func (b *unsafeBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 }
 
 // TryWrite always succeeds in unsafe mode (no lock to try).
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// Since there are no locks to contend with, this is equivalent to Write.
+// Returns true if write succeeded, false if buffer was full.
 //
 //go:inline
 //go:nosplit
@@ -200,6 +214,8 @@ func (b *unsafeBuffer) TryWrite(p []byte) bool {
 
 // Bytes returns data slice - direct access, no copy.
 // ⚠️ UNSAFE: Returned slice shares memory with buffer!
+// The returned slice is valid until the buffer is modified or freed.
+// Modifications to the returned slice will affect the buffer contents.
 //
 //go:inline
 //go:nosplit
@@ -211,7 +227,9 @@ func (b *unsafeBuffer) Bytes() []byte {
 }
 
 // String returns buffer content as string.
-// ⚠️ UNSAFE: Uses unsafe conversion!
+// ⚠️ UNSAFE: Uses unsafe conversion for zero-copy performance!
+// The returned string shares memory with the buffer until GC collects it.
+// This avoids allocation but requires careful memory management.
 //
 //go:inline
 //go:nosplit
@@ -223,7 +241,9 @@ func (b *unsafeBuffer) String() string {
 }
 
 // BytesUnsafe returns raw pointer and length.
-// ⚠️ UNSAFE: Direct memory access!
+// ⚠️ UNSAFE: Direct memory access! Use only if you know what you're doing.
+// The pointer is valid until the buffer is modified, resized, or freed.
+// This provides the fastest possible access but requires extreme care.
 //
 //go:inline
 //go:nosplit
@@ -235,6 +255,8 @@ func (b *unsafeBuffer) BytesUnsafe() (ptr uintptr, len int) {
 }
 
 // Len returns current length - direct field access.
+// No atomic operations needed since this is single-threaded.
+// Returns the number of bytes currently stored in the buffer.
 //
 //go:inline
 //go:nosplit
@@ -243,6 +265,8 @@ func (b *unsafeBuffer) Len() int {
 }
 
 // Cap returns capacity.
+// Returns the maximum number of bytes the buffer can hold.
+// This value is fixed at buffer creation time.
 //
 //go:inline
 //go:nosplit
@@ -251,6 +275,8 @@ func (b *unsafeBuffer) Cap() int {
 }
 
 // Available returns remaining space.
+// Calculates how many bytes can still be written to the buffer.
+// Returns capacity minus current length.
 //
 //go:inline
 //go:nosplit
@@ -259,7 +285,9 @@ func (b *unsafeBuffer) Available() int {
 }
 
 // Reset clears position - direct field access.
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// Resets the buffer to empty state without deallocating memory.
+// This is much faster than creating a new buffer.
 //
 //go:inline
 //go:nosplit
@@ -269,7 +297,9 @@ func (b *unsafeBuffer) Reset() {
 }
 
 // Clear zeros memory and resets.
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// Securely wipes all data by zeroing memory before resetting length.
+// Use this when buffer contained sensitive data.
 //
 //go:nosplit
 func (b *unsafeBuffer) Clear() {
@@ -281,7 +311,9 @@ func (b *unsafeBuffer) Clear() {
 }
 
 // Truncate reduces length.
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// Sets the buffer length to exactly n bytes, discarding any excess.
+// Does not zero the discarded data for performance.
 //
 //go:inline
 //go:nosplit
@@ -298,6 +330,8 @@ func (b *unsafeBuffer) Truncate(n int) {
 }
 
 // Grow checks available space.
+// Verifies that at least n bytes of space are available for writing.
+// Returns errBufferFull if insufficient space, nil otherwise.
 //
 //go:inline
 func (b *unsafeBuffer) Grow(n int) error {
@@ -308,7 +342,9 @@ func (b *unsafeBuffer) Grow(n int) error {
 }
 
 // Extend advances position.
-// ⚠️ UNSAFE: Not thread-safe!
+// ⚠️ UNSAFE: Not thread-safe! Will panic if used concurrently.
+// Advances the write position by n bytes without actually writing data.
+// Useful for reserving space that will be filled later.
 //
 //go:inline
 func (b *unsafeBuffer) Extend(n int) error {
@@ -326,6 +362,8 @@ func (b *unsafeBuffer) Extend(n int) error {
 }
 
 // Clone creates independent copy.
+// Returns a new buffer with the same data but independent memory.
+// The clone is not pooled even if the original buffer was from a pool.
 func (b *unsafeBuffer) Clone() Buffer {
 	newBuf := make([]byte, b.cap)
 
@@ -346,6 +384,8 @@ func (b *unsafeBuffer) Clone() Buffer {
 }
 
 // RemainingSlice returns unused portion.
+// Returns a slice representing the available write space in the buffer.
+// Writing to this slice directly updates the buffer (use with extreme care!).
 //
 //go:inline
 //go:nosplit
@@ -358,6 +398,8 @@ func (b *unsafeBuffer) RemainingSlice() []byte {
 }
 
 // AppendBytes appends multiple bytes.
+// Variadic convenience method equivalent to Write(data).
+// Returns error if buffer becomes full during the operation.
 func (b *unsafeBuffer) AppendBytes(data ...byte) error {
 	if len(data) == 0 {
 		return nil

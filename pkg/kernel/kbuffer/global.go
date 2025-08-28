@@ -1,3 +1,5 @@
+// Package kbuffer provides ultra-optimized, lock-free byte buffers for kernel operations.
+// This file contains the global buffer pool implementation with size-class based pooling.
 package kbuffer
 
 import (
@@ -16,6 +18,7 @@ var globalPool = newGlobalPool()
 
 // bufferPool implements high-performance buffer pooling with size classes.
 // Uses sync.Pool with power-of-2 size classes for efficient memory management.
+// The pool is optimized for concurrent access and memory efficiency.
 type bufferPool struct {
 	// Cache line 1 (64 bytes) - Pool arrays
 	pools [poolClassCount]*sync.Pool // Power-of-2 pools from 2^6 to 2^22 (8 bytes * 17 = 136 bytes split across lines)
@@ -61,6 +64,7 @@ func newGlobalPool() *bufferPool {
 
 // Get retrieves a buffer of at least the requested size from pool.
 // Returns larger buffer if exact size not available for better reuse.
+// The buffer is automatically resized to the requested length.
 func (p *bufferPool) Get(size int) []byte {
 	// Validate size
 	if size <= 0 {
@@ -95,7 +99,8 @@ func (p *bufferPool) Get(size int) []byte {
 }
 
 // Put returns a buffer to pool for reuse.
-// Clears buffer if security mode enabled.
+// Clears buffer if security mode enabled to prevent information leakage.
+// Only pools buffers with power-of-2 capacities that fit within size limits.
 func (p *bufferPool) Put(buf []byte) {
 	// Validate buffer
 	if buf == nil || cap(buf) == 0 {
@@ -134,7 +139,8 @@ func (p *bufferPool) Put(buf []byte) {
 }
 
 // GetBuffer retrieves a Buffer instance from pool.
-// Creates buffer wrapper around pooled byte slice.
+// Creates buffer wrapper around pooled byte slice for convenient use.
+// The returned buffer is marked as pooled for proper lifecycle management.
 func (p *bufferPool) GetBuffer(size int) Buffer {
 	// Get byte slice from pool
 	data := p.Get(size)
@@ -159,7 +165,8 @@ func (p *bufferPool) GetBuffer(size int) Buffer {
 }
 
 // PutBuffer returns a Buffer instance to pool.
-// Extracts underlying byte slice and pools it.
+// Extracts underlying byte slice and pools it for reuse.
+// Handles all buffer types including sharded buffers by pooling each shard.
 func (p *bufferPool) PutBuffer(b Buffer) {
 	if b == nil {
 		return
@@ -208,7 +215,8 @@ func (p *bufferPool) PutBuffer(b Buffer) {
 }
 
 // SetClearOnPut configures security clearing on buffer return.
-// Enables zeroing of buffer content for sensitive data.
+// When enabled, zeros buffer content when returned to pool to prevent information leakage.
+// This adds overhead but is necessary for sensitive data handling.
 //
 //go:inline
 func (p *bufferPool) SetClearOnPut(clear bool) {
@@ -216,7 +224,8 @@ func (p *bufferPool) SetClearOnPut(clear bool) {
 }
 
 // SetMaxSize sets maximum buffer size that will be pooled.
-// Larger buffers will be allocated directly without pooling.
+// Larger buffers will be allocated directly without pooling to avoid memory waste.
+// The size is automatically clamped to valid pooling bounds.
 //
 //go:inline
 func (p *bufferPool) SetMaxSize(size int64) {
@@ -230,7 +239,8 @@ func (p *bufferPool) SetMaxSize(size int64) {
 }
 
 // prewarm pre-allocates buffers for common sizes.
-// Reduces allocation overhead during initial usage.
+// Reduces allocation overhead during initial usage by warming up the pools.
+// The number of buffers preallocated scales with CPU count for concurrency.
 func (p *bufferPool) prewarm() {
 	// Common sizes to prewarm (in bytes)
 	sizes := []int{
@@ -270,6 +280,7 @@ func (p *bufferPool) prewarm() {
 
 // sizeToClass calculates the size class for a given size.
 // Returns the power-of-2 exponent that can hold the size.
+// Uses efficient bit manipulation for O(1) calculation.
 //
 //go:inline
 //go:nosplit
@@ -291,7 +302,8 @@ func sizeToClass(size int) int {
 }
 
 // isPowerOfTwo checks if n is a power of 2.
-// Uses bit manipulation for efficiency.
+// Uses efficient bit manipulation trick: n > 0 && (n & (n-1)) == 0.
+// Returns true if n is exactly a power of 2, false otherwise.
 //
 //go:inline
 //go:nosplit
@@ -302,6 +314,8 @@ func isPowerOfTwo(n int) bool {
 // Package-level convenience functions using global pool
 
 // Get retrieves a buffer from the global pool.
+// Convenience function that uses the shared global pool instance.
+// Returns a byte slice of at least the requested size.
 //
 //go:inline
 func Get(size int) []byte {
@@ -309,6 +323,8 @@ func Get(size int) []byte {
 }
 
 // Put returns a buffer to the global pool.
+// Convenience function that uses the shared global pool instance.
+// The buffer will be reused for future allocations if appropriate.
 //
 //go:inline
 func Put(buf []byte) {
@@ -316,6 +332,8 @@ func Put(buf []byte) {
 }
 
 // GetBuffer retrieves a Buffer from the global pool.
+// Convenience function that returns a full Buffer interface implementation.
+// The buffer is ready for immediate use with all operations available.
 //
 //go:inline
 func GetBuffer(size int) Buffer {
@@ -323,6 +341,8 @@ func GetBuffer(size int) Buffer {
 }
 
 // PutBuffer returns a Buffer to the global pool.
+// Convenience function that recycles a Buffer instance for reuse.
+// Works with all buffer types including sharded buffers.
 //
 //go:inline
 func PutBuffer(b Buffer) {
@@ -330,6 +350,8 @@ func PutBuffer(b Buffer) {
 }
 
 // SetGlobalClearOnPut sets security clearing for global pool.
+// When enabled, all buffers are zeroed when returned to prevent data leakage.
+// This affects all users of the global pool.
 //
 //go:inline
 func SetGlobalClearOnPut(clear bool) {
@@ -337,6 +359,8 @@ func SetGlobalClearOnPut(clear bool) {
 }
 
 // SetGlobalMaxSize sets max size for global pool.
+// Buffers larger than this size will not be pooled.
+// This affects memory usage patterns for all global pool users.
 //
 //go:inline
 func SetGlobalMaxSize(size int64) {

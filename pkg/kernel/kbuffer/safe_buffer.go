@@ -1,9 +1,11 @@
+// Package kbuffer provides high-performance, thread-safe buffer implementations.
+// This file contains the thread-safe buffer implementation using spinlocks.
 package kbuffer
 
 import (
-	"runtime"
-	"sync/atomic"
-	"unsafe"
+	"runtime"     // For Gosched() in spinlock backoff
+	"sync/atomic" // For atomic operations
+	"unsafe"      // For zero-copy operations
 )
 
 // ============================================================================
@@ -23,42 +25,48 @@ import (
 
 // spinLock is a lightweight spinlock for short critical sections.
 // More efficient than mutex for our use case (short writes).
+// Uses atomic CAS operations for lock acquisition.
 type spinLock struct {
-	lock atomic.Uint32
+	lock atomic.Uint32 // Lock state: 0=unlocked, 1=locked
 }
 
 // Lock acquires the spinlock.
+// Uses exponential backoff to reduce contention.
+// Blocks until lock is acquired.
 //
 //go:nosplit
 func (s *spinLock) Lock() {
-	backoff := 1
-	for !s.lock.CompareAndSwap(0, 1) {
+	backoff := 1                       // Initial backoff count
+	for !s.lock.CompareAndSwap(0, 1) { // Try to acquire lock
 		// Exponential backoff to reduce contention
-		for i := 0; i < backoff; i++ {
-			runtime.Gosched()
+		for i := 0; i < backoff; i++ { // Backoff loop
+			runtime.Gosched() // Yield to other goroutines
 		}
-		if backoff < 32 {
-			backoff <<= 1
+		if backoff < 32 { // Cap maximum backoff
+			backoff <<= 1 // Double backoff time
 		}
 	}
 }
 
 // Unlock releases the spinlock.
+// Must be called after Lock().
 //
 //go:nosplit
 func (s *spinLock) Unlock() {
-	s.lock.Store(0)
+	s.lock.Store(0) // Release lock atomically
 }
 
 // TryLock attempts to acquire without blocking.
+// Returns true if lock was acquired, false otherwise.
 //
 //go:nosplit
 func (s *spinLock) TryLock() bool {
-	return s.lock.CompareAndSwap(0, 1)
+	return s.lock.CompareAndSwap(0, 1) // Try atomic CAS
 }
 
 // safeBuffer is a thread-safe buffer using spinlock.
 // Optimized for high-throughput concurrent writes.
+// Fields are organized into cache lines for performance.
 type safeBuffer struct {
 	// Cache line 1 (64 bytes) - Hot path fields
 	data unsafe.Pointer // Pointer to byte array (8 bytes)
@@ -66,80 +74,87 @@ type safeBuffer struct {
 	cap  uint32         // Fixed capacity (4 bytes)
 	flag atomic.Uint32  // Status flags (4 bytes)
 	spin spinLock       // Spinlock for writes (4 bytes)
-	_    [40]byte       // Cache line padding
+	_    [40]byte       // Cache line padding to prevent false sharing
 
 	// Cache line 2 (64 bytes) - Cold path fields
-	origin unsafe.Pointer // Original allocation pointer (8 bytes)
-	pooled bool           // From pool flag (1 byte)
-	_      [55]byte       // Cache line padding
+	origin unsafe.Pointer // Original allocation pointer for reset (8 bytes)
+	pooled bool           // Indicates if from pool (1 byte)
+	_      [55]byte       // Cache line padding to 64 bytes
 }
 
 // newSafeBuffer creates a new thread-safe buffer with spinlock.
 // ✅ SAFE: Can be used concurrently from multiple goroutines.
+// Parameters:
+//   - capacity: Buffer size in bytes
+//   - opts: Optional configuration functions
+//
+// Returns a new Buffer interface implementation.
 //
 //go:nosplit
 func newSafeBuffer(capacity int, opts ...Option) Buffer {
 	// Validate capacity
-	if capacity <= 0 {
-		capacity = defaultBufferSize
+	if capacity <= 0 { // Handle invalid capacity
+		capacity = defaultBufferSize // Use default
 	}
-	if capacity < minBufferSize {
-		capacity = minBufferSize
+	if capacity < minBufferSize { // Enforce minimum
+		capacity = minBufferSize // Set to minimum
 	}
-	if capacity > maxBufferSize {
-		capacity = maxBufferSize
+	if capacity > maxBufferSize { // Enforce maximum
+		capacity = maxBufferSize // Set to maximum
 	}
 
 	// Allocate memory
-	buf := make([]byte, capacity)
+	buf := make([]byte, capacity) // Allocate backing array
 
-	// Create buffer
+	// Create buffer structure
 	b := &safeBuffer{
-		data:   unsafe.Pointer(&buf[0]),
-		cap:    uint32(capacity),
-		origin: unsafe.Pointer(&buf[0]),
-		pooled: false,
+		data:   unsafe.Pointer(&buf[0]), // Point to data
+		cap:    uint32(capacity),        // Store capacity
+		origin: unsafe.Pointer(&buf[0]), // Save original pointer
+		pooled: false,                   // Not from pool
 	}
 
 	// Initialize atomic fields
-	b.len.Store(0)
-	b.flag.Store(stateFlagNormal)
+	b.len.Store(0)                // Start empty
+	b.flag.Store(stateFlagNormal) // Set normal state
 
-	// Apply options
-	for _, opt := range opts {
-		if err := opt(b); err != nil {
-			continue
+	// Apply optional configurations
+	for _, opt := range opts { // Iterate options
+		if err := opt(b); err != nil { // Apply option
+			continue // Skip on error
 		}
 	}
 
-	return b
+	return b // Return configured buffer
 }
 
 // Write appends bytes with spinlock protection.
 // ✅ SAFE: Thread-safe with spinlock.
+// Implements io.Writer interface.
+// Returns number of bytes written and any error.
 func (b *safeBuffer) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
-		return 0, nil
+	if len(p) == 0 { // Check empty input
+		return 0, nil // Nothing to write
 	}
 
 	// Acquire spinlock with defer for panic safety
-	b.spin.Lock()
-	defer b.spin.Unlock()
+	b.spin.Lock()         // Lock for exclusive access
+	defer b.spin.Unlock() // Ensure unlock on exit
 
 	// Critical section - keep it short!
-	currentLen := b.len.Load()
-	newLen := currentLen + uint32(len(p))
+	currentLen := b.len.Load()            // Get current length
+	newLen := currentLen + uint32(len(p)) // Calculate new length
 
-	if newLen > b.cap {
-		return 0, errBufferFull
+	if newLen > b.cap { // Check capacity
+		return 0, errBufferFull // Buffer full error
 	}
 
 	// Copy data
-	dst := unsafe.Pointer(uintptr(b.data) + uintptr(currentLen))
-	copy(unsafe.Slice((*byte)(dst), len(p)), p)
+	dst := unsafe.Pointer(uintptr(b.data) + uintptr(currentLen)) // Calculate destination
+	copy(unsafe.Slice((*byte)(dst), len(p)), p)                  // Copy bytes
 
 	// Update length atomically
-	b.len.Store(newLen)
+	b.len.Store(newLen) // Store new length
 
 	// Update flags if full
 	if newLen == b.cap {
