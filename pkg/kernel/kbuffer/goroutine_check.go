@@ -40,21 +40,6 @@ func (g *goroutineChecker) checkGoroutineSafety() {
 //
 //go:nosplit
 func getCurrentGID() uint32 {
-	// Get current goroutine pointer from runtime
-	g := getCurrentG()
-	if g == nil {
-		return 0
-	}
-
-	// Extract ID from goroutine structure
-	// This is a hack but reliable for detection purposes
-	return uint32(uintptr(unsafe.Pointer(g)) >> 10)
-}
-
-// getCurrentG returns current goroutine pointer
-//
-//go:nosplit
-func getCurrentG() unsafe.Pointer {
 	// Use runtime.Stack to get goroutine info
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)
@@ -64,9 +49,19 @@ func getCurrentG() unsafe.Pointer {
 		for i := 0; i < n; i++ {
 			hash = hash*31 + uint32(buf[i])
 		}
-		return unsafe.Pointer(uintptr(hash))
+		return hash
 	}
-	return nil
+	return 0
+}
+
+// getCurrentG returns current goroutine pointer from runtime internals
+// This function exists for compatibility but is not used in the safe path
+//
+//go:nosplit
+func getCurrentG() unsafe.Pointer {
+	// Return a dummy non-nil pointer to avoid nil checks
+	// The actual value doesn't matter as we use getCurrentGID() for safety checks
+	return unsafe.Pointer(&debugMode)
 }
 
 // debugMode controls goroutine safety checks
