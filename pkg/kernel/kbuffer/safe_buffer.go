@@ -272,29 +272,31 @@ func (b *safeBuffer) TryWrite(p []byte) bool {
 	return true
 }
 
-// Bytes returns data slice - lock-free read.
-// ✅ SAFE: Atomic read, no lock needed.
-//
-//go:inline
-//go:nosplit
+// Bytes returns a copy of the buffer data.
+// ✅ SAFE: Returns a copy to prevent data races.
 func (b *safeBuffer) Bytes() []byte {
 	length := b.len.Load()
 	if length == 0 {
 		return nil
 	}
-	return unsafe.Slice((*byte)(b.data), length)
+
+	// Lock and copy to prevent races with concurrent writes
+	b.spin.Lock()
+	result := make([]byte, length)
+	copy(result, unsafe.Slice((*byte)(b.data), length))
+	b.spin.Unlock()
+
+	return result
 }
 
-// String returns content as string - lock-free read.
-// ✅ SAFE: Atomic read, no lock needed.
-//
-//go:nosplit
+// String returns content as string.
+// ✅ SAFE: Creates a copy to prevent data races.
 func (b *safeBuffer) String() string {
-	length := b.len.Load()
-	if length == 0 {
+	data := b.Bytes()
+	if len(data) == 0 {
 		return ""
 	}
-	return unsafe.String((*byte)(b.data), length)
+	return string(data)
 }
 
 // BytesUnsafe returns raw pointer - lock-free read.

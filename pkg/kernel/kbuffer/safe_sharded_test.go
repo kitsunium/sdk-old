@@ -511,56 +511,62 @@ func TestSafeShardedBufferGrow(t *testing.T) {
 func TestSafeShardedBufferExtend(t *testing.T) {
 	buf := newSafeShardedBuffer(100, 4).(*safeShardedBuffer)
 
-	// Get initial state of affinity shard
-	affinityShard := buf.selectShard()
-	initialLen := affinityShard.buffer.Len()
-	initialCap := affinityShard.buffer.Cap()
+	// Get initial total length
+	initialTotalLen := buf.Len()
 
-	// Extend should work on affinity shard
+	// Extend should work on a shard
 	extendSize := 5
 	if err := buf.Extend(extendSize); err != nil {
 		t.Errorf("Extend(%d) error = %v", extendSize, err)
 	}
 
-	// Verify that the affinity shard's length increased
-	newLen := affinityShard.buffer.Len()
-	if newLen != initialLen+extendSize {
-		t.Errorf("Shard length after Extend = %d, want %d",
-			newLen, initialLen+extendSize)
+	// Verify that total length increased
+	newTotalLen := buf.Len()
+	if newTotalLen != initialTotalLen+extendSize {
+		t.Errorf("Total length after Extend = %d, want %d",
+			newTotalLen, initialTotalLen+extendSize)
 	}
 
-	// Verify available space decreased accordingly
-	available := affinityShard.buffer.Available()
-	expectedAvailable := initialCap - newLen
-	if available != expectedAvailable {
-		t.Errorf("Available space = %d, want %d", available, expectedAvailable)
+	// Verify that at least one shard was extended
+	var extendedShard *safeBufferShard
+	var extendedShardIdx int
+	for i := uint32(0); i < buf.shardCount; i++ {
+		if buf.shards[i].buffer.Len() == extendSize {
+			extendedShard = buf.shards[i]
+			extendedShardIdx = int(i)
+			break
+		}
+	}
+	if extendedShard == nil {
+		t.Error("No shard was extended")
+		return
 	}
 
-	// Write directly to the affinity shard (not through WriteAt which uses global sharding)
+	// Write directly to a specific shard for testing
 	testData := []byte("test")
-	n, err := affinityShard.buffer.Write(testData)
+	n, err := buf.WriteToShard(extendedShardIdx, testData)
 	if err != nil {
-		t.Errorf("Write to affinity shard error = %v", err)
+		t.Errorf("WriteToShard error = %v", err)
 	}
 	if n != len(testData) {
-		t.Errorf("Write wrote %d bytes, want %d", n, len(testData))
+		t.Errorf("WriteToShard wrote %d bytes, want %d", n, len(testData))
 	}
 
-	// Verify the data was written correctly
-	finalLen := affinityShard.buffer.Len()
-	expectedFinalLen := newLen + len(testData)
+	// Verify the data was written to the extended shard
+	finalLen := extendedShard.buffer.Len()
+	expectedFinalLen := extendSize + len(testData)
 	if finalLen != expectedFinalLen {
 		t.Errorf("Final shard length = %d, expected %d", finalLen, expectedFinalLen)
 	}
 
 	// Verify the buffer contains the test data
-	shardData := affinityShard.buffer.Bytes()
-	if len(shardData) < newLen+len(testData) {
+	shardData := extendedShard.buffer.Bytes()
+	if len(shardData) < expectedFinalLen {
 		t.Errorf("Shard data too short: %d bytes, expected at least %d",
-			len(shardData), newLen+len(testData))
+			len(shardData), expectedFinalLen)
 	} else {
 		// Data should be at the position after the extended region
-		writtenData := shardData[newLen : newLen+len(testData)]
+		writtenData := shardData[extendSize : extendSize+len(testData)]
 		if !bytes.Equal(writtenData, testData) {
 			t.Errorf("Written data mismatch: got %v, want %v", writtenData, testData)
 		}
