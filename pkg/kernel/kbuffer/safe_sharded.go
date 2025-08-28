@@ -1,6 +1,7 @@
 package kbuffer
 
 import (
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -15,6 +16,7 @@ type safeShardedBuffer struct {
 	shardMask  uint32             // Mask for fast shard selection
 	cap        uint32             // Total capacity across all shards
 	pooled     bool               // From pool flag
+	counter    atomic.Uint64      // Round-robin counter for shard selection
 	// Natural alignment and field ordering provide sufficient performance
 	// without artificial padding. Shards are allocated separately.
 }
@@ -79,25 +81,25 @@ func newSafeShardedBuffer(capacity, shardCount int, opts ...Option) Sharded {
 	return b
 }
 
-// selectShard chooses optimal shard for current goroutine.
-// Uses goroutine ID hashing for affinity and load distribution.
+// selectShard chooses optimal shard using round-robin selection.
+// This avoids expensive runtime.Stack() calls in the hot path.
 //
 //go:inline
 //go:nosplit
 func (b *safeShardedBuffer) selectShard() *safeBufferShard {
-	// Get goroutine ID for affinity (reduces contention)
-	gid := getCurrentGID()
+	// Use atomic counter for round-robin selection (avoids expensive getCurrentGID)
+	counter := b.counter.Add(1)
 
 	// Fast modulo using bit mask (works because shardCount is power of 2)
-	shardIndex := gid & b.shardMask
+	shardIndex := uint32(counter-1) & b.shardMask
 
 	return b.shards[shardIndex]
 }
 
 // Write distributes writes across shards for concurrency.
-// Each goroutine typically writes to its affinity shard.
+// Uses round-robin selection for optimal load distribution.
 func (b *safeShardedBuffer) Write(p []byte) (n int, err error) {
-	// Select shard based on goroutine affinity
+	// Select shard using round-robin
 	shard := b.selectShard()
 
 	// Try primary shard first
@@ -154,7 +156,7 @@ func (b *safeShardedBuffer) WriteString(s string) (n int, err error) {
 	return 0, errBufferFull
 }
 
-// WriteByte writes single byte to affinity shard.
+// WriteByte writes single byte to selected shard.
 //
 //go:inline
 func (b *safeShardedBuffer) WriteByte(c byte) error {
@@ -223,7 +225,7 @@ func (b *safeShardedBuffer) WriteToShard(shardIdx int, p []byte) (int, error) {
 	return shard.buffer.Write(p)
 }
 
-// TryWrite attempts non-blocking write to affinity shard.
+// TryWrite attempts non-blocking write to selected shard.
 //
 //go:inline
 //go:nosplit
@@ -362,7 +364,7 @@ func (b *safeShardedBuffer) Grow(n int) error {
 	return errBufferFull
 }
 
-// Extend advances position in affinity shard.
+// Extend advances position in selected shard.
 func (b *safeShardedBuffer) Extend(n int) error {
 	shard := b.selectShard()
 	return shard.buffer.Extend(n)
@@ -401,7 +403,7 @@ func (b *safeShardedBuffer) RemainingSlice() []byte {
 	return nil
 }
 
-// AppendBytes appends to affinity shard.
+// AppendBytes appends to selected shard.
 func (b *safeShardedBuffer) AppendBytes(data ...byte) error {
 	if len(data) == 0 {
 		return nil
