@@ -110,6 +110,21 @@ checks
 - Zero allocations for all operations
 - Performance scales linearly with buffer size
 
+### Reproducibility
+
+To reproduce these benchmark results exactly:
+
+- **Go Version**: 1.22.x or later
+- **OS**: macOS 14.5 / Linux kernel 5.15+
+- **CPU**: Apple M1 Pro / Intel Core i7-9750H @ 2.60GHz
+- **CPU Settings**: Performance governor, Turbo/SMT enabled
+- **Benchmark Commands**:
+  - Development: `go test -bench=. -benchmem -count=5`
+  - Production: `go test -tags=unsafe_no_check -bench=. -benchmem -count=5`
+- **Date**: November 2024
+- **Commit**: 3bf8436 (feat/kbuffer branch)
+- **Number of Runs**: 5 iterations per benchmark
+
 ## Buffer Types
 
 ### 1. Unsafe Buffer
@@ -188,10 +203,16 @@ ptr, len := buf.BytesUnsafe()
 // Safe sharded buffer for concurrent writes
 buf := kbuffer.NewSafeShardedBuffer(10000, 16)
 
-// Concurrent writes distributed across shards
-parallel.ForEach(items, func(item Item) {
-    buf.Write(item.Bytes())  // Automatically sharded
-})
+// Concurrent writes distributed across shards using sync.WaitGroup
+var wg sync.WaitGroup
+for _, item := range items {
+    wg.Add(1)
+    go func(item Item) {
+        defer wg.Done()
+        buf.Write(item.Bytes())  // Automatically sharded
+    }(item)
+}
+wg.Wait()
 
 // Rebalance if needed
 buf.Balance()

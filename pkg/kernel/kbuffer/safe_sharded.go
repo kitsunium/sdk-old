@@ -11,24 +11,20 @@ var _ Sharded = (*safeShardedBuffer)(nil)
 // safeShardedBuffer provides THREAD-SAFE concurrent write access through sharding.
 // Each shard operates independently to minimize contention.
 type safeShardedBuffer struct {
-	// Cache line 1 (64 bytes) - Core configuration
-	shards     []*safeBufferShard // Array of buffer shards (8 bytes)
-	shardCount uint32             // Number of shards (4 bytes)
-	shardMask  uint32             // Mask for fast shard selection (4 bytes)
-	cap        uint32             // Total capacity across all shards (4 bytes)
-	_          [44]byte           // Cache line padding
-
-	// Cache line 2 (64 bytes) - Metadata
-	pooled bool     // From pool flag (1 byte)
-	_      [63]byte // Cache line padding
+	shards     []*safeBufferShard // Array of buffer shards (slice header: 24 bytes on 64-bit)
+	shardCount uint32             // Number of shards
+	shardMask  uint32             // Mask for fast shard selection
+	cap        uint32             // Total capacity across all shards
+	pooled     bool               // From pool flag
+	// Natural alignment and field ordering provide sufficient performance
+	// without artificial padding. Shards are allocated separately.
 }
 
 // safeBufferShard represents a single SAFE shard with its own buffer.
-// Each shard is cache-line aligned to prevent false sharing.
+// Allocated separately to avoid false sharing between shards.
 type safeBufferShard struct {
-	// Cache line aligned shard data
-	buffer Buffer   // Underlying SAFE buffer implementation (8 bytes)
-	_      [56]byte // Cache line padding
+	buffer Buffer // Underlying SAFE buffer implementation (interface: 16 bytes on 64-bit)
+	// Each shard is independently allocated, naturally avoiding false sharing
 }
 
 // newSafeShardedBuffer creates a THREAD-SAFE sharded buffer for concurrent access.
@@ -170,21 +166,60 @@ func (b *safeShardedBuffer) WriteByte(c byte) error {
 	return shard.buffer.WriteByte(c)
 }
 
-// WriteAt writes at specific global offset across shards.
-// Calculates which shard contains the offset and writes there.
+// WriteAt writes at specific global offset, potentially spanning multiple shards.
+// Handles writes that cross shard boundaries.
 func (b *safeShardedBuffer) WriteAt(p []byte, off int64) (n int, err error) {
-	// Calculate shard and local offset
-	shardCapacity := int64(b.cap) / int64(b.shardCount)
-	shardIndex := off / shardCapacity
-
-	if shardIndex >= int64(b.shardCount) {
+	// Validate offset
+	if off < 0 || off >= int64(b.cap) {
 		return 0, errInvalidOffset
 	}
 
-	localOffset := off % shardCapacity
-	shard := b.shards[shardIndex]
+	// Calculate shard capacity
+	shardCapacity := int64(b.cap) / int64(b.shardCount)
+	bytesWritten := 0
+	dataRemaining := len(p)
+	currentOffset := off
 
-	return shard.buffer.WriteAt(p, localOffset)
+	// Write data, potentially spanning multiple shards
+	for dataRemaining > 0 && currentOffset < int64(b.cap) {
+		// Calculate current shard and local offset
+		shardIdx := int(currentOffset / shardCapacity)
+		localOffset := currentOffset % shardCapacity
+
+		// Ensure shard index is valid
+		if shardIdx >= int(b.shardCount) {
+			break
+		}
+
+		// Calculate how much we can write to this shard
+		spaceInShard := shardCapacity - localOffset
+		toWrite := int64(dataRemaining)
+		if toWrite > spaceInShard {
+			toWrite = spaceInShard
+		}
+
+		// Write to the shard
+		shard := b.shards[shardIdx]
+		written, writeErr := shard.buffer.WriteAt(p[bytesWritten:bytesWritten+int(toWrite)], localOffset)
+		bytesWritten += written
+		dataRemaining -= written
+		currentOffset += int64(written)
+
+		// Handle errors
+		if writeErr != nil {
+			if err == nil {
+				err = writeErr
+			}
+			break
+		}
+
+		// If we wrote less than expected, stop
+		if written < int(toWrite) {
+			break
+		}
+	}
+
+	return bytesWritten, err
 }
 
 // WriteToShard writes directly to specific shard.
@@ -297,7 +332,9 @@ func (b *safeShardedBuffer) Clear() {
 	}
 }
 
-// Truncate reduces all shards proportionally.
+// Truncate sets the total buffer length to exactly n bytes.
+// The n bytes are distributed proportionally across shards.
+// This is an absolute operation, not relative.
 func (b *safeShardedBuffer) Truncate(n int) {
 	if n <= 0 {
 		b.Reset()

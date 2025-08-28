@@ -69,34 +69,34 @@ func TestGetCurrentGID(t *testing.T) {
 	}
 }
 
-// TestGetCurrentG tests goroutine pointer extraction.
+// TestGetCurrentG tests goroutine token extraction.
 func TestGetCurrentG(t *testing.T) {
-	// Get pointer from current goroutine
+	// Get token from current goroutine
 	g1 := getCurrentG()
-	if g1 == nil {
-		t.Error("getCurrentG() returned nil")
+	if g1 == 0 {
+		t.Error("getCurrentG() returned 0")
 	}
 
-	// Get pointer again
+	// Get token again
 	g2 := getCurrentG()
 	if g1 != g2 {
 		t.Error("getCurrentG() not consistent")
 	}
 
 	// Get from different goroutine
-	done := make(chan unsafe.Pointer)
+	done := make(chan uintptr)
 	go func() {
 		done <- getCurrentG()
 	}()
 
 	g3 := <-done
-	if g3 == nil {
-		t.Error("getCurrentG() returned nil from goroutine")
+	if g3 == 0 {
+		t.Error("getCurrentG() returned 0 from goroutine")
 	}
 
-	// Pointers from different goroutines should differ
+	// Tokens from different goroutines should differ
 	if g3 == g1 {
-		t.Error("Different goroutines returned same pointer")
+		t.Error("Different goroutines returned same token")
 	}
 }
 
@@ -273,9 +273,10 @@ func TestGoroutineCheckerMemoryUsage(t *testing.T) {
 	var checker goroutineChecker
 	size := unsafe.Sizeof(checker)
 
-	// Should be exactly 16 bytes (two uint64 atomics)
-	if size != 16 {
-		t.Errorf("goroutineChecker size = %d bytes, want 16", size)
+	// Should be exactly 20 bytes (two uint64 atomics + one uint32 atomic)
+	// Actual size may be 24 due to alignment
+	if size != 20 && size != 24 {
+		t.Errorf("goroutineChecker size = %d bytes, want 20 or 24", size)
 	}
 
 	// Test alignment
@@ -284,6 +285,9 @@ func TestGoroutineCheckerMemoryUsage(t *testing.T) {
 	}
 	if uintptr(unsafe.Pointer(&checker.writes))%8 != 0 {
 		t.Error("writes field not 8-byte aligned")
+	}
+	if uintptr(unsafe.Pointer(&checker.counter))%4 != 0 {
+		t.Error("counter field not 4-byte aligned")
 	}
 }
 

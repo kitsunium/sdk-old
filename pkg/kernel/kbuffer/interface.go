@@ -203,7 +203,7 @@ type Buffer interface {
 	Available() int     // Available write space
 	Reset()             // Reset position (keep capacity)
 	Clear()             // Zero memory and reset
-	Truncate(n int)     // Reduce to n bytes
+	Truncate(n int)     // Set total length to n bytes (absolute, not relative)
 	Grow(n int) error   // Ensure n bytes available
 	Extend(n int) error // Advance position by n
 
