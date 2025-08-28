@@ -1,7 +1,6 @@
 package kbuffer
 
 import (
-	"runtime"
 	"unsafe"
 )
 
@@ -52,10 +51,7 @@ func newSafeShardedBuffer(capacity, shardCount int, opts ...Option) Sharded {
 	shardCount = int(nextPowerOf2(uint32(shardCount)))
 
 	// Calculate per-shard capacity
-	shardCapacity := capacity / shardCount
-	if shardCapacity < minBufferSize {
-		shardCapacity = minBufferSize
-	}
+	shardCapacity := max(capacity/shardCount, minBufferSize)
 
 	// Create sharded buffer
 	b := &safeShardedBuffer{
@@ -90,7 +86,7 @@ func newSafeShardedBuffer(capacity, shardCount int, opts ...Option) Sharded {
 //go:nosplit
 func (b *safeShardedBuffer) selectShard() *safeBufferShard {
 	// Get goroutine ID for affinity (reduces contention)
-	gid := getGoroutineID()
+	gid := getCurrentGID()
 
 	// Fast modulo using bit mask (works because shardCount is power of 2)
 	shardIndex := gid & b.shardMask
@@ -198,10 +194,7 @@ func (b *safeShardedBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 		localOffset := currentOffset % shardCapacity
 		spaceInShard := shardCapacity - localOffset
 		remaining := len(p) - bytesWritten
-		toWrite := int64(remaining)
-		if toWrite > spaceInShard {
-			toWrite = spaceInShard
-		}
+		toWrite := min(int64(remaining), spaceInShard)
 
 		// Write to shard
 		written, writeErr := b.writeToShardAt(shardIdx, p[bytesWritten:bytesWritten+int(toWrite)], localOffset)
@@ -453,26 +446,6 @@ func (b *safeShardedBuffer) Balance() {
 			offset += size
 		}
 	}
-}
-
-// getGoroutineID returns a pseudo goroutine ID for sharding.
-// Uses runtime internals for best performance.
-//
-//go:inline
-//go:nosplit
-func getGoroutineID() uint32 {
-	// Use runtime.Stack to get goroutine info
-	var buf [64]byte
-	n := runtime.Stack(buf[:], false)
-	if n > 0 {
-		// Hash stack trace for pseudo-ID
-		hash := uint32(0)
-		for i := 0; i < n; i++ {
-			hash = hash*31 + uint32(buf[i])
-		}
-		return hash
-	}
-	return 0
 }
 
 // nextPowerOf2 rounds up to next power of 2.
