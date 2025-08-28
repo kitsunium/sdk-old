@@ -40,6 +40,10 @@ func (g *goroutineChecker) checkGoroutineSafety() {
 	// First access - always check and set ownership
 	if currentOwner == 0 {
 		currentGID := getCurrentGID()
+		// Safeguard against unlikely case where getCurrentGID returns 0
+		if currentGID == 0 {
+			currentGID = 1 // Use non-zero fallback
+		}
 		if g.gid.CompareAndSwap(0, uint64(currentGID)) {
 			g.writes.Add(1)
 			return
