@@ -122,15 +122,15 @@ func (b *safeBuffer) Write(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	// Acquire spinlock
+	// Acquire spinlock with defer for panic safety
 	b.spin.Lock()
+	defer b.spin.Unlock()
 
 	// Critical section - keep it short!
 	currentLen := b.len.Load()
 	newLen := currentLen + uint32(len(p))
 
 	if newLen > b.cap {
-		b.spin.Unlock()
 		return 0, errBufferFull
 	}
 
@@ -145,8 +145,6 @@ func (b *safeBuffer) Write(p []byte) (n int, err error) {
 	if newLen == b.cap {
 		b.flag.Store(b.flag.Load() | stateFlagFull)
 	}
-
-	b.spin.Unlock()
 
 	return len(p), nil
 }
@@ -397,7 +395,13 @@ func (b *safeBuffer) Truncate(n int) {
 //
 //go:inline
 func (b *safeBuffer) Grow(n int) error {
-	if b.Available() < n {
+	// Acquire lock to safely check available space
+	b.spin.Lock()
+	defer b.spin.Unlock()
+
+	currentLen := b.len.Load()
+	available := int(b.cap - currentLen)
+	if available < n {
 		return errBufferFull
 	}
 	return nil

@@ -3,40 +3,57 @@ package kbuffer
 import (
 	"runtime"
 	"sync/atomic"
-	"unsafe"
+)
+
+const (
+	// sampleMask determines sampling frequency (1 in 512 checks)
+	sampleMask = uint32(511)
 )
 
 // goroutineChecker tracks goroutine ID to detect concurrent access
 type goroutineChecker struct {
-	gid    atomic.Uint64 // Current goroutine ID (0 = unset)
-	writes atomic.Uint64 // Write counter for detection
+	gid     atomic.Uint64 // Current goroutine ID (0 = unset)
+	writes  atomic.Uint64 // Write counter for detection
+	counter atomic.Uint32 // Sampling counter for amortized checks
 }
 
 // checkGoroutineSafety panics if called from different goroutine
+// Uses amortized sampling to reduce overhead of getCurrentGID calls
 func (g *goroutineChecker) checkGoroutineSafety() {
-	currentGID := getCurrentGID()
+	// Increment counter atomically
+	count := g.counter.Add(1)
 
-	// First access - set the goroutine ID
-	if g.gid.CompareAndSwap(0, uint64(currentGID)) {
-		g.writes.Add(1)
-		return
+	// Load current owner
+	currentOwner := g.gid.Load()
+
+	// First access - always check and set ownership
+	if currentOwner == 0 {
+		currentGID := getCurrentGID()
+		if g.gid.CompareAndSwap(0, uint64(currentGID)) {
+			g.writes.Add(1)
+			return
+		}
+		// Lost race, re-load owner
+		currentOwner = g.gid.Load()
 	}
 
-	// Check if same goroutine
-	if g.gid.Load() == uint64(currentGID) {
-		g.writes.Add(1)
-		return
+	// Sample check: only call expensive getCurrentGID periodically
+	if (count-1)&sampleMask == 0 {
+		currentGID := getCurrentGID()
+		if currentOwner != uint64(currentGID) {
+			// DIFFERENT GOROUTINE DETECTED - PANIC!
+			panic("kbuffer: UNSAFE buffer accessed from multiple goroutines! " +
+				"Use NewSafeBuffer() or NewSafeShardedBuffer() for concurrent access. " +
+				"This panic prevents data corruption and undefined behavior.")
+		}
 	}
 
-	// DIFFERENT GOROUTINE DETECTED - PANIC!
-	panic("kbuffer: UNSAFE buffer accessed from multiple goroutines! " +
-		"Use NewSafeBuffer() or NewSafeShardedBuffer() for concurrent access. " +
-		"This panic prevents data corruption and undefined behavior.")
+	// Increment write counter
+	g.writes.Add(1)
 }
 
 // getCurrentGID returns current goroutine ID for safety checking
-//
-//go:nosplit
+// Note: This function calls runtime.Stack and must not be marked nosplit
 func getCurrentGID() uint32 {
 	// Use runtime.Stack to get goroutine info
 	var buf [64]byte
@@ -52,33 +69,13 @@ func getCurrentGID() uint32 {
 	return 0
 }
 
-// goidCache caches the goroutine ID to ensure consistency
-var goidCache struct {
-	goid uintptr
-	ptr  unsafe.Pointer
-}
-
-// getCurrentG returns a consistent pointer for the current goroutine
-// Uses the goroutine ID from runtime to ensure uniqueness
-//
-//go:nosplit
-func getCurrentG() unsafe.Pointer {
-	// Get current goroutine ID
+// getCurrentG returns a deterministic token for the current goroutine
+// Returns a uintptr-based token instead of an unsafe.Pointer to avoid GC issues
+func getCurrentG() uintptr {
+	// Get current goroutine ID and return as token
+	// This avoids unsafe pointer forging and global state mutation
 	goid := getCurrentGID()
-
-	// Check cache first
-	if uintptr(goid) == goidCache.goid && goidCache.ptr != nil {
-		return goidCache.ptr
-	}
-
-	// Create a unique pointer based on goroutine ID
-	// We use the address of goidCache plus an offset based on goid
-	// This avoids the go vet warning while providing unique pointers
-	ptr := unsafe.Pointer(uintptr(unsafe.Pointer(&goidCache)) + uintptr(goid)*8)
-
-	// Cache for consistency
-	goidCache.goid = uintptr(goid)
-	goidCache.ptr = ptr
-
-	return ptr
+	// Create deterministic token from goroutine ID
+	// Use a simple transformation that provides uniqueness
+	return uintptr(goid) * 0x9E3779B9 // Golden ratio prime for better distribution
 }
