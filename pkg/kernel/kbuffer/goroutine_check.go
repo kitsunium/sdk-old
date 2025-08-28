@@ -1,6 +1,9 @@
 //go:build !unsafe_no_check
 // +build !unsafe_no_check
 
+// Package kbuffer provides ultra-optimized, lock-free byte buffers for kernel operations.
+// This file contains goroutine safety checking for development builds.
+// Safety checks are enabled by default and can detect concurrent access to unsafe buffers.
 package kbuffer
 
 import (
@@ -9,21 +12,29 @@ import (
 )
 
 const (
-	// sampleMask determines sampling frequency (1 in 512 checks)
+	// sampleMask determines sampling frequency (1 in 512 checks).
+	// This reduces the overhead of safety checking by sampling operations.
+	// Set to 511 (binary: 111111111) for efficient bitwise AND operation.
 	sampleMask = uint32(511)
 )
 
-// testingSkipSafetyCheck is used only in tests to temporarily disable safety checks
+// testingSkipSafetyCheck is used only in tests to temporarily disable safety checks.
+// This allows tests to bypass goroutine checking when testing specific scenarios.
 var testingSkipSafetyCheck bool
 
-// goroutineChecker tracks goroutine ID to detect concurrent access
+// goroutineChecker tracks goroutine ID to detect concurrent access.
+// Uses atomic operations to detect when an unsafe buffer is accessed
+// from multiple goroutines, which would cause data corruption.
 type goroutineChecker struct {
 	gid     atomic.Uint64 // Current goroutine ID (0 = unset)
 	writes  atomic.Uint64 // Write counter for detection
 	counter atomic.Uint32 // Sampling counter for amortized checks
 }
 
-// checkSafety performs goroutine safety checks in development builds
+// checkSafety performs goroutine safety checks in development builds.
+// This is the main entry point for safety checking. In development builds,
+// it will panic if concurrent access is detected. In production builds,
+// this becomes a no-op for maximum performance.
 func (g *goroutineChecker) checkSafety() {
 	// Allow tests to skip safety checks
 	if !testingSkipSafetyCheck {
@@ -31,8 +42,10 @@ func (g *goroutineChecker) checkSafety() {
 	}
 }
 
-// checkGoroutineSafety panics if called from different goroutine
-// Uses amortized sampling to reduce overhead of getCurrentGID calls
+// checkGoroutineSafety panics if called from different goroutine.
+// Uses amortized sampling to reduce overhead of getCurrentGID calls.
+// This is the core safety checking logic that detects concurrent access
+// and panics with a helpful error message to prevent data corruption.
 func (g *goroutineChecker) checkGoroutineSafety() {
 	// Load current owner
 	currentOwner := g.gid.Load()
@@ -78,7 +91,10 @@ func (g *goroutineChecker) checkGoroutineSafety() {
 	g.writes.Add(1)
 }
 
-// getCurrentGID returns current goroutine ID for safety checking
+// getCurrentGID returns current goroutine ID for safety checking.
+// Uses runtime.Stack to get goroutine information and hashes it to create
+// a unique identifier. This is more expensive than atomic operations but
+// necessary for detecting goroutine switches.
 func getCurrentGID() uint32 {
 	// Use runtime.Stack to get goroutine info
 	var buf [64]byte
