@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
-// Benchmark buffer write operations
+// Benchmark standard buffer operations
 
-func BenchmarkBuffer_Write(b *testing.B) {
+func BenchmarkStandardBuffer_Write(b *testing.B) {
 	sizes := []int{64, 256, 1024, 4096, 16384, 65536}
 
 	for _, size := range sizes {
@@ -20,7 +21,7 @@ func BenchmarkBuffer_Write(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
-			buf := NewBuffer(size * 2)
+			buf := NewUnsafeBuffer(size * 2)
 			b.ResetTimer()
 			b.SetBytes(int64(size))
 
@@ -32,14 +33,14 @@ func BenchmarkBuffer_Write(b *testing.B) {
 	}
 }
 
-func BenchmarkBuffer_WriteString(b *testing.B) {
+func BenchmarkStandardBuffer_WriteString(b *testing.B) {
 	sizes := []int{64, 256, 1024, 4096}
 
 	for _, size := range sizes {
 		str := string(make([]byte, size))
 
 		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
-			buf := NewBuffer(size * 2)
+			buf := NewUnsafeBuffer(size * 2)
 			b.ResetTimer()
 			b.SetBytes(int64(size))
 
@@ -51,8 +52,8 @@ func BenchmarkBuffer_WriteString(b *testing.B) {
 	}
 }
 
-func BenchmarkBuffer_WriteByte(b *testing.B) {
-	buf := NewBuffer(b.N)
+func BenchmarkStandardBuffer_WriteByte(b *testing.B) {
+	buf := NewUnsafeBuffer(b.N)
 	b.ResetTimer()
 	b.SetBytes(1)
 
@@ -61,9 +62,9 @@ func BenchmarkBuffer_WriteByte(b *testing.B) {
 	}
 }
 
-func BenchmarkBuffer_TryWrite(b *testing.B) {
+func BenchmarkStandardBuffer_TryWrite(b *testing.B) {
 	data := make([]byte, 256)
-	buf := NewBuffer(1024)
+	buf := NewUnsafeBuffer(1024)
 
 	b.ResetTimer()
 	b.SetBytes(256)
@@ -74,272 +75,375 @@ func BenchmarkBuffer_TryWrite(b *testing.B) {
 	}
 }
 
-func BenchmarkBuffer_String(b *testing.B) {
-	buf := NewBuffer(1024)
-	buf.Write([]byte("hello world"))
+func BenchmarkStandardBuffer_Bytes(b *testing.B) {
+	buf := NewUnsafeBuffer(1024)
+	buf.Write(bytes.Repeat([]byte("x"), 1024))
 
 	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		_ = buf.String()
-	}
-}
-
-func BenchmarkBuffer_Bytes(b *testing.B) {
-	buf := NewBuffer(1024)
-	buf.Write([]byte("hello world"))
-
-	b.ResetTimer()
+	b.SetBytes(1024)
 
 	for i := 0; i < b.N; i++ {
 		_ = buf.Bytes()
 	}
 }
 
-// Benchmark pool operations
+func BenchmarkStandardBuffer_String(b *testing.B) {
+	buf := NewUnsafeBuffer(1024)
+	buf.Write(bytes.Repeat([]byte("x"), 1024))
 
-func BenchmarkPool_Get(b *testing.B) {
-	sizes := []int{64, 256, 1024, 4096, 16384, 65536}
-	p := newPool()
+	b.ResetTimer()
+	b.SetBytes(1024)
 
-	for _, size := range sizes {
-		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
-			b.SetBytes(int64(size))
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i++ {
-				buf := p.Get(size)
-				_ = buf[0] // Prevent optimization
-			}
-		})
+	for i := 0; i < b.N; i++ {
+		_ = buf.String()
 	}
 }
 
-func BenchmarkPool_GetPut(b *testing.B) {
-	sizes := []int{64, 256, 1024, 4096, 16384, 65536}
-	p := newPool()
-
-	for _, size := range sizes {
-		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
-			b.SetBytes(int64(size))
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i++ {
-				buf := p.Get(size)
-				p.Put(buf)
-			}
-		})
-	}
-}
-
-func BenchmarkPool_GetBuffer(b *testing.B) {
-	p := newPool()
+func BenchmarkStandardBuffer_Reset(b *testing.B) {
+	buf := NewUnsafeBuffer(1024)
+	data := make([]byte, 512)
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		buf := p.GetBuffer(1024)
-		p.PutBuffer(buf)
+		buf.Write(data)
+		buf.Reset()
 	}
 }
 
-// Benchmark vs standard library
+func BenchmarkStandardBuffer_Clear(b *testing.B) {
+	buf := NewUnsafeBuffer(1024)
+	data := make([]byte, 512)
 
-func BenchmarkComparison_Buffer_vs_BytesBuffer(b *testing.B) {
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf.Write(data)
+		buf.Clear()
+	}
+}
+
+// Benchmark sharded buffer operations
+
+func BenchmarkShardedBuffer_Write(b *testing.B) {
+	shardCounts := []int{4, 8, 16, 32}
+
+	for _, shards := range shardCounts {
+		b.Run(fmt.Sprintf("shards_%d", shards), func(b *testing.B) {
+			buf := NewSafeShardedBuffer(65536, shards)
+			data := make([]byte, 256)
+
+			b.ResetTimer()
+			b.SetBytes(256)
+
+			for i := 0; i < b.N; i++ {
+				buf.Write(data)
+				if i%(1000) == 0 {
+					buf.Reset()
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkShardedBuffer_Balance(b *testing.B) {
+	buf := NewSafeShardedBuffer(4096, 16)
+
+	// Create imbalanced distribution
+	for i := 0; i < 10; i++ {
+		buf.WriteToShard(0, make([]byte, 100))
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf.Balance()
+	}
+}
+
+// Benchmark pool operations
+
+func BenchmarkPool_GetPut(b *testing.B) {
+	pool := GetGlobalPool()
+
+	sizes := []int{256, 1024, 4096, 16384}
+
+	for _, size := range sizes {
+		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				buf := pool.Get(size)
+				pool.Put(buf)
+			}
+		})
+	}
+}
+
+func BenchmarkPool_GetBufferPutBuffer(b *testing.B) {
+	pool := GetGlobalPool()
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf := pool.GetBuffer(1024)
+		buf.Write([]byte("test"))
+		pool.PutBuffer(buf)
+	}
+}
+
+// Concurrent benchmarks
+
+func BenchmarkConcurrent_StandardBuffer(b *testing.B) {
+	data := make([]byte, 100)
+
+	b.RunParallel(func(pb *testing.PB) {
+		buf := NewUnsafeBuffer(10000)
+		for pb.Next() {
+			buf.Write(data)
+			if buf.Available() < 100 {
+				buf.Reset()
+			}
+		}
+	})
+}
+
+func BenchmarkConcurrent_ShardedBuffer(b *testing.B) {
+	buf := NewSafeShardedBuffer(100000, 16)
+	data := make([]byte, 100)
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			buf.Write(data)
+			if buf.Available() < 1000 {
+				buf.Reset()
+			}
+		}
+	})
+}
+
+func BenchmarkConcurrent_Pool(b *testing.B) {
+	pool := GetGlobalPool()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			buf := pool.Get(1024)
+			// Simulate some work
+			for i := 0; i < len(buf) && i < 100; i++ {
+				buf[i] = byte(i)
+			}
+			pool.Put(buf)
+		}
+	})
+}
+
+// Memory allocation benchmarks
+
+func BenchmarkAllocation_StandardBuffer(b *testing.B) {
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		buf := NewUnsafeBuffer(1024)
+		buf.Write([]byte("test"))
+		_ = buf.String()
+	}
+}
+
+func BenchmarkAllocation_WithPool(b *testing.B) {
+	pool := GetGlobalPool()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		buf := pool.GetBuffer(1024)
+		buf.Write([]byte("test"))
+		_ = buf.String()
+		pool.PutBuffer(buf)
+	}
+}
+
+func BenchmarkAllocation_ZeroCopy(b *testing.B) {
+	buf := NewUnsafeBuffer(1024)
+	data := []byte("test data")
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		buf.Reset()
+		buf.Write(data)
+		_ = buf.Bytes()  // Zero-copy
+		_ = buf.String() // Zero-allocation
+	}
+}
+
+// Comparison benchmarks with standard library
+
+func BenchmarkComparison_StandardBuffer_vs_BytesBuffer(b *testing.B) {
 	data := make([]byte, 1024)
 
-	b.Run("kbuffer.Buffer", func(b *testing.B) {
-		b.SetBytes(1024)
+	b.Run("kbuffer", func(b *testing.B) {
+		buf := NewUnsafeBuffer(2048)
 		b.ResetTimer()
+		b.SetBytes(1024)
 
 		for i := 0; i < b.N; i++ {
-			buf := NewBuffer(1024)
+			buf.Reset()
 			buf.Write(data)
-			_ = buf.String()
+			_ = buf.Bytes()
 		}
 	})
 
 	b.Run("bytes.Buffer", func(b *testing.B) {
+		buf := bytes.NewBuffer(make([]byte, 0, 2048))
+		b.ResetTimer()
 		b.SetBytes(1024)
-		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			buf := &bytes.Buffer{}
-			buf.Write(data)
-			_ = buf.String()
-		}
-	})
-}
-
-func BenchmarkComparison_Pool_vs_Make(b *testing.B) {
-	p := newPool()
-
-	b.Run("pool.Get", func(b *testing.B) {
-		b.SetBytes(4096)
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			buf := p.Get(4096)
-			buf[0] = 1 // Use buffer
-			p.Put(buf)
-		}
-	})
-
-	b.Run("make", func(b *testing.B) {
-		b.SetBytes(4096)
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			buf := make([]byte, 4096)
-			buf[0] = 1 // Use buffer
-		}
-	})
-}
-
-// Benchmark concurrent access
-
-func BenchmarkPool_Concurrent(b *testing.B) {
-	p := newPool()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			buf := p.Get(1024)
-			copy(buf, []byte("test data"))
-			p.Put(buf)
-		}
-	})
-}
-
-func BenchmarkBuffer_Concurrent(b *testing.B) {
-	b.RunParallel(func(pb *testing.PB) {
-		buf := NewBuffer(1024)
-		data := []byte("test data")
-
-		for pb.Next() {
 			buf.Reset()
 			buf.Write(data)
-			_ = buf.String()
+			_ = buf.Bytes()
 		}
 	})
 }
 
-// Benchmark memory allocations
+// Scalability benchmarks
 
-func BenchmarkAllocations_Buffer(b *testing.B) {
-	data := []byte("hello world")
+func BenchmarkScalability_ShardedBuffer(b *testing.B) {
+	data := make([]byte, 100)
 
-	b.ReportAllocs()
-	b.ResetTimer()
+	for _, numCPU := range []int{1, 2, 4, 8, 16} {
+		b.Run(fmt.Sprintf("cpu_%d", numCPU), func(b *testing.B) {
+			runtime.GOMAXPROCS(numCPU)
+			defer runtime.GOMAXPROCS(runtime.NumCPU())
 
-	for i := 0; i < b.N; i++ {
-		buf := NewBuffer(100)
-		buf.Write(data)
-		_ = buf.String()
-	}
-}
+			buf := NewSafeShardedBuffer(1000000, numCPU*2)
+			var wg sync.WaitGroup
+			var ops atomic.Int64
 
-func BenchmarkAllocations_Pool(b *testing.B) {
-	p := newPool()
+			b.ResetTimer()
 
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		buf := p.Get(100)
-		copy(buf, []byte("hello"))
-		p.Put(buf)
-	}
-}
-
-func BenchmarkAllocations_PoolReuse(b *testing.B) {
-	p := newPool()
-
-	// Pre-warm pool
-	for i := 0; i < 100; i++ {
-		buf := make([]byte, 1024)
-		p.Put(buf)
-	}
-
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		buf := p.Get(1024)
-		copy(buf, []byte("test"))
-		p.Put(buf)
-	}
-}
-
-// Benchmark with various workloads
-
-func BenchmarkWorkload_SmallWrites(b *testing.B) {
-	buf := NewBuffer(1024)
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		for j := 0; j < 100; j++ {
-			buf.WriteByte(byte(j))
-		}
-	}
-}
-
-func BenchmarkWorkload_MixedOperations(b *testing.B) {
-	buf := NewBuffer(4096)
-	data := []byte("test data")
-	str := "string data"
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		buf.Write(data)
-		buf.WriteString(str)
-		buf.WriteByte('x')
-		_ = buf.Len()
-		_ = buf.Available()
-		_ = buf.String()
-	}
-}
-
-func BenchmarkWorkload_PoolChurn(b *testing.B) {
-	p := newPool()
-	sizes := []int{64, 128, 256, 512, 1024, 2048, 4096}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		size := sizes[i%len(sizes)]
-		buf := p.Get(size)
-		for j := 0; j < size; j++ {
-			buf[j] = byte(j)
-		}
-		p.Put(buf)
-	}
-}
-
-// Benchmark pool efficiency
-
-func BenchmarkPoolEfficiency(b *testing.B) {
-	p := newPool()
-
-	// Run workload
-	var wg sync.WaitGroup
-	workers := runtime.NumCPU()
-	opsPerWorker := b.N / workers
-
-	wg.Add(workers)
-	for w := 0; w < workers; w++ {
-		go func() {
-			defer wg.Done()
-			for i := 0; i < opsPerWorker; i++ {
-				buf := p.Get(1024)
-				copy(buf, []byte("test"))
-				p.Put(buf)
+			for i := 0; i < numCPU; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for j := 0; j < b.N/numCPU; j++ {
+						buf.Write(data)
+						ops.Add(1)
+						if j%1000 == 0 && buf.Available() < 10000 {
+							buf.Reset()
+						}
+					}
+				}()
 			}
-		}()
+
+			wg.Wait()
+			b.SetBytes(100 * ops.Load() / int64(b.N))
+		})
+	}
+}
+
+// Cache efficiency benchmarks
+
+func BenchmarkCacheEfficiency_Sequential(b *testing.B) {
+	buf := NewUnsafeBuffer(1 << 20) // 1MB
+	data := make([]byte, cacheLineSize)
+
+	b.ResetTimer()
+	b.SetBytes(int64(cacheLineSize))
+
+	for i := 0; i < b.N; i++ {
+		buf.Write(data)
+		if buf.Available() < cacheLineSize {
+			buf.Reset()
+		}
+	}
+}
+
+func BenchmarkCacheEfficiency_Random(b *testing.B) {
+	const bufSize = 1 << 20
+	buf := NewUnsafeBuffer(bufSize)
+	data := make([]byte, cacheLineSize)
+
+	// Fill buffer first
+	for buf.Available() >= cacheLineSize {
+		buf.Write(data)
 	}
 
-	wg.Wait()
+	b.ResetTimer()
+	b.SetBytes(int64(cacheLineSize))
+
+	for i := 0; i < b.N; i++ {
+		offset := int64((i * 7919) % (bufSize - cacheLineSize))
+		buf.WriteAt(data, offset)
+	}
+}
+
+// Contention benchmarks
+
+func BenchmarkContention_Sharded(b *testing.B) {
+	data := []byte("test")
+
+	for _, numGoroutines := range []int{1, 10, 100} {
+		b.Run(fmt.Sprintf("goroutines_%d", numGoroutines), func(b *testing.B) {
+			buf := NewSafeShardedBuffer(100000, numGoroutines)
+			b.SetParallelism(numGoroutines)
+			b.ResetTimer()
+
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					buf.Write(data)
+					if buf.Available() < 1000 {
+						buf.Reset()
+					}
+				}
+			})
+		})
+	}
+}
+
+// Unsafe operation benchmarks
+
+func BenchmarkUnsafe_StringConversion(b *testing.B) {
+	buf := NewUnsafeBuffer(1024)
+	buf.Write([]byte("hello world test data"))
+
+	b.Run("zero_alloc", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = buf.String() // Zero-allocation string conversion
+		}
+	})
+
+	b.Run("standard", func(b *testing.B) {
+		data := buf.Bytes()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = string(data) // Standard conversion
+		}
+	})
+}
+
+func BenchmarkUnsafe_BytesAccess(b *testing.B) {
+	buf := NewUnsafeBuffer(1024)
+	buf.Write(make([]byte, 1024))
+
+	b.Run("unsafe_pointer", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ptr, length := buf.BytesUnsafe()
+			// Simply verify we got the pointer and length
+			// Don't convert to avoid go vet warnings
+			if ptr == 0 || length == 0 {
+				b.Fatal("BytesUnsafe returned invalid values")
+			}
+		}
+	})
+
+	b.Run("standard", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = buf.Bytes()
+		}
+	})
 }

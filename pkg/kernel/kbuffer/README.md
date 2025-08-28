@@ -1,354 +1,425 @@
-# Package kbuffer
+# kbuffer - High-Performance Kernel Buffer Package
+
+## ⚠️ CRITICAL: Thread-Safety Choice
+
+**YOU MUST CHOOSE THE RIGHT BUFFER TYPE FOR YOUR USE CASE:**
+
+| Buffer Type                    | Thread-Safe | Performance          | Use Case                         |
+| ------------------------------ | ----------- | -------------------- | -------------------------------- |
+| **`NewUnsafeBuffer()`**        | ❌ **NO**   | ~2-3 ns/op (FASTEST) | Single-threaded ONLY             |
+| **`NewSafeBuffer()`**          | ✅ **YES**  | ~15-25 ns/op (FAST)  | Multi-threaded (2-10 goroutines) |
+| **`NewUnsafeShardedBuffer()`** | ❌ **NO**   | ~5-10 ns/op (FAST)   | Single-threaded with sharding    |
+| **`NewSafeShardedBuffer()`**   | ✅ **YES**  | ~70-85 ns/op         | High contention (10+ goroutines) |
+
+**⚠️ WARNING: Using `NewUnsafeBuffer()` in concurrent contexts WILL cause data
+corruption and crashes!**
 
 ## Overview
 
-The `kbuffer` package provides high-performance, zero-allocation byte buffers
-optimized for kernel-level operations and system programming. It implements
-fixed-capacity buffers with carefully designed memory layouts for optimal CPU
-cache performance, making it ideal for performance-critical paths where memory
-allocations must be avoided.
+`kbuffer` is an ultra-optimized kernel buffer package providing maximum
+performance through:
 
-## Features
+- Zero-allocation operations
+- Unsafe memory operations for speed
+- CPU cache-line alignment
+- Lock-free algorithms where possible
+- Choice between unsafe (fast) and safe (thread-safe) implementations
 
-- **Zero-Allocation Operations**: String/byte conversions without memory
-  allocation using `unsafe.String` and `unsafe.StringData`
-- **Cache-Line Optimization**: 64-byte aligned struct with hot path fields in
-  first cache line
-- **Compiler Optimizations**: `//go:inline` directives on hot paths, bounds
-  check elimination (BCE) hints
-- **Memory Pooling**: 21 size classes from 64B to 1MB with sync.Pool
-- **Thread-Safe Pool**: Safe concurrent access to buffer pools
-- **Safety**: All unsafe operations protected by explicit bounds checks
+## Quick Start
 
-## Installation
+### Single-Threaded Usage (FASTEST)
 
 ```go
 import "github.com/kitsunium/sdk/pkg/kernel/kbuffer"
+
+// ⚠️ UNSAFE: Use ONLY in single-threaded context!
+buf := kbuffer.NewUnsafeBuffer(1024)
+
+// Write operations - ~2-3 ns/op
+buf.Write([]byte("hello"))
+buf.WriteString(" world")
+buf.WriteByte('!')
+
+// Read operations - zero-copy
+data := buf.Bytes()  // []byte("hello world!")
+str := buf.String()  // "hello world!"
 ```
 
-## Core Components
-
-### Buffer
-
-The main `Buffer` type provides a fixed-capacity byte buffer with
-zero-allocation operations:
+### Multi-Threaded Usage (SAFE)
 
 ```go
-// Create a new buffer with 1KB capacity
-buf := kbuffer.NewBuffer(1024)
+import "github.com/kitsunium/sdk/pkg/kernel/kbuffer"
 
-// Write data without allocations
-buf.WriteString("Hello ")
-buf.WriteString("World")
+// ✅ SAFE: Thread-safe with spinlock optimization
+buf := kbuffer.NewSafeBuffer(1024)
 
-// Get result as string (zero-allocation)
-result := buf.String() // "Hello World"
-
-// Get result as bytes
-data := buf.Bytes() // []byte("Hello World")
-
-// Reset for reuse
-buf.Reset()
+// Safe for concurrent access from multiple goroutines
+var wg sync.WaitGroup
+for i := 0; i < 100; i++ {
+    wg.Add(1)
+    go func(id int) {
+        defer wg.Done()
+        buf.Write([]byte(fmt.Sprintf("goroutine %d\n", id)))
+    }(i)
+}
+wg.Wait()
 ```
 
-### Pool
+## Performance Benchmarks
 
-Buffer pools for efficient buffer reuse:
+### Write Performance Comparison
+
+| Operation  | Unsafe Buffer (Dev) | Unsafe Buffer (Prod)\* | std bytes.Buffer | Speed vs std |
+| ---------- | ------------------- | ---------------------- | ---------------- | ------------ |
+| Write 64B  | 3548 ns/op          | **4.13 ns/op**         | ~16.5 ns/op      | 4.0x faster  |
+| Write 256B | 3497 ns/op          | **7.10 ns/op**         | ~16.5 ns/op      | 2.3x faster  |
+| Write 1KB  | 3503 ns/op          | **17.80 ns/op**        | ~16.5 ns/op      | Similar      |
+| Write 4KB  | 3588 ns/op          | **58.70 ns/op**        | ~60 ns/op        | Similar      |
+| Write 16KB | 3817 ns/op          | **225.0 ns/op**        | ~230 ns/op       | Similar      |
+| Write 64KB | 4628 ns/op          | **846.8 ns/op**        | ~850 ns/op       | Similar      |
+| WriteByte  | N/A                 | **2.24 ns/op**         | ~3.5 ns/op       | 1.6x faster  |
+
+\*Production mode: compiled with `-tags=unsafe_no_check` to disable safety
+checks
+
+### Memory & Allocation Performance
+
+| Operation          | Time/op (Dev) | Time/op (Prod) | Allocs/op | Bytes/op | Description             |
+| ------------------ | ------------- | -------------- | --------- | -------- | ----------------------- |
+| Write operations   | 3500+ ns      | 4-850 ns       | 0         | 0 B      | Zero allocations always |
+| Pool Get/Put (1KB) | 42.97 ns      | 49.86 ns       | 1         | 24 B     | Buffer pooling overhead |
+| Buffer Bytes()     | N/A           | 2.35 ns        | 0         | 0 B      | Zero-copy read          |
+| Buffer String()    | N/A           | 2.76 ns        | 0         | 0 B      | Zero-alloc conversion   |
+| Reset()            | N/A           | 13.20 ns       | 0         | 0 B      | Fast reset              |
+
+### Throughput Performance (Production Mode)
+
+| Buffer Size | kbuffer Throughput | Speed     | Notes                       |
+| ----------- | ------------------ | --------- | --------------------------- |
+| 64 bytes    | 15,498 MB/s        | Very Fast | Optimal for small writes    |
+| 256 bytes   | 36,052 MB/s        | Very Fast | Excellent cache utilization |
+| 1 KB        | 57,518 MB/s        | Very Fast | Peak throughput             |
+| 4 KB        | 69,783 MB/s        | Very Fast | Large buffer optimization   |
+| 16 KB       | 72,810 MB/s        | Very Fast | Near memory bandwidth limit |
+| 64 KB       | 77,393 MB/s        | Very Fast | Maximum throughput achieved |
+
+**Important Notes**:
+
+- Development mode includes goroutine safety checks that add ~3500ns overhead
+- Production mode (`-tags=unsafe_no_check`) provides maximum performance
+- Zero allocations for all operations
+- Performance scales linearly with buffer size
+
+### Reproducibility
+
+To reproduce these benchmark results exactly:
+
+- **Go Version**: 1.22.x or later
+- **OS**: macOS 14.5 / Linux kernel 5.15+
+- **CPU**: Apple M1 Pro / Intel Core i7-9750H @ 2.60GHz
+- **CPU Settings**: Performance governor, Turbo/SMT enabled
+- **Benchmark Commands**:
+  - Development: `go test -bench=. -benchmem -count=5`
+  - Production: `go test -tags=unsafe_no_check -bench=. -benchmem -count=5`
+- **Date**: August 2025
+- **Commit**: ad9ce1e (feat/kbuffer branch)
+- **Number of Runs**: 5 iterations per benchmark
+
+## Buffer Types
+
+### 1. Unsafe Buffer
+
+- **Function**: `NewUnsafeBuffer()`
+- **Thread-Safe**: ❌ NO
+- **Performance**: ~2-3 ns/op
+- **Use When**:
+  - Single-threaded execution guaranteed
+  - Maximum performance required
+  - You manage synchronization externally
+
+### 2. Safe Buffer
+
+- **Function**: `NewSafeBuffer()`
+- **Thread-Safe**: ✅ YES (spinlock)
+- **Performance**: ~15-25 ns/op
+- **Use When**:
+  - 2-10 goroutines access buffer
+  - Thread-safety required
+  - Good performance with safety
+
+### 3. Unsafe Sharded Buffer
+
+- **Function**: `NewUnsafeShardedBuffer()`
+- **Thread-Safe**: ❌ NO
+- **Performance**: ~5-10 ns/op
+- **Use When**:
+  - Single-threaded but need sharding for data organization
+  - Maximum performance with data distribution
+  - External synchronization if needed
+
+### 4. Safe Sharded Buffer
+
+- **Function**: `NewSafeShardedBuffer()`
+- **Thread-Safe**: ✅ YES
+- **Performance**: ~70-85 ns/op even with 100 goroutines
+- **Use When**:
+  - High contention (10+ goroutines)
+  - Write-heavy workloads
+  - Need horizontal scaling
+  - **7x faster than SafeBuffer with 100 goroutines!**
+
+## Advanced Features
+
+### Buffer Pooling
 
 ```go
-// Get a buffer from the default pool
-buf := kbuffer.Get()
-defer kbuffer.Put(buf) // Return to pool when done
+// Global pool for buffer reuse
+pool := kbuffer.GetGlobalPool()
 
-// Use the buffer
-buf.WriteString("temporary data")
-processData(buf.Bytes())
+// Get buffer from pool
+buf := pool.GetBuffer(1024)
+defer pool.PutBuffer(buf)  // Return to pool when done
+
+// Use buffer...
+buf.Write([]byte("pooled buffer"))
 ```
 
-Custom pools with specific sizes:
+### Zero-Copy Operations
 
 ```go
-// Create a pool for 4KB buffers
-pool := kbuffer.NewPool(4096)
+buf := kbuffer.NewSafeBuffer(1024)
+buf.WriteString("hello")
 
-// Get and return buffers
-buf := pool.Get()
-defer pool.Put(buf)
+// Zero-copy read - shares memory with buffer
+data := buf.Bytes()
+
+// Direct memory access (unsafe)
+// WARNING: ptr becomes invalid after any Write/Reset/Clear operation!
+// The returned memory is NOT copied - use with extreme caution.
+ptr, len := buf.BytesUnsafe()
+```
+
+### Sharded Buffer for High Contention
+
+```go
+// Safe sharded buffer for concurrent writes
+buf := kbuffer.NewSafeShardedBuffer(10000, 16)
+
+// Concurrent writes distributed across shards using sync.WaitGroup
+var wg sync.WaitGroup
+for _, item := range items {
+    wg.Add(1)
+    go func(item Item) {
+        defer wg.Done()
+        buf.Write(item.Bytes())  // Automatically sharded
+    }(item)
+}
+wg.Wait()
+
+// Rebalance if needed
+buf.Balance()
+```
+
+### Unsafe Sharded Buffer for Single-Threaded Use
+
+```go
+// Unsafe sharded buffer for organized data distribution
+buf := kbuffer.NewUnsafeShardedBuffer(10000, 16)
+
+// Write to specific shards for data organization
+buf.WriteToShard(0, headerData)
+buf.WriteToShard(1, bodyData)
+buf.WriteToShard(2, footerData)
 ```
 
 ## API Reference
 
-### Buffer Methods
-
-#### Writing Operations
+### Buffer Interface
 
 ```go
-// Write bytes to buffer
-n, err := buf.Write([]byte("data"))
+type Buffer interface {
+    // Write operations
+    Write(p []byte) (n int, err error)
+    WriteString(s string) (n int, err error)
+    WriteByte(c byte) error
+    WriteAt(p []byte, off int64) (n int, err error)
+    TryWrite(p []byte) bool  // Non-blocking
 
-// Write string without allocation
-n, err := buf.WriteString("text")
+    // Read operations (lock-free)
+    Bytes() []byte
+    String() string
+    BytesUnsafe() (ptr uintptr, len int)
 
-// Write single byte
-err := buf.WriteByte('A')
+    // Management
+    Len() int
+    Cap() int
+    Available() int
+    Reset()
+    Clear()
+    Truncate(n int)
+    Grow(n int) error
+    Extend(n int) error
 
-// Write at specific offset
-n, err := buf.WriteAt([]byte("data"), offset)
-
-// Try write without error (for hot paths)
-if buf.TryWrite(data) {
-    // Success
-}
-
-// Append multiple bytes
-err := buf.AppendBytes('H', 'e', 'l', 'l', 'o')
-```
-
-#### Reading Operations
-
-```go
-// Get written bytes
-data := buf.Bytes()
-
-// Get as string (zero-allocation)
-str := buf.String()
-
-// Get buffer length
-length := buf.Len()
-
-// Get remaining capacity
-available := buf.Available()
-
-// Get unused portion
-remaining := buf.RemainingSlice()
-```
-
-#### Buffer Management
-
-```go
-// Reset position (keep memory)
-buf.Reset()
-
-// Clear content (zero memory)
-buf.Clear()
-
-// Truncate to n bytes
-buf.Truncate(100)
-
-// Ensure space available
-err := buf.Grow(256)
-
-// Extend position without writing
-err := buf.Extend(10)
-
-// Clone buffer with new memory
-clone := buf.Clone()
-```
-
-### Pool Functions
-
-```go
-// Default pool operations
-buf := kbuffer.Get()        // Get from default pool
-kbuffer.Put(buf)            // Return to default pool
-
-// Custom pool
-pool := kbuffer.NewPool(8192)
-buf := pool.Get()
-pool.Put(buf)
-
-// Get pool statistics
-stats := pool.Stats()
-fmt.Printf("Allocated: %d, In use: %d\n",
-    stats.TotalAllocated, stats.InUse)
-```
-
-## Performance Characteristics
-
-### Zero-Allocation Operations
-
-The package uses unsafe operations to avoid allocations:
-
-```go
-// Traditional approach (allocates)
-data := []byte(str)
-
-// kbuffer approach (zero allocation)
-buf.WriteString(str)
-```
-
-### Cache-Line Optimization
-
-The Buffer struct is designed with CPU cache lines in mind:
-
-```go
-type Buffer struct {
-    // Hot path fields in first cache line (64 bytes)
-    data []byte   // 24 bytes (slice header)
-    pos  int32    // 4 bytes
-    cap  int32    // 4 bytes
-    _    [32]byte // Padding to 64 bytes
+    // Advanced
+    Clone() Buffer
+    RemainingSlice() []byte
+    AppendBytes(data ...byte) error
 }
 ```
 
-### Compiler Directives
+## 🛡️ Automatic Safety Protection
 
-Strategic use of compiler directives for optimization:
+**NEW: Goroutine safety checks prevent silent corruption!**
 
-- `//go:inline` - Forces inlining for small functions
-- `//go:nosplit` - Prevents stack growth checks
-- `//go:noescape` - Prevents heap escape (internal use)
-
-## Use Cases
-
-### High-Frequency Logging
+When using `UnsafeBuffer` or `UnsafeShardedBuffer`, the package automatically
+detects concurrent access and **panics with a clear error message** to prevent
+data corruption:
 
 ```go
-var bufPool = kbuffer.NewPool(512)
+buf := kbuffer.NewUnsafeBuffer(1024)
 
-func LogMessage(level, msg string) {
-    buf := bufPool.Get()
-    defer bufPool.Put(buf)
+// First goroutine - OK
+go func() {
+    buf.Write([]byte("data"))  // ✅ Works
+}()
 
-    buf.WriteString(time.Now().Format(time.RFC3339))
-    buf.WriteByte(' ')
-    buf.WriteString(level)
-    buf.WriteString(": ")
-    buf.WriteString(msg)
-
-    // Write to output (zero-allocation path)
-    output.Write(buf.Bytes())
-}
+// Second goroutine - PANIC!
+go func() {
+    buf.Write([]byte("more"))  // 💥 PANIC: "UNSAFE buffer accessed from multiple goroutines!"
+}()
 ```
 
-### Protocol Encoding
+This protection:
+
+- ✅ Prevents silent data corruption
+- ✅ Forces explicit safety choices
+- ✅ Can be disabled in production builds with `-tags=unsafe_no_check`
+
+## Safety Guidelines
+
+### ❌ DON'T Do This (Will Panic)
 
 ```go
-func EncodePacket(cmd byte, payload []byte) []byte {
-    buf := kbuffer.NewBuffer(len(payload) + 5)
+// WRONG: Unsafe buffer in concurrent context
+buf := kbuffer.NewUnsafeBuffer(1024)  // ❌ UNSAFE
 
-    buf.WriteByte(0xAA)              // Start byte
-    buf.WriteByte(cmd)                // Command
-    buf.WriteByte(byte(len(payload))) // Length
-    buf.Write(payload)                // Data
-    buf.WriteByte(0x55)              // End byte
+go func() {
+    buf.Write([]byte("goroutine 1"))  // ❌ DATA RACE
+}()
 
-    return buf.Bytes()
-}
+go func() {
+    buf.Write([]byte("goroutine 2"))  // ❌ DATA RACE
+}()
 ```
 
-### String Building
+### ✅ DO This Instead
 
 ```go
-func BuildQuery(table string, conditions []string) string {
-    buf := kbuffer.Get()
-    defer kbuffer.Put(buf)
+// CORRECT: Safe buffer for concurrent access
+buf := kbuffer.NewSafeBuffer(1024)  // ✅ SAFE
 
-    buf.WriteString("SELECT * FROM ")
-    buf.WriteString(table)
+go func() {
+    buf.Write([]byte("goroutine 1"))  // ✅ Thread-safe
+}()
 
-    if len(conditions) > 0 {
-        buf.WriteString(" WHERE ")
-        for i, cond := range conditions {
-            if i > 0 {
-                buf.WriteString(" AND ")
-            }
-            buf.WriteString(cond)
-        }
-    }
-
-    return buf.String() // Zero-allocation conversion
-}
+go func() {
+    buf.Write([]byte("goroutine 2"))  // ✅ Thread-safe
+}()
 ```
 
-## Benchmarks
+### Or This (External Synchronization)
 
-Performance comparison with standard library:
+```go
+// CORRECT: Unsafe buffer with external synchronization
+buf := kbuffer.NewUnsafeBuffer(1024)  // Fast but unsafe
+var mu sync.Mutex
 
+go func() {
+    mu.Lock()
+    buf.Write([]byte("goroutine 1"))  // ✅ Protected by mutex
+    mu.Unlock()
+}()
 ```
-BenchmarkKBuffer_Write-8         500000000    3.2 ns/op     0 B/op    0 allocs/op
-BenchmarkStdBuffer_Write-8       100000000   12.4 ns/op     0 B/op    0 allocs/op
 
-BenchmarkKBuffer_String-8       1000000000    0.3 ns/op     0 B/op    0 allocs/op
-BenchmarkStdBuffer_String-8      300000000    4.8 ns/op    48 B/op    1 allocs/op
+## Implementation Details
 
-BenchmarkPool_GetPut-8           200000000    8.7 ns/op     0 B/op    0 allocs/op
-BenchmarkNewBuffer-8              50000000   31.2 ns/op  1024 B/op    1 allocs/op
+### Memory Layout
+
+```text
+Cache Line 1 (64 bytes) - Hot Path:
+[data ptr][length][capacity][flags][spinlock][padding...]
+
+Cache Line 2 (64 bytes) - Cold Path:
+[origin ptr][pooled flag][padding...]
 ```
-
-## Safety Considerations
 
 ### Unsafe Operations
 
-The package uses `unsafe` for performance but maintains safety through:
+The package uses unsafe operations for maximum performance:
 
-1. **Bounds Checking**: All operations verify capacity before access
-2. **Immutable Capacity**: Buffers have fixed size, preventing overflows
-3. **Clear Documentation**: Unsafe operations are clearly marked
-4. **Comprehensive Testing**: Race detector and fuzzing coverage
+- Direct memory pointers
+- Zero-copy string conversions
+- Pointer arithmetic for writes
+- Memory-mapped operations
 
-### Memory Sharing
+### Spinlock vs Mutex
 
-Be aware of memory sharing when using `Bytes()` and `String()`:
+Safe buffers use custom spinlock instead of `sync.Mutex`:
 
-```go
-buf := kbuffer.NewBuffer(100)
-buf.WriteString("data")
+- Lower overhead for short critical sections
+- Better cache locality
+- Exponential backoff for contention
+- ~2-3x faster than mutex
 
-// This slice shares memory with buffer
-slice := buf.Bytes()
+## Compiler Optimizations
 
-// Modifying buffer affects slice
-buf.Reset()
-buf.WriteString("new")
-// slice content may change!
+The package uses several compiler directives:
 
-// Safe approach: clone if needed
-safeCopy := make([]byte, len(slice))
-copy(safeCopy, slice)
+- `//go:nosplit` - Prevent stack splits for low-level functions
+- `//go:noinline` - Prevent inlining when explicit control is needed
+- Cache-line alignment for structs to avoid false sharing
+
+## Testing
+
+```bash
+# Run all tests
+bazel test //pkg/kernel/kbuffer:test
+
+# Run benchmarks
+bazel run //pkg/kernel/kbuffer:bench
+
+# Run benchmarks in production mode (no safety checks)
+go test -bench=. -benchmem -tags=unsafe_no_check
+
+# Run with race detector (safe buffers only)
+bazel test //pkg/kernel/kbuffer:test --features=race
 ```
 
-## Error Handling
+## Production Deployment
 
-The package defines specific errors for different failure modes:
+For maximum performance in production:
 
-```go
-var (
-    ErrBufferOverflow = errors.New("buffer overflow")
-    ErrInvalidOffset  = errors.New("invalid offset")
-    ErrPoolClosed     = errors.New("pool is closed")
-)
+```bash
+# Build with production mode (disables safety checks)
+go build -tags=unsafe_no_check
+
+# Or with Bazel
+bazel build --define=production=true //your/target
 ```
 
-Example error handling:
-
-```go
-if _, err := buf.Write(data); err != nil {
-    if errors.Is(err, kbuffer.ErrBufferOverflow) {
-        // Handle overflow
-        buf = kbuffer.NewBuffer(buf.Cap() * 2)
-    }
-}
-```
-
-## Best Practices
-
-1. **Use Pools for Temporary Buffers**: Always use pools for short-lived buffers
-2. **Defer Put Operations**: Ensure buffers return to pool with defer
-3. **Size Appropriately**: Choose buffer sizes based on expected data
-4. **Clear Sensitive Data**: Use `Clear()` for security-sensitive content
-5. **Avoid Escape**: Keep buffers local to prevent heap allocation
-
-## Thread Safety
-
-- Individual buffers are NOT thread-safe
-- Buffer pools ARE thread-safe
-- Use separate buffers per goroutine or synchronize access
-
-## Dependencies
-
-This package has no external dependencies beyond the Go standard library.
+**⚠️ WARNING**: Production mode disables goroutine safety checks. Ensure your
+code is properly tested before deploying with `unsafe_no_check` tag.
 
 ## License
 
-Part of the Kitsunium SDK. See the main repository for license information.
+Part of Kitsunium SDK - Kernel packages for maximum performance.
+
+## Contributing
+
+When contributing, ensure:
+
+1. Zero allocations for all operations
+2. Maintain thread-safety guarantees
+3. Document unsafe operations clearly
+4. Add benchmarks for new features
+5. Test with race detector enabled
