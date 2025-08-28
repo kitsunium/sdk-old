@@ -422,23 +422,7 @@ func (b *safeShardedBuffer) Balance() {
 //go:inline
 //go:nosplit
 func getGoroutineID() uint32 {
-	// Get current goroutine pointer
-	g := getg()
-	if g == nil {
-		return 0
-	}
-
-	// Extract ID from goroutine structure
-	// This is a hack but provides good distribution
-	return uint32(uintptr(unsafe.Pointer(g)) >> 10)
-}
-
-// getg returns current goroutine pointer.
-//
-//go:nosplit
-func getg() unsafe.Pointer {
-	// This is architecture-specific and may need adjustment
-	// Using runtime.Stack as fallback for portability
+	// Use runtime.Stack to get goroutine info
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)
 	if n > 0 {
@@ -447,9 +431,9 @@ func getg() unsafe.Pointer {
 		for i := 0; i < n; i++ {
 			hash = hash*31 + uint32(buf[i])
 		}
-		return unsafe.Pointer(uintptr(hash))
+		return hash
 	}
-	return nil
+	return 0
 }
 
 // nextPowerOf2 rounds up to next power of 2.

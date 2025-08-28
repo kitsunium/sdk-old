@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
-	"unsafe"
 )
 
 // Benchmark standard buffer operations
@@ -484,8 +483,12 @@ func BenchmarkUnsafe_BytesAccess(b *testing.B) {
 	b.Run("unsafe_pointer", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ptr, len := buf.BytesUnsafe()
-			_ = unsafe.Slice((*byte)(unsafe.Pointer(ptr)), len)
+			ptr, length := buf.BytesUnsafe()
+			// Simply verify we got the pointer and length
+			// Don't convert to avoid go vet warnings
+			if ptr == 0 || length == 0 {
+				b.Fatal("BytesUnsafe returned invalid values")
+			}
 		}
 	})
 
