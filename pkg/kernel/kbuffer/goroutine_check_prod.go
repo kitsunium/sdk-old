@@ -3,6 +3,9 @@
 
 package kbuffer
 
+// goroutineChecker is a no-op in production builds
+type goroutineChecker struct{}
+
 // checkSafety is a no-op in production builds (unsafe_no_check)
 // This completely eliminates any runtime overhead
 //
@@ -11,3 +14,6 @@ func (g *goroutineChecker) checkSafety() {
 	// No-op: safety checks are disabled in production
 	// The compiler will inline this empty function
 }
+
+// testingSkipSafetyCheck is not used in production builds but needs to exist for tests to compile
+var testingSkipSafetyCheck bool
