@@ -1,3 +1,6 @@
+// Package kbuffer provides ultra-optimized, lock-free byte buffers for kernel operations.
+// This file contains the unsafe sharded buffer implementation for maximum performance
+// in single-threaded contexts where sharding is needed for algorithmic reasons.
 package kbuffer
 
 import (
@@ -9,6 +12,8 @@ var _ Sharded = (*unsafeShardedBuffer)(nil)
 
 // unsafeShardedBuffer provides NON-THREAD-SAFE sharded buffer for maximum performance.
 // WARNING: Only use in single-threaded context or with external synchronization!
+// This implementation provides sharding benefits without synchronization overhead,
+// making it ideal for algorithms that need data distribution but run single-threaded.
 type unsafeShardedBuffer struct {
 	// Cache line 1 (64 bytes) - Core configuration
 	shards     []*unsafeBufferShard // Array of buffer shards (8 bytes)
@@ -24,7 +29,8 @@ type unsafeShardedBuffer struct {
 }
 
 // unsafeBufferShard represents a single UNSAFE shard.
-// Each shard is cache-line aligned to prevent false sharing.
+// Each shard is cache-line aligned to prevent false sharing even in single-threaded use.
+// The padding ensures optimal memory layout for sequential access patterns.
 type unsafeBufferShard struct {
 	// Cache line aligned shard data
 	buffer Buffer   // Underlying UNSAFE buffer implementation (8 bytes)
@@ -33,6 +39,8 @@ type unsafeBufferShard struct {
 
 // newUnsafeShardedBuffer creates an UNSAFE sharded buffer.
 // WARNING: NOT THREAD-SAFE! Use only in single-threaded context!
+// Creates a sharded buffer where each shard is an unsafe buffer for maximum performance.
+// Sharding helps with data organization and can improve cache locality for certain access patterns.
 //
 //go:nosplit
 func newUnsafeShardedBuffer(capacity, shardCount int, opts ...Option) Sharded {
@@ -88,6 +96,7 @@ func newUnsafeShardedBuffer(capacity, shardCount int, opts ...Option) Sharded {
 
 // selectShard chooses optimal shard using simple round-robin.
 // No goroutine affinity needed since this is single-threaded.
+// Uses a simple static counter for deterministic shard selection.
 //
 //go:inline
 //go:nosplit
@@ -101,7 +110,9 @@ func (b *unsafeShardedBuffer) selectShard() *unsafeBufferShard {
 }
 
 // Write distributes writes across shards.
-// NOT THREAD-SAFE - no synchronization!
+// NOT THREAD-SAFE - no synchronization! Will panic if used concurrently.
+// Attempts to write to shards in sequence until one accepts the data.
+// Returns the number of bytes written and any error.
 func (b *unsafeShardedBuffer) Write(p []byte) (n int, err error) {
 	// Check for concurrent access
 	b.checker.checkSafety()
@@ -118,7 +129,9 @@ func (b *unsafeShardedBuffer) Write(p []byte) (n int, err error) {
 }
 
 // WriteString performs sharded string write.
-// NOT THREAD-SAFE!
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Uses zero-copy string writing for maximum performance.
+// Returns the number of bytes written and any error.
 //
 //go:nosplit
 func (b *unsafeShardedBuffer) WriteString(s string) (n int, err error) {
@@ -136,7 +149,9 @@ func (b *unsafeShardedBuffer) WriteString(s string) (n int, err error) {
 }
 
 // WriteByte writes single byte to next available shard.
-// NOT THREAD-SAFE!
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Finds the first shard with available space and writes the byte.
+// Returns error only if all shards are full.
 //
 //go:inline
 func (b *unsafeShardedBuffer) WriteByte(c byte) error {
@@ -152,6 +167,9 @@ func (b *unsafeShardedBuffer) WriteByte(c byte) error {
 }
 
 // WriteAt writes at specific global offset across shards.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Calculates which shard contains the offset and performs the write.
+// Returns the number of bytes written and any error.
 func (b *unsafeShardedBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 	// Check for concurrent access
 	b.checker.checkSafety()
@@ -171,6 +189,9 @@ func (b *unsafeShardedBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 }
 
 // WriteToShard writes directly to specific shard.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Allows manual shard selection for advanced use cases and algorithms.
+// Returns the number of bytes written and any error.
 func (b *unsafeShardedBuffer) WriteToShard(shardIdx int, p []byte) (int, error) {
 	// Check for concurrent access
 	b.checker.checkSafety()
@@ -184,6 +205,9 @@ func (b *unsafeShardedBuffer) WriteToShard(shardIdx int, p []byte) (int, error) 
 }
 
 // TryWrite attempts non-blocking write to first available shard.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Since no locks are involved, this behaves identically to Write.
+// Returns true if any shard accepted the data, false if all are full.
 //
 //go:inline
 //go:nosplit
@@ -200,6 +224,8 @@ func (b *unsafeShardedBuffer) TryWrite(p []byte) bool {
 }
 
 // Bytes collects data from all shards into single slice.
+// Allocates a new slice and copies data from all shards in order.
+// The returned slice is independent of the buffer's internal memory.
 func (b *unsafeShardedBuffer) Bytes() []byte {
 	// Calculate total size
 	totalSize := 0
@@ -222,6 +248,8 @@ func (b *unsafeShardedBuffer) Bytes() []byte {
 }
 
 // String returns consolidated string from all shards.
+// Creates a consolidated view of all shard data as a single string.
+// Uses unsafe string conversion for performance after collecting the data.
 func (b *unsafeShardedBuffer) String() string {
 	data := b.Bytes()
 	if len(data) == 0 {
@@ -231,7 +259,9 @@ func (b *unsafeShardedBuffer) String() string {
 }
 
 // BytesUnsafe returns pointer to first shard's data.
-// WARNING: Only represents first shard, not all data.
+// WARNING: Only represents first shard, not all data!
+// This is a limitation of the interface - use Bytes() for complete data.
+// The pointer is valid until the buffer is modified or freed.
 //
 //go:inline
 //go:nosplit
@@ -243,6 +273,8 @@ func (b *unsafeShardedBuffer) BytesUnsafe() (ptr uintptr, len int) {
 }
 
 // Len returns total length across all shards.
+// Sums the current length of all shards to get total data size.
+// This requires iterating through all shards.
 //
 //go:nosplit
 func (b *unsafeShardedBuffer) Len() int {
@@ -254,6 +286,8 @@ func (b *unsafeShardedBuffer) Len() int {
 }
 
 // Cap returns total capacity across all shards.
+// Returns the sum of all shard capacities (precomputed at creation).
+// This is a constant value set when the buffer was created.
 //
 //go:inline
 //go:nosplit
@@ -262,6 +296,8 @@ func (b *unsafeShardedBuffer) Cap() int {
 }
 
 // Available returns total available space across all shards.
+// Sums the available space in each shard to get total free space.
+// This requires iterating through all shards to calculate.
 //
 //go:nosplit
 func (b *unsafeShardedBuffer) Available() int {
@@ -273,6 +309,8 @@ func (b *unsafeShardedBuffer) Available() int {
 }
 
 // Reset resets all shards to empty state.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Clears all shards back to zero length while preserving capacity.
 //
 //go:nosplit
 func (b *unsafeShardedBuffer) Reset() {
@@ -285,6 +323,8 @@ func (b *unsafeShardedBuffer) Reset() {
 }
 
 // Clear zeros and resets all shards.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Securely wipes all data across all shards before resetting.
 func (b *unsafeShardedBuffer) Clear() {
 	// Check for concurrent access
 	b.checker.checkSafety()
@@ -295,7 +335,9 @@ func (b *unsafeShardedBuffer) Clear() {
 }
 
 // Truncate sets the total buffer length to exactly n bytes.
-// This is an absolute operation, not relative.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// This is an absolute operation, not relative. Distributes the truncation
+// across shards proportionally with remainder handling.
 func (b *unsafeShardedBuffer) Truncate(n int) {
 	// Check for concurrent access
 	b.checker.checkSafety()
@@ -319,6 +361,8 @@ func (b *unsafeShardedBuffer) Truncate(n int) {
 }
 
 // Grow ensures space available in at least one shard.
+// Checks if any shard has at least n bytes of free space.
+// Returns nil if space is available, errBufferFull otherwise.
 //
 //go:inline
 func (b *unsafeShardedBuffer) Grow(n int) error {
@@ -332,6 +376,8 @@ func (b *unsafeShardedBuffer) Grow(n int) error {
 }
 
 // Extend advances position in first available shard.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Reserves n bytes in the first shard that has sufficient space.
 func (b *unsafeShardedBuffer) Extend(n int) error {
 	// Check for concurrent access
 	b.checker.checkSafety()
@@ -345,6 +391,8 @@ func (b *unsafeShardedBuffer) Extend(n int) error {
 }
 
 // Clone creates deep copy of sharded buffer.
+// Returns a new independent buffer with the same shard structure and data.
+// The clone is not pooled even if the original was from a pool.
 func (b *unsafeShardedBuffer) Clone() Buffer {
 	clone := &unsafeShardedBuffer{
 		shards:     make([]*unsafeBufferShard, b.shardCount),
@@ -366,6 +414,8 @@ func (b *unsafeShardedBuffer) Clone() Buffer {
 }
 
 // RemainingSlice returns remaining space from first available shard.
+// Searches shards in order for the first one with available space.
+// Returns nil if no shard has available space.
 //
 //go:nosplit
 func (b *unsafeShardedBuffer) RemainingSlice() []byte {
@@ -378,6 +428,8 @@ func (b *unsafeShardedBuffer) RemainingSlice() []byte {
 }
 
 // AppendBytes appends to first available shard.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Variadic convenience method equivalent to Write(data).
 func (b *unsafeShardedBuffer) AppendBytes(data ...byte) error {
 	if len(data) == 0 {
 		return nil
@@ -387,6 +439,8 @@ func (b *unsafeShardedBuffer) AppendBytes(data ...byte) error {
 }
 
 // ShardCount returns the number of shards.
+// Returns the shard count that was set when the buffer was created.
+// This is useful for algorithms that need to know the shard structure.
 //
 //go:inline
 //go:nosplit
@@ -395,6 +449,9 @@ func (b *unsafeShardedBuffer) ShardCount() int {
 }
 
 // Balance redistributes data across shards for better distribution.
+// NOT THREAD-SAFE! Will panic if used concurrently.
+// Collects all data and redistributes it evenly across shards.
+// Useful after uneven write patterns to optimize future access.
 func (b *unsafeShardedBuffer) Balance() {
 	// Check for concurrent access
 	b.checker.checkSafety()

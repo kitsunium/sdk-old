@@ -328,7 +328,58 @@ func NewSafeShardedBuffer(capacity, shards int, opts ...Option) Sharded {
 }
 
 // GetGlobalPool returns the global buffer pool instance.
+// The global pool is shared across the entire application and provides
+// optimized buffer pooling with size classes from 64 bytes to 4MB.
+// It is thread-safe and can be used concurrently from multiple goroutines.
 func GetGlobalPool() Pool {
 	// Implementation will be in global.go
 	return globalPool
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+// nextPowerOf2 rounds up to next power of 2.
+// Uses efficient bit manipulation for O(1) calculation.
+// Returns the smallest power of 2 that is >= n.
+//
+//go:inline
+//go:nosplit
+func nextPowerOf2(n uint32) uint32 {
+	if n == 0 { // Handle zero case
+		return 1 // Minimum power of 2
+	}
+	n--          // Decrement to handle exact powers
+	n |= n >> 1  // Fill bits to the right
+	n |= n >> 2  // Continue filling
+	n |= n >> 4  // Continue filling
+	n |= n >> 8  // Continue filling
+	n |= n >> 16 // Final fill for 32-bit
+	n++          // Increment to next power
+	return n     // Return result
+}
+
+// min returns the smaller of two integers.
+// Simple utility function for bounds checking.
+//
+//go:inline
+//go:nosplit
+func min(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// max returns the larger of two integers.
+// Simple utility function for bounds checking.
+//
+//go:inline
+//go:nosplit
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
