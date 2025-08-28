@@ -2,32 +2,52 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kbuffer",
-    srcs = [
-        "buffer.go",
-        "constants.go",
-        "errors.go",
-        "pool.go",
-    ],
+    srcs = glob(
+        ["*.go"],
+        exclude = ["*_test.go"],
+    ),
     importpath = "github.com/kitsunium/sdk/pkg/kernel/kbuffer",
     visibility = ["//visibility:public"],
 )
 
 go_test(
-    name = "kbuffer_test",
-    srcs = [
-        "buffer_test.go",
-        "kbuffer_bench_test.go",
-        "pool_test.go",
-    ],
+    name = "test",
+    size = "small",
+    timeout = "short",
+    srcs = glob(
+        ["*_test.go"],
+        exclude = ["*_bench_test.go"],
+    ),
     embed = [":kbuffer"],
 )
 
 go_test(
-    name = "kbuffer_bench_test",
-    srcs = ["kbuffer_bench_test.go"],
+    name = "bench",
+    size = "large",
+    timeout = "long",
+    srcs = glob(["*_bench_test.go"]),
+    args = [
+        "-test.bench=.",
+        "-test.benchmem",
+    ],
     embed = [":kbuffer"],
     tags = [
-        "bench",
+        "benchmark",
         "manual",
     ],
+)
+
+go_test(
+    name = "kbuffer_test",
+    srcs = [
+        "global_test.go",
+        "goroutine_check_test.go",
+        "interface_test.go",
+        "kbuffer_bench_test.go",
+        "safe_buffer_test.go",
+        "safe_sharded_test.go",
+        "unsafe_buffer_test.go",
+        "unsafe_sharded_test.go",
+    ],
+    embed = [":kbuffer"],
 )
