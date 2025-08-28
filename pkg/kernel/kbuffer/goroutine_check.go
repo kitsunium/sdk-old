@@ -13,8 +13,6 @@ type goroutineChecker struct {
 }
 
 // checkGoroutineSafety panics if called from different goroutine
-//
-//go:inline
 func (g *goroutineChecker) checkGoroutineSafety() {
 	currentGID := getCurrentGID()
 
@@ -84,7 +82,3 @@ func getCurrentG() unsafe.Pointer {
 
 	return ptr
 }
-
-// debugMode controls goroutine safety checks in dev builds
-// In production builds (unsafe_no_check), this is always false and checkSafety is a no-op
-var debugMode = true
