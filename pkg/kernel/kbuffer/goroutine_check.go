@@ -20,9 +20,6 @@ type goroutineChecker struct {
 // checkGoroutineSafety panics if called from different goroutine
 // Uses amortized sampling to reduce overhead of getCurrentGID calls
 func (g *goroutineChecker) checkGoroutineSafety() {
-	// Increment counter atomically
-	count := g.counter.Add(1)
-
 	// Load current owner
 	currentOwner := g.gid.Load()
 
@@ -33,12 +30,23 @@ func (g *goroutineChecker) checkGoroutineSafety() {
 			g.writes.Add(1)
 			return
 		}
-		// Lost race, re-load owner
+		// Lost race, re-check ownership
 		currentOwner = g.gid.Load()
+		if currentOwner != uint64(currentGID) {
+			panic("kbuffer: UNSAFE buffer accessed from multiple goroutines! " +
+				"Use NewSafeBuffer() or NewSafeShardedBuffer() for concurrent access. " +
+				"This panic prevents data corruption and undefined behavior.")
+		}
+		g.writes.Add(1)
+		return
 	}
 
-	// Sample check: only call expensive getCurrentGID periodically
-	if (count-1)&sampleMask == 0 {
+	// Increment counter for sampling
+	count := g.counter.Add(1)
+
+	// Always check on first few accesses to catch early violations
+	// Then sample periodically to reduce overhead
+	if count <= 10 || (count-1)&sampleMask == 0 {
 		currentGID := getCurrentGID()
 		if currentOwner != uint64(currentGID) {
 			// DIFFERENT GOROUTINE DETECTED - PANIC!
@@ -75,7 +83,7 @@ func getCurrentG() uintptr {
 	// Get current goroutine ID and return as token
 	// This avoids unsafe pointer forging and global state mutation
 	goid := getCurrentGID()
-	// Create deterministic token from goroutine ID
-	// Use a simple transformation that provides uniqueness
-	return uintptr(goid) * 0x9E3779B9 // Golden ratio prime for better distribution
+	// Return the ID directly as token - it's already unique per goroutine
+	// The multiplication could cause collisions due to overflow
+	return uintptr(goid)
 }
