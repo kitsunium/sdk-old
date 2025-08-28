@@ -166,6 +166,15 @@ func (b *safeShardedBuffer) WriteByte(c byte) error {
 	return shard.buffer.WriteByte(c)
 }
 
+// writeToShardAt performs a single write operation to a specific shard at a local offset
+func (b *safeShardedBuffer) writeToShardAt(shardIdx int, data []byte, localOffset int64) (int, error) {
+	if shardIdx >= int(b.shardCount) {
+		return 0, nil
+	}
+	shard := b.shards[shardIdx]
+	return shard.buffer.WriteAt(data, localOffset)
+}
+
 // WriteAt writes at specific global offset, potentially spanning multiple shards.
 // Handles writes that cross shard boundaries.
 func (b *safeShardedBuffer) WriteAt(p []byte, off int64) (n int, err error) {
@@ -174,52 +183,40 @@ func (b *safeShardedBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 		return 0, errInvalidOffset
 	}
 
-	// Calculate shard capacity
 	shardCapacity := int64(b.cap) / int64(b.shardCount)
 	bytesWritten := 0
-	dataRemaining := len(p)
 	currentOffset := off
 
-	// Write data, potentially spanning multiple shards
-	for dataRemaining > 0 && currentOffset < int64(b.cap) {
-		// Calculate current shard and local offset
+	// Write data across shards
+	for bytesWritten < len(p) && currentOffset < int64(b.cap) {
+		// Calculate shard parameters inline to avoid struct allocation
 		shardIdx := int(currentOffset / shardCapacity)
-		localOffset := currentOffset % shardCapacity
-
-		// Ensure shard index is valid
 		if shardIdx >= int(b.shardCount) {
 			break
 		}
-
-		// Calculate how much we can write to this shard
+		
+		localOffset := currentOffset % shardCapacity
 		spaceInShard := shardCapacity - localOffset
-		toWrite := int64(dataRemaining)
+		remaining := len(p) - bytesWritten
+		toWrite := int64(remaining)
 		if toWrite > spaceInShard {
 			toWrite = spaceInShard
 		}
 
-		// Write to the shard
-		shard := b.shards[shardIdx]
-		written, writeErr := shard.buffer.WriteAt(p[bytesWritten:bytesWritten+int(toWrite)], localOffset)
+		// Write to shard
+		written, writeErr := b.writeToShardAt(shardIdx, p[bytesWritten:bytesWritten+int(toWrite)], localOffset)
 		bytesWritten += written
-		dataRemaining -= written
 		currentOffset += int64(written)
 
-		// Handle errors
 		if writeErr != nil {
-			if err == nil {
-				err = writeErr
-			}
-			break
+			return bytesWritten, writeErr
 		}
-
-		// If we wrote less than expected, stop
 		if written < int(toWrite) {
 			break
 		}
 	}
 
-	return bytesWritten, err
+	return bytesWritten, nil
 }
 
 // WriteToShard writes directly to specific shard.
