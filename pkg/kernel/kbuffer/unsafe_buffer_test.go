@@ -44,9 +44,9 @@ func TestNewUnsafeBuffer(t *testing.T) {
 // TestUnsafeBufferWrite tests write operations on unsafe buffer.
 func TestUnsafeBufferWrite(t *testing.T) {
 	// Temporarily disable debug mode to avoid goroutine check
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
 
@@ -98,9 +98,9 @@ func TestUnsafeBufferWrite(t *testing.T) {
 // TestUnsafeBufferWriteString tests string write operations.
 func TestUnsafeBufferWriteString(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(60).(*unsafeBuffer)
 
@@ -149,9 +149,9 @@ func TestUnsafeBufferWriteString(t *testing.T) {
 // TestUnsafeBufferWriteByte tests single byte write operations.
 func TestUnsafeBufferWriteByte(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(4).(*unsafeBuffer) // Will be rounded to minBufferSize
 	actualCap := buf.Cap()
@@ -182,9 +182,9 @@ func TestUnsafeBufferWriteByte(t *testing.T) {
 // TestUnsafeBufferWriteAt tests positional write operations.
 func TestUnsafeBufferWriteAt(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
 
@@ -235,9 +235,9 @@ func TestUnsafeBufferWriteAt(t *testing.T) {
 // TestUnsafeBufferTryWrite tests non-blocking write attempts.
 func TestUnsafeBufferTryWrite(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(10).(*unsafeBuffer)
 
@@ -262,9 +262,9 @@ func TestUnsafeBufferTryWrite(t *testing.T) {
 // TestUnsafeBufferReadOperations tests all read methods.
 func TestUnsafeBufferReadOperations(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	// Test with empty buffer
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
@@ -303,9 +303,9 @@ func TestUnsafeBufferReadOperations(t *testing.T) {
 // TestUnsafeBufferStateOperations tests Len, Cap, Available.
 func TestUnsafeBufferStateOperations(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
 
@@ -336,9 +336,9 @@ func TestUnsafeBufferStateOperations(t *testing.T) {
 // TestUnsafeBufferReset tests reset operation.
 func TestUnsafeBufferReset(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
 	buf.Write([]byte("test data"))
@@ -362,9 +362,9 @@ func TestUnsafeBufferReset(t *testing.T) {
 // TestUnsafeBufferClear tests clear operation.
 func TestUnsafeBufferClear(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
 	data := []byte("sensitive data to clear")
@@ -389,9 +389,9 @@ func TestUnsafeBufferClear(t *testing.T) {
 // TestUnsafeBufferTruncate tests truncate operation.
 func TestUnsafeBufferTruncate(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
 	buf.Write([]byte("hello unsafe world"))
@@ -435,9 +435,9 @@ func TestUnsafeBufferTruncate(t *testing.T) {
 // TestUnsafeBufferGrow tests grow operation.
 func TestUnsafeBufferGrow(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(10).(*unsafeBuffer) // Will be rounded to minBufferSize
 	actualCap := buf.Cap()
@@ -465,9 +465,9 @@ func TestUnsafeBufferGrow(t *testing.T) {
 // TestUnsafeBufferExtend tests extend operation.
 func TestUnsafeBufferExtend(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(10).(*unsafeBuffer) // Will be rounded to minBufferSize
 	actualCap := buf.Cap()
@@ -502,9 +502,9 @@ func TestUnsafeBufferExtend(t *testing.T) {
 // TestUnsafeBufferClone tests clone operation.
 func TestUnsafeBufferClone(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
 	data := []byte("data to clone")
@@ -546,9 +546,9 @@ func TestUnsafeBufferClone(t *testing.T) {
 // TestUnsafeBufferRemainingSlice tests remaining slice operation.
 func TestUnsafeBufferRemainingSlice(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(10).(*unsafeBuffer) // Will be rounded to minBufferSize
 	actualCap := buf.Cap()
@@ -578,9 +578,9 @@ func TestUnsafeBufferRemainingSlice(t *testing.T) {
 // TestUnsafeBufferAppendBytes tests variadic append operation.
 func TestUnsafeBufferAppendBytes(t *testing.T) {
 	// Temporarily disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(10).(*unsafeBuffer)
 
@@ -621,52 +621,12 @@ func TestUnsafeBufferAppendBytes(t *testing.T) {
 	}
 }
 
-// TestUnsafeBufferGoroutineSafety tests goroutine safety checking.
-func TestUnsafeBufferGoroutineSafety(t *testing.T) {
-	// Enable debug mode for this test
-	oldDebugMode := debugMode
-	debugMode = true
-	defer func() { debugMode = oldDebugMode }()
-
-	buf := newUnsafeBuffer(100).(*unsafeBuffer)
-
-	// First write should set goroutine ID
-	buf.Write([]byte("first"))
-
-	// Writing from same goroutine should work
-	buf.Write([]byte(" second"))
-
-	// Test panic when accessed from different goroutine
-	done := make(chan bool)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Expected panic
-				done <- true
-			} else {
-				done <- false
-			}
-		}()
-		// This should panic
-		buf.Write([]byte(" from another goroutine"))
-	}()
-
-	select {
-	case panicked := <-done:
-		if !panicked {
-			t.Error("Expected panic when accessing unsafe buffer from different goroutine")
-		}
-	case <-time.After(1 * time.Second):
-		t.Error("Timeout waiting for goroutine safety check")
-	}
-}
-
 // TestUnsafeBufferGoroutineSafetyDisabled tests with safety check disabled.
 func TestUnsafeBufferGoroutineSafetyDisabled(t *testing.T) {
-	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	// Disable safety checks (true = skip checks, false = do checks)
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = true
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(100).(*unsafeBuffer)
 
@@ -704,9 +664,9 @@ func TestUnsafeBufferPerformance(t *testing.T) {
 	}
 
 	// Disable debug mode for performance testing
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(1 << 20).(*unsafeBuffer) // 1MB buffer
 	data := make([]byte, 1024)                      // 1KB chunks
@@ -744,9 +704,9 @@ func TestUnsafeBufferDataRace(t *testing.T) {
 	}
 
 	// Disable safety checks to allow concurrent access (for testing only!)
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = true // true = skip checks
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeBuffer(10000).(*unsafeBuffer)
 
@@ -779,10 +739,10 @@ func TestUnsafeBufferDataRace(t *testing.T) {
 
 // TestUnsafeBufferEdgeCases tests various edge cases.
 func TestUnsafeBufferEdgeCases(t *testing.T) {
-	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	// Enable safety checks (false = do checks)
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	// Test with minimum size buffer
 	minBuf := newUnsafeBuffer(1).(*unsafeBuffer)

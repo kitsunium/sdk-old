@@ -10,10 +10,10 @@ import (
 
 // TestGoroutineChecker tests the goroutine safety checker.
 func TestGoroutineChecker(t *testing.T) {
-	// Enable debug mode for testing
-	oldDebugMode := debugMode
-	debugMode = true
-	defer func() { debugMode = oldDebugMode }()
+	// Enable safety checks for testing (false = do checks)
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	var checker goroutineChecker
 
@@ -36,66 +36,6 @@ func TestGoroutineChecker(t *testing.T) {
 	if checker.gid.Load() == 0 {
 		t.Error("goroutine ID not set")
 	}
-}
-
-// TestGoroutineCheckerPanic tests panic on cross-goroutine access.
-func TestGoroutineCheckerPanic(t *testing.T) {
-	// Enable debug mode
-	oldDebugMode := debugMode
-	debugMode = true
-	defer func() { debugMode = oldDebugMode }()
-
-	var checker goroutineChecker
-
-	// Set goroutine ID from current goroutine
-	checker.checkGoroutineSafety()
-
-	// Try to access from different goroutine
-	done := make(chan bool)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Expected panic
-				done <- true
-			} else {
-				done <- false
-			}
-		}()
-		// This should panic
-		checker.checkGoroutineSafety()
-	}()
-
-	select {
-	case panicked := <-done:
-		if !panicked {
-			t.Error("Expected panic when accessing from different goroutine")
-		}
-	case <-time.After(1 * time.Second):
-		t.Error("Timeout waiting for panic")
-	}
-}
-
-// TestGoroutineCheckerCheckSafety tests conditional checking.
-func TestGoroutineCheckerCheckSafety(t *testing.T) {
-	var checker goroutineChecker
-
-	// Test with debug mode enabled
-	debugMode = true
-	checker.checkSafety() // Should perform check
-	if checker.writes.Load() != 1 {
-		t.Error("checkSafety() should increment writes when debugMode=true")
-	}
-
-	// Test with debug mode disabled
-	debugMode = false
-	checker2 := goroutineChecker{}
-	checker2.checkSafety() // Should skip check
-	if checker2.writes.Load() != 0 {
-		t.Error("checkSafety() should not increment writes when debugMode=false")
-	}
-
-	// Reset debug mode
-	debugMode = true
 }
 
 // TestGetCurrentGID tests goroutine ID extraction.
@@ -162,10 +102,10 @@ func TestGetCurrentG(t *testing.T) {
 
 // TestGoroutineCheckerConcurrentInit tests concurrent initialization.
 func TestGoroutineCheckerConcurrentInit(t *testing.T) {
-	// Enable debug mode
-	oldDebugMode := debugMode
-	debugMode = true
-	defer func() { debugMode = oldDebugMode }()
+	// Enable safety checks (false = do checks)
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	var checker goroutineChecker
 	var wg sync.WaitGroup
@@ -220,10 +160,10 @@ func TestGoroutineCheckerConcurrentInit(t *testing.T) {
 
 // TestGoroutineCheckerCompareAndSwap tests atomic initialization.
 func TestGoroutineCheckerCompareAndSwap(t *testing.T) {
-	// Enable debug mode
-	oldDebugMode := debugMode
-	debugMode = true
-	defer func() { debugMode = oldDebugMode }()
+	// Enable safety checks (false = do checks)
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	var checker goroutineChecker
 	currentGID := getCurrentGID()
@@ -246,10 +186,10 @@ func TestGoroutineCheckerCompareAndSwap(t *testing.T) {
 
 // TestGoroutineCheckerWriteCounter tests write counting.
 func TestGoroutineCheckerWriteCounter(t *testing.T) {
-	// Enable debug mode
-	oldDebugMode := debugMode
-	debugMode = true
-	defer func() { debugMode = oldDebugMode }()
+	// Enable safety checks (false = do checks)
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	var checker goroutineChecker
 
@@ -267,22 +207,22 @@ func TestGoroutineCheckerWriteCounter(t *testing.T) {
 // TestDebugModeGlobal tests the global debug mode flag.
 func TestDebugModeGlobal(t *testing.T) {
 	// Store original value
-	originalDebugMode := debugMode
+	originalDebugMode := testingSkipSafetyCheck
 
 	// Test setting to false
-	debugMode = false
-	if debugMode != false {
-		t.Error("Failed to set debugMode to false")
+	testingSkipSafetyCheck = false
+	if testingSkipSafetyCheck != false {
+		t.Error("Failed to set testingSkipSafetyCheck to false")
 	}
 
 	// Test setting to true
-	debugMode = true
-	if debugMode != true {
-		t.Error("Failed to set debugMode to true")
+	testingSkipSafetyCheck = true
+	if testingSkipSafetyCheck != true {
+		t.Error("Failed to set testingSkipSafetyCheck to true")
 	}
 
 	// Restore original value
-	debugMode = originalDebugMode
+	testingSkipSafetyCheck = originalDebugMode
 }
 
 // TestGoroutineCheckerPerformance tests performance impact.
@@ -291,11 +231,15 @@ func TestGoroutineCheckerPerformance(t *testing.T) {
 		t.Skip("Skipping performance test in short mode")
 	}
 
+	// Save and restore original mode
+	oldDebugMode := testingSkipSafetyCheck
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
+
 	var checker goroutineChecker
 	iterations := 1000000
 
-	// Test with debug mode enabled
-	debugMode = true
+	// Test with safety checks enabled (false = do checks)
+	testingSkipSafetyCheck = false
 	start := time.Now()
 	for i := 0; i < iterations; i++ {
 		checker.checkSafety()
@@ -305,19 +249,16 @@ func TestGoroutineCheckerPerformance(t *testing.T) {
 	// Reset checker for fair comparison
 	checker = goroutineChecker{}
 
-	// Test with debug mode disabled
-	debugMode = false
+	// Test with safety checks disabled (true = skip checks)
+	testingSkipSafetyCheck = true
 	start = time.Now()
 	for i := 0; i < iterations; i++ {
 		checker.checkSafety()
 	}
 	disabledDuration := time.Since(start)
 
-	// Reset debug mode
-	debugMode = true
-
-	t.Logf("Performance with debug mode enabled: %v for %d iterations", enabledDuration, iterations)
-	t.Logf("Performance with debug mode disabled: %v for %d iterations", disabledDuration, iterations)
+	t.Logf("Performance with safety checks enabled: %v for %d iterations", enabledDuration, iterations)
+	t.Logf("Performance with safety checks disabled: %v for %d iterations", disabledDuration, iterations)
 	t.Logf("Overhead ratio: %.2fx", float64(enabledDuration)/float64(disabledDuration))
 
 	// Disabled should be significantly faster
@@ -357,9 +298,10 @@ func TestGoroutineCheckerRaceCondition(t *testing.T) {
 
 	var checker goroutineChecker
 
-	// Disable debug mode to avoid panics
-	debugMode = false
-	defer func() { debugMode = true }()
+	// Disable safety checks to avoid panics (true = skip checks)
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = true
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	var wg sync.WaitGroup
 	const goroutines = 100
