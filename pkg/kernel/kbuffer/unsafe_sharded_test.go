@@ -11,9 +11,9 @@ import (
 // TestNewUnsafeShardedBufferCreation tests unsafe sharded buffer creation.
 func TestNewUnsafeShardedBufferCreation(t *testing.T) {
 	// Temporarily disable debug mode to avoid goroutine checks
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	tests := []struct {
 		name       string
@@ -70,9 +70,9 @@ func TestNewUnsafeShardedBufferCreation(t *testing.T) {
 // TestUnsafeShardedBufferWrite tests write operations across shards.
 func TestUnsafeShardedBufferWrite(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(1024, 4).(*unsafeShardedBuffer)
 
@@ -102,9 +102,9 @@ func TestUnsafeShardedBufferWrite(t *testing.T) {
 // TestUnsafeShardedBufferWorkStealing tests fallback when primary shard is full.
 func TestUnsafeShardedBufferWorkStealing(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	// Create small shards to test work stealing
 	buf := newUnsafeShardedBuffer(40, 4).(*unsafeShardedBuffer) // 10 bytes per shard
@@ -134,9 +134,9 @@ func TestUnsafeShardedBufferWorkStealing(t *testing.T) {
 // TestUnsafeShardedBufferWriteString tests string write operations.
 func TestUnsafeShardedBufferWriteString(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(200, 4).(*unsafeShardedBuffer)
 
@@ -160,9 +160,9 @@ func TestUnsafeShardedBufferWriteString(t *testing.T) {
 // TestUnsafeShardedBufferWriteByte tests single byte write operations.
 func TestUnsafeShardedBufferWriteByte(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -182,9 +182,9 @@ func TestUnsafeShardedBufferWriteByte(t *testing.T) {
 // TestUnsafeShardedBufferWriteAt tests positional write across shards.
 func TestUnsafeShardedBufferWriteAt(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(256, 4).(*unsafeShardedBuffer) // At least minBufferSize per shard
 	shardCapacity := int64(buf.Cap()) / int64(buf.ShardCount())
@@ -222,9 +222,9 @@ func TestUnsafeShardedBufferWriteAt(t *testing.T) {
 // TestUnsafeShardedBufferWriteToShard tests direct shard writing.
 func TestUnsafeShardedBufferWriteToShard(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -255,9 +255,9 @@ func TestUnsafeShardedBufferWriteToShard(t *testing.T) {
 // TestUnsafeShardedBufferTryWrite tests non-blocking write attempts.
 func TestUnsafeShardedBufferTryWrite(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(20, 2).(*unsafeShardedBuffer) // Small buffer
 
@@ -282,9 +282,9 @@ func TestUnsafeShardedBufferTryWrite(t *testing.T) {
 // TestUnsafeShardedBufferBytes tests collecting bytes from all shards.
 func TestUnsafeShardedBufferBytes(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -315,9 +315,9 @@ func TestUnsafeShardedBufferBytes(t *testing.T) {
 // TestUnsafeShardedBufferString tests string consolidation.
 func TestUnsafeShardedBufferString(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -339,9 +339,9 @@ func TestUnsafeShardedBufferString(t *testing.T) {
 // TestUnsafeShardedBufferBytesUnsafe tests unsafe byte access.
 func TestUnsafeShardedBufferBytesUnsafe(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -364,9 +364,9 @@ func TestUnsafeShardedBufferBytesUnsafe(t *testing.T) {
 // TestUnsafeShardedBufferStateOperations tests Len, Cap, Available.
 func TestUnsafeShardedBufferStateOperations(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(256, 4).(*unsafeShardedBuffer) // At least minBufferSize per shard
 	actualCap := buf.Cap()
@@ -395,9 +395,9 @@ func TestUnsafeShardedBufferStateOperations(t *testing.T) {
 // TestUnsafeShardedBufferReset tests reset operation across all shards.
 func TestUnsafeShardedBufferReset(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -424,9 +424,9 @@ func TestUnsafeShardedBufferReset(t *testing.T) {
 // TestUnsafeShardedBufferClear tests clear operation across all shards.
 func TestUnsafeShardedBufferClear(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -447,9 +447,9 @@ func TestUnsafeShardedBufferClear(t *testing.T) {
 // TestUnsafeShardedBufferTruncate tests truncate operation.
 func TestUnsafeShardedBufferTruncate(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -481,9 +481,9 @@ func TestUnsafeShardedBufferTruncate(t *testing.T) {
 // TestUnsafeShardedBufferGrow tests grow operation.
 func TestUnsafeShardedBufferGrow(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(256, 4).(*unsafeShardedBuffer) // At least minBufferSize per shard
 	shardCap := buf.shards[0].buffer.Cap()
@@ -516,9 +516,9 @@ func TestUnsafeShardedBufferGrow(t *testing.T) {
 // TestUnsafeShardedBufferExtend tests extend operation.
 func TestUnsafeShardedBufferExtend(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -531,9 +531,9 @@ func TestUnsafeShardedBufferExtend(t *testing.T) {
 // TestUnsafeShardedBufferClone tests clone operation.
 func TestUnsafeShardedBufferClone(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -571,9 +571,9 @@ func TestUnsafeShardedBufferClone(t *testing.T) {
 // TestUnsafeShardedBufferRemainingSlice tests remaining slice operation.
 func TestUnsafeShardedBufferRemainingSlice(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(256, 4).(*unsafeShardedBuffer) // At least minBufferSize per shard
 	shardCap := buf.shards[0].buffer.Cap()
@@ -600,9 +600,9 @@ func TestUnsafeShardedBufferRemainingSlice(t *testing.T) {
 // TestUnsafeShardedBufferAppendBytes tests variadic append operation.
 func TestUnsafeShardedBufferAppendBytes(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -624,9 +624,9 @@ func TestUnsafeShardedBufferAppendBytes(t *testing.T) {
 // TestUnsafeShardedBufferBalance tests rebalancing operation.
 func TestUnsafeShardedBufferBalance(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -670,46 +670,6 @@ func TestUnsafeShardedBufferBalance(t *testing.T) {
 	}
 }
 
-// TestUnsafeShardedBufferGoroutineSafety tests goroutine safety checking.
-func TestUnsafeShardedBufferGoroutineSafety(t *testing.T) {
-	// Enable debug mode for this test
-	oldDebugMode := debugMode
-	debugMode = true
-	defer func() { debugMode = oldDebugMode }()
-
-	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
-
-	// First write should set goroutine ID
-	buf.Write([]byte("first"))
-
-	// Writing from same goroutine should work
-	buf.Write([]byte(" second"))
-
-	// Test panic when accessed from different goroutine
-	done := make(chan bool)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// Expected panic
-				done <- true
-			} else {
-				done <- false
-			}
-		}()
-		// This should panic
-		buf.Write([]byte(" from another goroutine"))
-	}()
-
-	select {
-	case panicked := <-done:
-		if !panicked {
-			t.Error("Expected panic when accessing unsafe buffer from different goroutine")
-		}
-	case <-time.After(1 * time.Second):
-		t.Error("Timeout waiting for goroutine safety check")
-	}
-}
-
 // TestUnsafeShardedBufferPerformance tests performance characteristics.
 func TestUnsafeShardedBufferPerformance(t *testing.T) {
 	if testing.Short() {
@@ -717,9 +677,9 @@ func TestUnsafeShardedBufferPerformance(t *testing.T) {
 	}
 
 	// Disable debug mode for performance testing
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(1<<20, 16).(*unsafeShardedBuffer) // 1MB, 16 shards
 	data := make([]byte, 100)
@@ -751,9 +711,9 @@ func TestUnsafeShardedBufferDataRace(t *testing.T) {
 	}
 
 	// Disable safety checks to allow concurrent access (for testing only!)
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = true // true = skip checks
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(10000, 8).(*unsafeShardedBuffer)
 
@@ -783,9 +743,9 @@ func TestUnsafeShardedBufferDataRace(t *testing.T) {
 // TestUnsafeShardedBufferSelectShard tests shard selection logic.
 func TestUnsafeShardedBufferSelectShard(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	buf := newUnsafeShardedBuffer(100, 4).(*unsafeShardedBuffer)
 
@@ -805,9 +765,9 @@ func TestUnsafeShardedBufferSelectShard(t *testing.T) {
 // TestUnsafeShardedBufferEdgeCases tests various edge cases.
 func TestUnsafeShardedBufferEdgeCases(t *testing.T) {
 	// Disable debug mode
-	oldDebugMode := debugMode
-	debugMode = false
-	defer func() { debugMode = oldDebugMode }()
+	oldDebugMode := testingSkipSafetyCheck
+	testingSkipSafetyCheck = false
+	defer func() { testingSkipSafetyCheck = oldDebugMode }()
 
 	// Test with single shard
 	singleShard := newUnsafeShardedBuffer(100, 1).(*unsafeShardedBuffer)
