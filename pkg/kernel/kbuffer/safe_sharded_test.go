@@ -611,7 +611,7 @@ func TestSafeShardedBufferRemainingSlice(t *testing.T) {
 
 	// Should return slice from first available shard
 	remaining := buf.RemainingSlice()
-	if remaining == nil || len(remaining) == 0 {
+	if len(remaining) == 0 {
 		t.Error("RemainingSlice() should return available space")
 	}
 
@@ -822,21 +822,21 @@ func TestSafeShardedBufferStress(t *testing.T) {
 // TestGetGoroutineID tests the goroutine ID extraction.
 func TestGetGoroutineID(t *testing.T) {
 	// Get ID from current goroutine
-	id1 := getGoroutineID()
+	id1 := getCurrentGID()
 	if id1 == 0 {
-		t.Error("getGoroutineID() returned 0")
+		t.Error("getCurrentGID() returned 0")
 	}
 
 	// Get ID from same goroutine again
-	id2 := getGoroutineID()
+	id2 := getCurrentGID()
 	if id1 != id2 {
-		t.Errorf("getGoroutineID() not consistent: %d != %d", id1, id2)
+		t.Errorf("getCurrentGID() not consistent: %d != %d", id1, id2)
 	}
 
 	// Get ID from different goroutine
 	done := make(chan uint32)
 	go func() {
-		done <- getGoroutineID()
+		done <- getCurrentGID()
 	}()
 
 	id3 := <-done

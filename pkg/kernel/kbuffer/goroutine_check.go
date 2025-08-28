@@ -84,18 +84,17 @@ func getCurrentGID() uint32 {
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)
 	if n > 0 {
-		// Hash stack trace for pseudo-ID
+		// Hash only first 16 bytes which contain goroutine ID
+		// This avoids expensive hashing of entire stack trace
+		limit := n
+		if limit > 16 {
+			limit = 16
+		}
 		hash := uint32(0)
-		for i := 0; i < n; i++ {
+		for i := 0; i < limit; i++ {
 			hash = hash*31 + uint32(buf[i])
 		}
 		return hash
 	}
 	return 0
-}
-
-// getCurrentG returns a deterministic token for the current goroutine
-func getCurrentG() uintptr {
-	goid := getCurrentGID()
-	return uintptr(goid)
 }

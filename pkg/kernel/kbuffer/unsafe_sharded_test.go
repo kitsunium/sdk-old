@@ -578,7 +578,7 @@ func TestUnsafeShardedBufferRemainingSlice(t *testing.T) {
 
 	// Should return available space
 	remaining := buf.RemainingSlice()
-	if remaining == nil || len(remaining) == 0 {
+	if len(remaining) == 0 {
 		t.Error("RemainingSlice() should return available space")
 	}
 
