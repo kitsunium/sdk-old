@@ -373,9 +373,9 @@ Safe buffers use custom spinlock instead of `sync.Mutex`:
 
 The package uses several compiler directives:
 
-- `//go:nosplit` - Prevent stack splits
-- `//go:inline` - Force inlining
-- Cache-line alignment for structs
+- `//go:nosplit` - Prevent stack splits for low-level functions
+- `//go:noinline` - Prevent inlining when explicit control is needed
+- Cache-line alignment for structs to avoid false sharing
 
 ## Testing
 
