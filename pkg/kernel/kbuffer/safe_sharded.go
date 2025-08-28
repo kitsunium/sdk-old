@@ -241,6 +241,11 @@ func (b *safeShardedBuffer) TryWrite(p []byte) bool {
 
 // Bytes collects data from all shards into single slice.
 // Performs allocation and copy for consolidated view.
+//
+// Note: This method provides a best-effort snapshot. Since each shard
+// has its own lock, the returned data may not represent an atomic
+// point-in-time view when concurrent writes are happening.
+// For atomic operations, use individual shard methods.
 func (b *safeShardedBuffer) Bytes() []byte {
 	// Calculate total size
 	totalSize := 0
