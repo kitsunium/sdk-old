@@ -221,3 +221,13 @@ build:sdk --strip=never  # Keep symbols for better debugging by consumers
 # =============================================================================
 # Default settings are already included in common/build/test sections above
 # Use --config=dev or --config=prod explicitly when building
+# Benchmark configurations for 'bazel run'
+run:benchmark --config=dev
+run:benchmark --test_arg=-test.bench=.
+run:benchmark --test_arg=-test.benchtime=1s
+run:benchmark --test_env=GOMAXPROCS=1
+
+run:benchmark-multi --config=dev  
+run:benchmark-multi --test_arg=-test.bench=.
+run:benchmark-multi --test_arg=-test.benchtime=1s
+

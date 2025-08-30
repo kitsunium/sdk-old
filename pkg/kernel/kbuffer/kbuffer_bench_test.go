@@ -11,7 +11,7 @@ import (
 
 // Benchmark standard buffer operations
 
-func BenchmarkStandardBuffer_Write(b *testing.B) {
+func BenchmarkWrite_SingleCore(b *testing.B) {
 	sizes := []int{64, 256, 1024, 4096, 16384, 65536}
 
 	for _, size := range sizes {
@@ -33,7 +33,7 @@ func BenchmarkStandardBuffer_Write(b *testing.B) {
 	}
 }
 
-func BenchmarkStandardBuffer_WriteString(b *testing.B) {
+func BenchmarkWriteString_SingleCore(b *testing.B) {
 	sizes := []int{64, 256, 1024, 4096}
 
 	for _, size := range sizes {
@@ -52,7 +52,7 @@ func BenchmarkStandardBuffer_WriteString(b *testing.B) {
 	}
 }
 
-func BenchmarkStandardBuffer_WriteByte(b *testing.B) {
+func BenchmarkWriteByte_SingleCore(b *testing.B) {
 	buf := NewUnsafeBuffer(b.N)
 	b.ResetTimer()
 	b.SetBytes(1)
@@ -62,7 +62,7 @@ func BenchmarkStandardBuffer_WriteByte(b *testing.B) {
 	}
 }
 
-func BenchmarkStandardBuffer_TryWrite(b *testing.B) {
+func BenchmarkTryWrite_SingleCore(b *testing.B) {
 	data := make([]byte, 256)
 	buf := NewUnsafeBuffer(1024)
 
@@ -75,7 +75,7 @@ func BenchmarkStandardBuffer_TryWrite(b *testing.B) {
 	}
 }
 
-func BenchmarkStandardBuffer_Bytes(b *testing.B) {
+func BenchmarkBytes_SingleCore(b *testing.B) {
 	buf := NewUnsafeBuffer(1024)
 	buf.Write(bytes.Repeat([]byte("x"), 1024))
 
@@ -87,7 +87,7 @@ func BenchmarkStandardBuffer_Bytes(b *testing.B) {
 	}
 }
 
-func BenchmarkStandardBuffer_String(b *testing.B) {
+func BenchmarkString_SingleCore(b *testing.B) {
 	buf := NewUnsafeBuffer(1024)
 	buf.Write(bytes.Repeat([]byte("x"), 1024))
 
@@ -99,7 +99,7 @@ func BenchmarkStandardBuffer_String(b *testing.B) {
 	}
 }
 
-func BenchmarkStandardBuffer_Reset(b *testing.B) {
+func BenchmarkReset_SingleCore(b *testing.B) {
 	buf := NewUnsafeBuffer(1024)
 	data := make([]byte, 512)
 
@@ -111,7 +111,7 @@ func BenchmarkStandardBuffer_Reset(b *testing.B) {
 	}
 }
 
-func BenchmarkStandardBuffer_Clear(b *testing.B) {
+func BenchmarkClear_SingleCore(b *testing.B) {
 	buf := NewUnsafeBuffer(1024)
 	data := make([]byte, 512)
 
@@ -192,11 +192,16 @@ func BenchmarkPool_GetBufferPutBuffer(b *testing.B) {
 	}
 }
 
-// Concurrent benchmarks
+// Multi-core benchmarks
 
-func BenchmarkConcurrent_StandardBuffer(b *testing.B) {
+func BenchmarkWrite_MultiCore(b *testing.B) {
 	data := make([]byte, 100)
+	cores := runtime.GOMAXPROCS(0)
+	if cores < 2 {
+		cores = 2
+	}
 
+	b.SetParallelism(cores)
 	b.RunParallel(func(pb *testing.PB) {
 		buf := NewUnsafeBuffer(10000)
 		for pb.Next() {
@@ -208,10 +213,15 @@ func BenchmarkConcurrent_StandardBuffer(b *testing.B) {
 	})
 }
 
-func BenchmarkConcurrent_ShardedBuffer(b *testing.B) {
+func BenchmarkShardedWrite_MultiCore(b *testing.B) {
 	buf := NewSafeShardedBuffer(100000, 16)
 	data := make([]byte, 100)
+	cores := runtime.GOMAXPROCS(0)
+	if cores < 2 {
+		cores = 2
+	}
 
+	b.SetParallelism(cores)
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -223,7 +233,7 @@ func BenchmarkConcurrent_ShardedBuffer(b *testing.B) {
 	})
 }
 
-func BenchmarkPool_ParallelGetPut(b *testing.B) {
+func BenchmarkPool_MultiCore(b *testing.B) {
 	sizes := []int{256, 1024, 4096}
 	pool := NewPool()
 
@@ -245,7 +255,7 @@ func BenchmarkPool_ParallelGetPut(b *testing.B) {
 	}
 }
 
-func BenchmarkBuffer_Concurrent(b *testing.B) {
+func BenchmarkPoolUsage_MultiCore(b *testing.B) {
 	pool := NewPool()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -259,7 +269,7 @@ func BenchmarkBuffer_Concurrent(b *testing.B) {
 	})
 }
 
-func BenchmarkBuffer_ParallelWrite(b *testing.B) {
+func BenchmarkParallelWrite_MultiCore(b *testing.B) {
 	sizes := []int{64, 256, 1024}
 
 	for _, size := range sizes {
@@ -281,7 +291,7 @@ func BenchmarkBuffer_ParallelWrite(b *testing.B) {
 	}
 }
 
-func BenchmarkBuffer_ParallelMixed(b *testing.B) {
+func BenchmarkMixed_MultiCore(b *testing.B) {
 	data := []byte("test data")
 	str := "string data"
 
@@ -373,40 +383,38 @@ func BenchmarkComparison_StandardBuffer_vs_BytesBuffer(b *testing.B) {
 	})
 }
 
-// Scalability benchmarks
+// Scalability benchmarks for multi-core
 
-func BenchmarkScalability_ShardedBuffer(b *testing.B) {
+func BenchmarkScalability_MultiCore(b *testing.B) {
 	data := make([]byte, 100)
-
-	for _, numCPU := range []int{1, 2, 4, 8, 16} {
-		b.Run(fmt.Sprintf("cpu_%d", numCPU), func(b *testing.B) {
-			runtime.GOMAXPROCS(numCPU)
-			defer runtime.GOMAXPROCS(runtime.NumCPU())
-
-			buf := NewSafeShardedBuffer(1000000, numCPU*2)
-			var wg sync.WaitGroup
-			var ops atomic.Int64
-
-			b.ResetTimer()
-
-			for i := 0; i < numCPU; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					for j := 0; j < b.N/numCPU; j++ {
-						buf.Write(data)
-						ops.Add(1)
-						if j%1000 == 0 && buf.Available() < 10000 {
-							buf.Reset()
-						}
-					}
-				}()
-			}
-
-			wg.Wait()
-			b.SetBytes(100 * ops.Load() / int64(b.N))
-		})
+	cores := runtime.GOMAXPROCS(0)
+	if cores < 2 {
+		cores = 2
 	}
+
+	buf := NewSafeShardedBuffer(1000000, cores*2)
+	var wg sync.WaitGroup
+	var ops atomic.Int64
+
+	b.SetParallelism(cores)
+	b.ResetTimer()
+
+	for i := 0; i < cores; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < b.N/cores; j++ {
+				buf.Write(data)
+				ops.Add(1)
+				if j%1000 == 0 && buf.Available() < 10000 {
+					buf.Reset()
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	b.SetBytes(100 * ops.Load() / int64(b.N))
 }
 
 // Cache efficiency benchmarks
@@ -447,7 +455,7 @@ func BenchmarkCacheEfficiency_Random(b *testing.B) {
 
 // Contention benchmarks
 
-func BenchmarkContention_Sharded(b *testing.B) {
+func BenchmarkContention_MultiCore(b *testing.B) {
 	pool := NewPool()
 
 	b.RunParallel(func(pb *testing.PB) {
@@ -459,7 +467,7 @@ func BenchmarkContention_Sharded(b *testing.B) {
 	})
 }
 
-func BenchmarkPool_ParallelContention(b *testing.B) {
+func BenchmarkPoolContention_MultiCore(b *testing.B) {
 	pool := NewPool()
 	sizes := []int{64, 256, 1024, 4096}
 

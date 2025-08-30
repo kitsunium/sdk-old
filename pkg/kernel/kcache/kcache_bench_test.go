@@ -5,10 +5,8 @@ package kcache
 import (
 	"fmt"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 	"unsafe"
 )
 
@@ -80,8 +78,8 @@ func BenchmarkCacheCreation(b *testing.B) {
 // Single-threaded Benchmarks
 // =============================================================================
 
-// BenchmarkSingleThreadedSet benchmarks single-threaded set operations
-func BenchmarkSingleThreadedSet(b *testing.B) {
+// BenchmarkSet_SingleCore benchmarks single-threaded set operations
+func BenchmarkSet_SingleCore(b *testing.B) {
 	sizes := []int{benchSmallSize, benchMediumSize, benchLargeSize}
 	cacheTypes := []struct {
 		name   string
@@ -111,8 +109,8 @@ func BenchmarkSingleThreadedSet(b *testing.B) {
 	}
 }
 
-// BenchmarkSingleThreadedGet benchmarks single-threaded get operations
-func BenchmarkSingleThreadedGet(b *testing.B) {
+// BenchmarkGet_SingleCore benchmarks single-threaded get operations
+func BenchmarkGet_SingleCore(b *testing.B) {
 	sizes := []int{benchSmallSize, benchMediumSize}
 	cacheTypes := []struct {
 		name   string
@@ -147,8 +145,8 @@ func BenchmarkSingleThreadedGet(b *testing.B) {
 	}
 }
 
-// BenchmarkSingleThreadedDelete benchmarks single-threaded delete operations
-func BenchmarkSingleThreadedDelete(b *testing.B) {
+// BenchmarkDelete_SingleCore benchmarks single-threaded delete operations
+func BenchmarkDelete_SingleCore(b *testing.B) {
 	sizes := []int{benchSmallSize, benchMediumSize}
 	cacheTypes := []struct {
 		name   string
@@ -185,151 +183,9 @@ func BenchmarkSingleThreadedDelete(b *testing.B) {
 	}
 }
 
-// =============================================================================
-// Multi-threaded Benchmarks
-// =============================================================================
+// Multi-threaded benchmarks moved to kcache_bench_multi_test.go
 
-// BenchmarkMultiThreadedSet benchmarks concurrent set operations
-func BenchmarkMultiThreadedSet(b *testing.B) {
-	cacheTypes := []struct {
-		name   string
-		create func() Cache
-	}{
-		{"SafeCache", func() Cache { return NewSafeCache(benchLargeSize) }},
-		{"SafeSharded", func() Cache { return NewSafeShardedCache(benchLargeSize, 16) }},
-	}
-
-	parallelisms := []int{2, 4, 8, 16}
-
-	for _, ct := range cacheTypes {
-		for _, p := range parallelisms {
-			b.Run(fmt.Sprintf("%s/p%d", ct.name, p), func(b *testing.B) {
-				cache := ct.create()
-
-				b.SetParallelism(p)
-				b.ResetTimer()
-				b.ReportAllocs()
-				b.RunParallel(func(pb *testing.PB) {
-					i := 0
-					for pb.Next() {
-						cache.Set(fmt.Sprintf("key-%d", i), i)
-						i++
-					}
-				})
-			})
-		}
-	}
-}
-
-// BenchmarkMultiThreadedGet benchmarks concurrent get operations
-func BenchmarkMultiThreadedGet(b *testing.B) {
-	cacheTypes := []struct {
-		name   string
-		create func() Cache
-	}{
-		{"SafeCache", func() Cache { return NewSafeCache(benchLargeSize) }},
-		{"SafeSharded", func() Cache { return NewSafeShardedCache(benchLargeSize, 16) }},
-	}
-
-	parallelisms := []int{2, 4, 8, 16}
-
-	for _, ct := range cacheTypes {
-		for _, p := range parallelisms {
-			b.Run(fmt.Sprintf("%s/p%d", ct.name, p), func(b *testing.B) {
-				cache := ct.create()
-				keys, values := generateBenchData(benchMediumSize)
-
-				// Pre-populate cache
-				for i := 0; i < benchMediumSize; i++ {
-					cache.Set(keys[i], values[i])
-				}
-
-				b.SetParallelism(p)
-				b.ResetTimer()
-				b.ReportAllocs()
-				b.RunParallel(func(pb *testing.PB) {
-					i := 0
-					for pb.Next() {
-						cache.Get(keys[i%benchMediumSize])
-						i++
-					}
-				})
-			})
-		}
-	}
-}
-
-// BenchmarkMultiThreadedMixed benchmarks mixed concurrent operations
-func BenchmarkMultiThreadedMixed(b *testing.B) {
-	cacheTypes := []struct {
-		name   string
-		create func() Cache
-	}{
-		{"SafeCache", func() Cache { return NewSafeCache(benchLargeSize) }},
-		{"SafeSharded", func() Cache { return NewSafeShardedCache(benchLargeSize, 16) }},
-	}
-
-	for _, ct := range cacheTypes {
-		b.Run(ct.name, func(b *testing.B) {
-			cache := ct.create()
-
-			b.ResetTimer()
-			b.ReportAllocs()
-			b.RunParallel(func(pb *testing.PB) {
-				i := 0
-				for pb.Next() {
-					key := fmt.Sprintf("key-%d", i)
-					switch i % 4 {
-					case 0:
-						cache.Set(key, i)
-					case 1:
-						cache.Get(key)
-					case 2:
-						cache.Has(key)
-					case 3:
-						cache.Delete(key)
-					}
-					i++
-				}
-			})
-		})
-	}
-}
-
-// =============================================================================
-// Contention Benchmarks
-// =============================================================================
-
-// BenchmarkHighContention benchmarks cache performance under high contention
-func BenchmarkHighContention(b *testing.B) {
-	cacheTypes := []struct {
-		name   string
-		create func() Cache
-	}{
-		{"SafeCache", func() Cache { return NewSafeCache(100) }},
-		{"SafeSharded", func() Cache { return NewSafeShardedCache(100, 16) }},
-	}
-
-	for _, ct := range cacheTypes {
-		b.Run(ct.name, func(b *testing.B) {
-			cache := ct.create()
-			// Use only 10 keys to create high contention
-			keys := []string{"k0", "k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8", "k9"}
-
-			b.ResetTimer()
-			b.ReportAllocs()
-			b.RunParallel(func(pb *testing.PB) {
-				i := 0
-				for pb.Next() {
-					key := keys[i%10]
-					cache.Set(key, i)
-					cache.Get(key)
-					i++
-				}
-			})
-		})
-	}
-}
+// Contention benchmarks moved to kcache_bench_multi_test.go
 
 // =============================================================================
 // Batch Operation Benchmarks
@@ -462,7 +318,7 @@ func BenchmarkProductionMode(b *testing.B) {
 	}
 
 	b.Run("ProdSet", func(b *testing.B) {
-		cache := NewUnsafeShardedCache(100000, 32)
+		cache := NewSafeShardedCache(100000, 32) // Use safe version for parallel
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -476,7 +332,7 @@ func BenchmarkProductionMode(b *testing.B) {
 	})
 
 	b.Run("ProdGet", func(b *testing.B) {
-		cache := NewUnsafeShardedCache(100000, 32)
+		cache := NewSafeShardedCache(100000, 32) // Use safe version for parallel
 		// Pre-populate
 		for i := 0; i < 10000; i++ {
 			cache.Set(i, i)
@@ -493,7 +349,7 @@ func BenchmarkProductionMode(b *testing.B) {
 	})
 
 	b.Run("ProdMixed", func(b *testing.B) {
-		cache := NewUnsafeShardedCache(100000, 32)
+		cache := NewSafeShardedCache(100000, 32) // Use safe version for parallel
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -518,45 +374,8 @@ func BenchmarkProductionMode(b *testing.B) {
 // Scalability Benchmarks
 // =============================================================================
 
-// BenchmarkScalability measures cache scalability with increasing cores
-func BenchmarkScalability(b *testing.B) {
-	maxProcs := runtime.GOMAXPROCS(0)
-	if maxProcs < 2 {
-		b.Skip("Scalability benchmark requires at least 2 cores")
-	}
-
-	for p := 1; p <= maxProcs; p *= 2 {
-		b.Run(fmt.Sprintf("Cores%d", p), func(b *testing.B) {
-			oldProcs := runtime.GOMAXPROCS(p)
-			defer runtime.GOMAXPROCS(oldProcs)
-
-			cache := NewSafeShardedCache(100000, 32)
-			// Pre-populate
-			for i := 0; i < 10000; i++ {
-				cache.Set(i, i)
-			}
-
-			var ops int64
-			b.ResetTimer()
-
-			start := time.Now()
-			var wg sync.WaitGroup
-			for i := 0; i < p; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					for time.Since(start) < time.Second {
-						cache.Get(int(atomic.AddInt64(&ops, 1)) % 10000)
-					}
-				}()
-			}
-			wg.Wait()
-
-			b.ReportMetric(float64(ops)/time.Since(start).Seconds(), "ops/s")
-			b.ReportMetric(float64(ops)/time.Since(start).Seconds()/float64(p), "ops/s/core")
-		})
-	}
-}
+// BenchmarkScalability removed - takes too long for regular runs
+// Use specialized performance testing tools for scalability analysis
 
 // =============================================================================
 // Cache Miss Benchmarks

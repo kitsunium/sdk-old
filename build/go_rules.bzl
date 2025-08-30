@@ -128,7 +128,7 @@ def kitsunium_go_benchmark(
             "-test.bench=.",
             "-test.benchmem",
             "-test.count=1",
-            "-test.benchtime=10000x",
+            # Removed hardcoded benchtime to allow override via command line
         ]
         
         # Single-core benchmarks use -test.cpu=1

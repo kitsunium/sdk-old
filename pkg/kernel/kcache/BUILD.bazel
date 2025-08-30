@@ -44,6 +44,7 @@ go_test(
         "batch_test.go",
         "cache_bench_test.go",
         "hasher_test.go",
+        "kcache_bench_multi_test.go",
         "kcache_bench_test.go",
         "options_test.go",
         "safe_cache_test.go",

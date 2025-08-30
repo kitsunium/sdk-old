@@ -49,12 +49,10 @@ help:
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
 	@echo ''
 	@echo 'Benchmarks:'
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks (single & multi-core)"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/single" "run single-core benchmarks only"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/multi" "run multi-core benchmarks only"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/prod" "run benchmarks in prod mode"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/update" "download latest benchmark database"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/compare" "compare two benchmark commits"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks for current commit"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench COMMIT=<hash>" "run benchmarks for specific commit"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/compare" "compare benchmark results"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/scaling" "analyze parallel scaling"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/list" "list saved benchmark results"
 	@echo ''
 	@echo 'Quality:'
@@ -136,184 +134,51 @@ test/coverage:
 ## bench: run benchmarks and save results to SQLite database
 # Usage:
 #   make bench                   - run benchmarks for current commit
-#   make bench <hash>            - checkout commit and run benchmarks
-#   make bench PRESERVE=true     - preserve history (for CI/CD)
+#   make bench COMMIT=<hash>     - run benchmarks for specific commit (with clone)
 .PHONY: bench
 bench:
 	@if [ ! -f benchmarks.sqlite ]; then \
-		echo "$(YELLOW)▶ No local benchmark database found, downloading from BENCH release...$(NC)"; \
-		$(MAKE) bench/update; \
+		echo "$(YELLOW)▶ No local benchmark database found, initializing...$(NC)"; \
+		touch benchmarks.sqlite; \
 	fi
-	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		COMMIT="$(filter-out $@,$(MAKECMDGOALS))"; \
-		echo "$(YELLOW)▶ Checking out commit $$COMMIT...$(NC)"; \
-		STASH_COUNT_BEFORE=$$(git stash list | wc -l); \
-		git stash push -m "bench: auto-stash before checkout" --include-untracked >/dev/null 2>&1; \
-		STASH_COUNT_AFTER=$$(git stash list | wc -l); \
-		git checkout $$COMMIT || exit 1; \
-		echo "$(YELLOW)▶ Running stable benchmarks for commit $$COMMIT...$(NC)"; \
-		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
-		BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
-		if [ -z "$$BENCH_TARGETS" ]; then \
-			echo "$(RED)❌ No benchmark targets found$(NC)"; \
-			exit 1; \
-		fi; \
-		bazel test --config=benchmark $$BENCH_TARGETS 2>&1 | \
-			python3 scripts/bench_manager.py save --stdin; \
-		git checkout - >/dev/null 2>&1; \
-		if [ $$STASH_COUNT_AFTER -gt $$STASH_COUNT_BEFORE ]; then \
-			git stash pop --quiet 2>/dev/null || echo "$(YELLOW)Note: Could not restore stashed changes$(NC)"; \
-		fi; \
+	@if [ -n "$(COMMIT)" ]; then \
+		echo "$(YELLOW)▶ Running benchmarks for commit $(COMMIT) with isolation...$(NC)"; \
+		python3 scripts/bench_runner.py run $(COMMIT) --clone; \
 	else \
-		echo "$(YELLOW)▶ Running benchmarks (single-core and multi-core)...$(NC)"; \
-		BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
-		if [ -z "$$BENCH_TARGETS" ]; then \
-			echo "$(RED)❌ No benchmark targets found$(NC)"; \
-			exit 1; \
-		fi; \
-		TOTAL=$$(echo "$$BENCH_TARGETS" | wc -w); \
-		NUM_CORES=$$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); \
-		BENCH_TIME=$$(grep -E "test:benchmark.*benchtime=" .bazelrc.benchmark 2>/dev/null | head -1 | sed 's/.*benchtime=//' | cut -d' ' -f1 || echo "1s"); \
-		echo "$(BLUE)→ Found $$TOTAL benchmark packages ($$BENCH_TIME per test, $$NUM_CORES CPU cores detected)$(NC)"; \
-		echo ""; \
-		echo "$(CYAN)━━━ Single-Core Benchmarks ━━━$(NC)"; \
-		echo "$(CYAN)→ Running with GOMAXPROCS=1 for consistent baseline$(NC)"; \
-		COUNTER=1; \
-		for TARGET in $$BENCH_TARGETS; do \
-			PKG_NAME=$$(echo $$TARGET | sed 's|//||' | sed 's|:.*||' | sed 's|.*/||'); \
-			echo "  $(CYAN)[$$COUNTER/$$TOTAL]$(NC) Running $$PKG_NAME (single-core)..."; \
-			START_TIME=$$(date +%s); \
-			bazel test --config=benchmark $$TARGET 2>&1 | \
-				tee /tmp/bench_single_$$COUNTER.out | grep -E "^Benchmark" | head -5; \
-			END_TIME=$$(date +%s); \
-			DURATION=$$((END_TIME - START_TIME)); \
-			BENCH_COUNT=$$(grep -c "^Benchmark" /tmp/bench_single_$$COUNTER.out 2>/dev/null || echo 0); \
-			echo "  $(GREEN)✓$(NC) $$PKG_NAME complete ($$BENCH_COUNT benchmarks, $$DURATION seconds)"; \
-			echo ""; \
-			COUNTER=$$((COUNTER + 1)); \
-		done; \
-		echo "$(CYAN)━━━ Multi-Core Benchmarks ━━━$(NC)"; \
-		echo "$(CYAN)→ Running with GOMAXPROCS=$$NUM_CORES for parallel performance$(NC)"; \
-		COUNTER=1; \
-		for TARGET in $$BENCH_TARGETS; do \
-			PKG_NAME=$$(echo $$TARGET | sed 's|//||' | sed 's|:.*||' | sed 's|.*/||'); \
-			echo "  $(CYAN)[$$COUNTER/$$TOTAL]$(NC) Running $$PKG_NAME ($$NUM_CORES cores)..."; \
-			START_TIME=$$(date +%s); \
-			bazel test --config=benchmark-multi $$TARGET 2>&1 | \
-				tee /tmp/bench_multi_$$COUNTER.out | grep -E "^Benchmark" | head -5; \
-			END_TIME=$$(date +%s); \
-			DURATION=$$((END_TIME - START_TIME)); \
-			BENCH_COUNT=$$(grep -c "^Benchmark" /tmp/bench_multi_$$COUNTER.out 2>/dev/null || echo 0); \
-			echo "  $(GREEN)✓$(NC) $$PKG_NAME complete ($$BENCH_COUNT benchmarks, $$DURATION seconds)"; \
-			echo ""; \
-			COUNTER=$$((COUNTER + 1)); \
-		done; \
-		echo "$(BLUE)→ Processing and saving results...$(NC)"; \
-		cat /tmp/bench_single_*.out 2>/dev/null | \
-			python3 scripts/bench_manager.py save --stdin --mode single $(if $(PRESERVE),--preserve-history); \
-		cat /tmp/bench_multi_*.out 2>/dev/null | \
-			python3 scripts/bench_manager.py save --stdin --mode multi --cores $$NUM_CORES $(if $(PRESERVE),--preserve-history); \
-		rm -f /tmp/bench_*.out; \
-	fi
-	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
-
-# Alias for CI/CD (preserves history)
-.PHONY: bench/save
-bench/save:
-	@$(MAKE) bench PRESERVE=true
-
-## bench/single: run single-core benchmarks only
-.PHONY: bench/single
-bench/single:
-	@echo "$(YELLOW)▶ Running single-core benchmarks (dev mode)...$(NC)"
-	@BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
-	if [ -z "$$BENCH_TARGETS" ]; then \
-		echo "$(RED)❌ No benchmark targets found$(NC)"; \
-		exit 1; \
-	fi; \
-	bazel test --config=benchmark $$BENCH_TARGETS
-
-## bench/multi: run multi-core benchmarks only
-.PHONY: bench/multi
-bench/multi:
-	@echo "$(YELLOW)▶ Running multi-core benchmarks (dev mode)...$(NC)"
-	@BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
-	if [ -z "$$BENCH_TARGETS" ]; then \
-		echo "$(RED)❌ No benchmark targets found$(NC)"; \
-		exit 1; \
-	fi; \
-	bazel test --config=benchmark-multi $$BENCH_TARGETS
-
-## bench/prod: run benchmarks in production mode
-.PHONY: bench/prod
-bench/prod:
-	@echo "$(YELLOW)▶ Running benchmarks in production mode (no safety checks)...$(NC)"
-	@BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
-	if [ -z "$$BENCH_TARGETS" ]; then \
-		echo "$(RED)❌ No benchmark targets found$(NC)"; \
-		exit 1; \
-	fi; \
-	bazel test --config=prod --config=benchmark $$BENCH_TARGETS
-
-## bench/update: fetch benchmark database from BENCH release
-.PHONY: bench/update
-bench/update:
-	@echo "$(YELLOW)▶ Fetching benchmark database from BENCH release...$(NC)"
-	@RELEASE_INFO=$$(curl -s https://api.github.com/repos/kitsunium/sdk/releases/tags/BENCH); \
-	if echo "$$RELEASE_INFO" | grep -q '"tag_name".*"BENCH"'; then \
-		echo "$(CYAN)→ BENCH release found, downloading benchmarks.sqlite$(NC)"; \
-		ASSET_URL=$$(echo "$$RELEASE_INFO" | grep -o '"browser_download_url".*benchmarks.sqlite"' | cut -d'"' -f4); \
-		if [ -n "$$ASSET_URL" ]; then \
-			curl -sL "$$ASSET_URL" -o benchmarks.sqlite && \
-			echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
-			echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
-		else \
-			curl -sL https://github.com/kitsunium/sdk/releases/download/BENCH/benchmarks.sqlite -o benchmarks.sqlite && \
-			echo "$(GREEN)✓ Benchmark database downloaded$(NC)" || \
-			echo "$(RED)❌ Failed to download benchmark database$(NC)"; \
-		fi; \
-	else \
-		echo "$(YELLOW)⚠ BENCH release not found, starting with empty database$(NC)"; \
+		echo "$(YELLOW)▶ Running benchmarks for current commit...$(NC)"; \
+		python3 scripts/bench_runner.py run HEAD; \
 	fi
 
-## bench/compare: compare benchmark results
-# Usage:
-#   make bench/compare                    - compare current with main
-#   make bench/compare <commit>           - compare current with <commit>
-#   make bench/compare <commit1> <commit2> - compare <commit1> with <commit2>
-.PHONY: bench/compare
-bench/compare:
-	@echo "$(YELLOW)▶ Comparing benchmarks...$(NC)"
-	@args="$(filter-out $@,$(MAKECMDGOALS))"; \
-	num_args=$$(echo "$$args" | tr -s ' ' | wc -w | tr -d ' '); \
-	if [ -z "$$args" ] || [ "$$num_args" = "0" ]; then \
-		echo "$(CYAN)→ Comparing current commit with main branch$(NC)"; \
-		python3 scripts/bench_manager.py compare; \
-	elif [ "$$num_args" = "1" ]; then \
-		echo "$(CYAN)→ Comparing current commit with $$args$(NC)"; \
-		python3 scripts/bench_manager.py compare $$args; \
-	elif [ "$$num_args" = "2" ]; then \
-		arg1=$$(echo $$args | cut -d' ' -f1); \
-		arg2=$$(echo $$args | cut -d' ' -f2); \
-		echo "$(CYAN)→ Comparing $$arg1 with $$arg2$(NC)"; \
-		python3 scripts/bench_manager.py compare $$arg1 $$arg2; \
-	else \
-		echo "$(RED)❌ Invalid arguments. Usage:$(NC)"; \
-		echo "  make bench/compare                    - compare current with main"; \
-		echo "  make bench/compare <commit>           - compare current with <commit>"; \
-		echo "  make bench/compare <commit1> <commit2> - compare <commit1> with <commit2>"; \
-		exit 1; \
-	fi
+## bench/scaling: analyze parallel scaling for current commit
+.PHONY: bench/scaling
+bench/scaling:
+	@echo "$(YELLOW)▶ Analyzing parallel scaling...$(NC)"
+	@python3 scripts/bench_runner.py scaling
 
 ## bench/list: list all saved benchmark results
 .PHONY: bench/list
 bench/list:
-	@python3 scripts/bench_manager.py list
+	@echo "$(YELLOW)▶ Listing saved benchmarks...$(NC)"
+	@python3 scripts/bench_runner.py list
+
+## bench/compare: compare benchmark results
+# Usage:
+#   make bench/compare COMMIT1=<hash> COMMIT2=<hash>
+.PHONY: bench/compare
+bench/compare:
+	@if [ -z "$(COMMIT1)" ]; then \
+		echo "$(RED)❌ Usage: make bench/compare COMMIT1=<hash> COMMIT2=<hash>$(NC)"; \
+		exit 1; \
+	fi
+	@if [ -z "$(COMMIT2)" ]; then \
+		echo "$(YELLOW)▶ Comparing $(COMMIT1) with HEAD...$(NC)"; \
+		python3 scripts/bench_runner.py compare $(COMMIT1) HEAD; \
+	else \
+		echo "$(YELLOW)▶ Comparing $(COMMIT1) with $(COMMIT2)...$(NC)"; \
+		python3 scripts/bench_runner.py compare $(COMMIT1) $(COMMIT2); \
+	fi
 
 
-# Catch-all rule for positional arguments to bench and bench/compare
-%:
-	@:
 
 ## deps: download and verify dependencies
 .PHONY: deps

@@ -117,26 +117,7 @@ func BenchmarkSharded_Get_Hit(b *testing.B) {
 	}
 }
 
-func BenchmarkSharded_Parallel_Mixed(b *testing.B) {
-	cache := NewUnsafeShardedCache(10000, 16)
-	// Pre-populate
-	for i := 0; i < 5000; i++ {
-		cache.Set(strconv.Itoa(i), i)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
-			if i%3 == 0 {
-				cache.Set(strconv.Itoa(i), i)
-			} else {
-				cache.Get(strconv.Itoa(i % 5000))
-			}
-			i++
-		}
-	})
-}
+// Parallel benchmarks moved to kcache_bench_multi_test.go
 
 // ============= Standard Map Benchmarks (for comparison) =============
 
@@ -190,42 +171,7 @@ func BenchmarkEviction_Sharded(b *testing.B) {
 	}
 }
 
-// ============= Parallel Benchmarks =============
-
-func BenchmarkCache_Parallel_Set(b *testing.B) {
-	sizes := []int{100, 1000, 10000}
-	for _, size := range sizes {
-		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
-			cache := NewCache(WithCapacity(size), WithShards(16))
-			b.ResetTimer()
-			b.ReportAllocs()
-			b.RunParallel(func(pb *testing.PB) {
-				i := 0
-				for pb.Next() {
-					cache.Set(strconv.Itoa(i), i)
-					i++
-				}
-			})
-		})
-	}
-}
-
-func BenchmarkCache_Parallel_Get(b *testing.B) {
-	cache := NewCache(WithCapacity(10000), WithShards(16))
-	// Pre-populate
-	for i := 0; i < 10000; i++ {
-		cache.Set(strconv.Itoa(i), i)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
-			cache.Get(strconv.Itoa(i % 10000))
-			i++
-		}
-	})
-}
+// Parallel benchmarks moved to kcache_bench_multi_test.go
 
 // ============= Memory Benchmarks =============
 
@@ -251,44 +197,4 @@ func BenchmarkCacheMemoryUsage(b *testing.B) {
 	}
 }
 
-// ============= Contention Benchmarks =============
-
-func BenchmarkCacheHighContention(b *testing.B) {
-	cache := NewUnsafeShardedCache(1000, 32)
-	// Pre-populate with hot keys
-	for i := 0; i < 100; i++ {
-		cache.Set(strconv.Itoa(i), i)
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			// 90% reads on hot keys, 10% writes
-			for i := 0; i < 9; i++ {
-				cache.Get(strconv.Itoa(i % 100))
-			}
-			cache.Set(strconv.Itoa(100), 100)
-		}
-	})
-}
-
-func BenchmarkLowContention(b *testing.B) {
-	cache := NewUnsafeShardedCache(100000, 32)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
-			// Each goroutine works on different keys
-			key := strconv.Itoa(i*runtime.NumCPU() + runtime.NumCPU())
-			if i%2 == 0 {
-				cache.Set(key, i)
-			} else {
-				cache.Get(key)
-			}
-			i++
-		}
-	})
-}
+// Contention benchmarks moved to kcache_bench_multi_test.go

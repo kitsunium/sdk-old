@@ -582,13 +582,6 @@ func BenchmarkGlobalPool(b *testing.B) {
 		}
 	})
 
-	b.Run("ConcurrentGetPutBuffer", func(b *testing.B) {
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				buf := pool.GetBuffer(1024)
-				buf.Write([]byte("test"))
-				pool.PutBuffer(buf)
-			}
-		})
-	})
+	// ConcurrentGetPutBuffer moved to kbuffer_bench_multi_test.go
+	// as it requires thread-safe operations
 }

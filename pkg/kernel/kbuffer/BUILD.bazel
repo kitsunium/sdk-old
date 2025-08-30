@@ -44,6 +44,7 @@ go_test(
     srcs = [
         "goroutine_check_test.go",
         "interface_test.go",
+        "kbuffer_bench_multi_test.go",
         "kbuffer_bench_test.go",
         "safe_buffer_test.go",
         "safe_sharded_test.go",
