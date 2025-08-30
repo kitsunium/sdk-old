@@ -167,19 +167,22 @@ bench/list:
 
 ## bench/compare: compare benchmark results
 # Usage:
-#   make bench/compare COMMIT1=<hash> COMMIT2=<hash>
+#   make bench/compare <hash1> <hash2>
 .PHONY: bench/compare
 bench/compare:
-	@if [ -z "$(COMMIT1)" ]; then \
-		echo "$(RED)❌ Usage: make bench/compare COMMIT1=<hash> COMMIT2=<hash>$(NC)"; \
+	@commits="$(filter-out $@,$(MAKECMDGOALS))"; \
+	commit1=$$(echo "$$commits" | awk '{print $$1}'); \
+	commit2=$$(echo "$$commits" | awk '{print $$2}'); \
+	if [ -z "$$commit1" ]; then \
+		echo "$(RED)❌ Usage: make bench/compare <hash1> <hash2>$(NC)"; \
 		exit 1; \
-	fi
-	@if [ -z "$(COMMIT2)" ]; then \
-		echo "$(YELLOW)▶ Comparing $(COMMIT1) with HEAD...$(NC)"; \
-		python3 scripts/bench_runner.py compare $(COMMIT1) HEAD; \
+	fi; \
+	if [ -z "$$commit2" ]; then \
+		echo "$(YELLOW)▶ Comparing $$commit1 with HEAD...$(NC)"; \
+		python3 scripts/bench_runner.py compare $$commit1 HEAD; \
 	else \
-		echo "$(YELLOW)▶ Comparing $(COMMIT1) with $(COMMIT2)...$(NC)"; \
-		python3 scripts/bench_runner.py compare $(COMMIT1) $(COMMIT2); \
+		echo "$(YELLOW)▶ Comparing $$commit1 with $$commit2...$(NC)"; \
+		python3 scripts/bench_runner.py compare $$commit1 $$commit2; \
 	fi
 
 

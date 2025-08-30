@@ -574,7 +574,7 @@ class BenchmarkComparator:
                     time_change = self._format_change(r1['ns_per_op'], r2['ns_per_op'])
                     
                     alloc_str = ""
-                    if r2.get('allocs_per_op'):
+                    if r2['allocs_per_op']:
                         alloc_str = f"{r2['allocs_per_op']} allocs"
                     
                     print(f"{bench[:29]:<30} {mode:<8} "
