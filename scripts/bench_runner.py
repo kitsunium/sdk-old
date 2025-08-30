@@ -549,44 +549,80 @@ class BenchmarkComparator:
             key = (r['package'], r['benchmark'], r['mode'])
             bench_map2[key] = r
         
-        # Compare results
+        # Group results by package
         packages = {}
-        for key in set(bench_map1.keys()) | set(bench_map2.keys()):
+        all_keys = set(bench_map1.keys()) | set(bench_map2.keys())
+        
+        for key in all_keys:
             pkg, bench, mode = key
             if pkg not in packages:
-                packages[pkg] = []
-            packages[pkg].append((bench, mode))
+                packages[pkg] = {}
+            if bench not in packages[pkg]:
+                packages[pkg][bench] = {}
+            packages[pkg][bench][mode] = key
         
+        # Print comparison by package
         for pkg in sorted(packages.keys()):
-            print(f"\n{Colors.BOLD}{pkg.split('/')[-1]}{Colors.NC}")
-            print("─" * 80)
+            pkg_name = pkg.split('/')[-1] if pkg else "root"
+            print(f"\n{Colors.BOLD}📦 {pkg_name}{Colors.NC}")
+            print("─" * 85)
             
-            # Print header
-            print(f"{'Benchmark':<30} {'Mode':<8} {'Time/op':<15} {'Change':<12} {'Allocs':<12}")
-            print("─" * 80)
+            # Print header with better formatting
+            print(f"{'Benchmark':<35} {'Single-Core':<20} {'Multi-Core':<20} {'Scaling':<10}")
+            print("─" * 85)
             
-            for bench, mode in sorted(set(packages[pkg])):
-                key = (pkg, bench, mode)
-                r1 = bench_map1.get(key)
-                r2 = bench_map2.get(key)
+            for bench_name in sorted(packages[pkg].keys()):
+                modes = packages[pkg][bench_name]
                 
-                if r1 and r2:
-                    time_change = self._format_change(r1['ns_per_op'], r2['ns_per_op'])
-                    
-                    alloc_str = ""
-                    if r2['allocs_per_op']:
-                        alloc_str = f"{r2['allocs_per_op']} allocs"
-                    
-                    print(f"{bench[:29]:<30} {mode:<8} "
-                          f"{r2['ns_per_op']:.1f} ns{'':<5} "
-                          f"{time_change:<12} {alloc_str:<12}")
-                elif r2:
-                    print(f"{bench[:29]:<30} {mode:<8} "
-                          f"{r2['ns_per_op']:.1f} ns{'':<5} "
-                          f"{'NEW':<12}")
-                elif r1:
-                    print(f"{bench[:29]:<30} {mode:<8} "
-                          f"{'REMOVED':<15}")
+                # Get single and multi results
+                single_key = modes.get('single')
+                multi_key = modes.get('multi')
+                
+                single_r1 = bench_map1.get(single_key) if single_key else None
+                single_r2 = bench_map2.get(single_key) if single_key else None
+                multi_r1 = bench_map1.get(multi_key) if multi_key else None
+                multi_r2 = bench_map2.get(multi_key) if multi_key else None
+                
+                # Format single-core results
+                single_str = ""
+                if single_r1 and single_r2:
+                    change = self._format_change(single_r1['ns_per_op'], single_r2['ns_per_op'])
+                    single_str = f"{single_r2['ns_per_op']:.1f}ns {change}"
+                elif single_r2:
+                    single_str = f"{single_r2['ns_per_op']:.1f}ns NEW"
+                elif single_r1:
+                    single_str = "REMOVED"
+                else:
+                    single_str = "-"
+                
+                # Format multi-core results
+                multi_str = ""
+                if multi_r1 and multi_r2:
+                    change = self._format_change(multi_r1['ns_per_op'], multi_r2['ns_per_op'])
+                    multi_str = f"{multi_r2['ns_per_op']:.1f}ns {change}"
+                elif multi_r2:
+                    multi_str = f"{multi_r2['ns_per_op']:.1f}ns NEW"
+                elif multi_r1:
+                    multi_str = "REMOVED"
+                else:
+                    multi_str = "-"
+                
+                # Calculate scaling efficiency if both modes exist
+                scaling_str = ""
+                if single_r2 and multi_r2 and multi_r2['cores'] > 1:
+                    speedup = single_r2['ns_per_op'] / multi_r2['ns_per_op']
+                    efficiency = (speedup / multi_r2['cores']) * 100
+                    if efficiency > 80:
+                        scaling_str = f"{Colors.GREEN}{efficiency:.0f}%{Colors.NC}"
+                    elif efficiency > 50:
+                        scaling_str = f"{Colors.YELLOW}{efficiency:.0f}%{Colors.NC}"
+                    else:
+                        scaling_str = f"{Colors.RED}{efficiency:.0f}%{Colors.NC}"
+                
+                # Only print if there's something to show
+                if single_str != "-" or multi_str != "-":
+                    bench_display = bench_name[:34]
+                    print(f"{bench_display:<35} {single_str:<20} {multi_str:<20} {scaling_str:<10}")
     
     def compare_parallel_scaling(self, commit: str):
         """Compare single vs multi-core performance for a commit."""
