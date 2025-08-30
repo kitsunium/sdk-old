@@ -9,7 +9,6 @@ load("//build:go_rules.bzl", "kitsunium_go_benchmark", "kitsunium_go_library", "
 kitsunium_go_library(
     name = "fs",
     importpath = "github.com/kitsunium/sdk/pkg/kernel/fs",
-    is_kernel = True,
     deps = [
         "//pkg/lib/pointer",
         "@org_golang_x_sys//unix",

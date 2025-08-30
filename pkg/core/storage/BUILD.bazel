@@ -22,15 +22,15 @@ kitsunium_go_test(
 
 # No benchmark files exist for this package
 
-alias(
-    name = "go_default_library",
-    actual = ":storage",
-    visibility = ["//visibility:public"],
-)
-
 go_test(
     name = "storage_test",
     size = "small",
     srcs = ["storage_test.go"],
     embed = [":storage"],
+)
+
+alias(
+    name = "go_default_library",
+    actual = ":storage",
+    visibility = ["//visibility:public"],
 )

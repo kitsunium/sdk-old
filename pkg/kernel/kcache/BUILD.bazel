@@ -9,7 +9,6 @@ load("//build:go_rules.bzl", "kitsunium_go_benchmark", "kitsunium_go_library", "
 kitsunium_go_library(
     name = "kcache",
     importpath = "github.com/kitsunium/sdk/pkg/kernel/kcache",
-    is_kernel = True,
 )
 
 # =============================================================================
@@ -35,7 +34,6 @@ kitsunium_go_benchmark(
 # Multi-core benchmark
 kitsunium_go_benchmark(
     name = "bench_multi",
-    srcs = ["kcache_bench_test.go"],
     embed = [":kcache"],
 )
 

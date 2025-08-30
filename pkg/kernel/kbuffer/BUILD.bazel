@@ -9,7 +9,6 @@ load("//build:go_rules.bzl", "kitsunium_go_benchmark", "kitsunium_go_library", "
 kitsunium_go_library(
     name = "kbuffer",
     importpath = "github.com/kitsunium/sdk/pkg/kernel/kbuffer",
-    is_kernel = True,
 )
 
 # =============================================================================

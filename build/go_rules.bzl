@@ -13,7 +13,6 @@ def kitsunium_go_library(
         importpath = None,
         deps = None,
         visibility = None,
-        is_kernel = False,
         **kwargs):
     """
     Standardized Go library rule for Kitsunium SDK.
@@ -24,7 +23,6 @@ def kitsunium_go_library(
         importpath: Import path for the library
         deps: Dependencies
         visibility: Visibility rules (defaults to //visibility:public)
-        is_kernel: Whether this is a kernel package (enforces additional constraints)
         **kwargs: Additional arguments passed to go_library
     """
     if srcs == None:
@@ -118,9 +116,9 @@ def kitsunium_go_benchmark(
     # Auto-detect source files based on target name
     if srcs == None:
         if "multi" in name:
-            srcs = native.glob(["*_bench_multi_test.go"], allow_empty = True)
+            srcs = native.glob(["*_bench_multi_test.go", "*bench*test.go"], allow_empty = True)
         else:
-            srcs = native.glob(["*_bench_test.go"], allow_empty = True)
+            srcs = native.glob(["*_bench_test.go", "*bench*test.go"], allow_empty = True)
     
     # Only create benchmark target if there are benchmark files
     if len(srcs) > 0:
@@ -158,7 +156,6 @@ def kitsunium_go_package(
         importpath,
         deps = None,
         test_deps = None,
-        is_kernel = False,
         has_benchmarks = True):
     """
     Complete package setup with library, tests, and benchmarks.
@@ -175,7 +172,6 @@ def kitsunium_go_package(
         importpath: Import path for the library
         deps: Library dependencies
         test_deps: Additional test dependencies
-        is_kernel: Whether this is a kernel package
         has_benchmarks: Whether to generate benchmark targets
     """
     # Create the library
@@ -183,7 +179,6 @@ def kitsunium_go_package(
         name = name,
         importpath = importpath,
         deps = deps,
-        is_kernel = is_kernel,
     )
     
     # Create the test target (MODE 1: TEST)

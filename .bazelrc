@@ -208,10 +208,6 @@ build --experimental_repository_cache_hardlinks
 build --remote_cache_compression
 build --remote_cache_async
 
-# Additional cache config for local builds
-build:local --disk_cache=~/.cache/bazel-disk-cache
-build:local --repository_cache=~/.cache/bazel-repo-cache
-
 # =============================================================================
 # SDK DISTRIBUTION BUILD
 # =============================================================================
