@@ -1,3 +1,5 @@
+// Package kcache provides cache implementations with configurable thread safety.
+// This file contains thread-safe cache implementation using RWMutex for concurrent access.
 package kcache
 
 import (

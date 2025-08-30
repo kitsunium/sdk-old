@@ -1,3 +1,5 @@
+// Package kcache provides cache implementations with configurable thread safety.
+// This file contains thread-safe sharded cache implementation with per-shard mutexes for reduced contention.
 package kcache
 
 import (

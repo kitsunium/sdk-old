@@ -1,3 +1,5 @@
+// Package kcache provides cache implementations with configurable thread safety.
+// This file contains batch processing functionality for optimized bulk operations.
 package kcache
 
 import (

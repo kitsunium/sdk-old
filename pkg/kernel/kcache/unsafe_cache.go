@@ -1,3 +1,5 @@
+// Package kcache provides cache implementations with configurable thread safety.
+// This file contains non-thread-safe cache implementation optimized for single-threaded access.
 package kcache
 
 import (
@@ -50,7 +52,7 @@ type unsafeCache struct {
 	mask     uint32     // Capacity - 1, used for fast modulo via bitwise AND
 	maxLoad  int32      // Maximum entries before resize (capacity * loadFactor)
 	hasher   Hasher     // Hash function implementation
-	pool     *entryPool // Object pool for entry allocation
+	pool     *EntryPool // Object pool for entry allocation
 
 	// Cache line 2 (64 bytes) - Safety and metadata
 	checker   goroutineChecker // Goroutine safety checker
@@ -91,7 +93,7 @@ func newUnsafeCache(capacity int) *unsafeCache {
 		mask:     uint32(capacity - 1),
 		maxLoad:  int32(float32(capacity) * DefaultLoadFactor),
 		hasher:   newFNVHasher(), // Default to FNV-1a for speed
-		pool:     newEntryPool(), // Initialize object pool
+		pool:     NewEntryPool(), // Initialize object pool
 	}
 
 	// Go guarantees zero initialization, no need for explicit loop
@@ -124,9 +126,9 @@ func newUnsafeCacheNoCheck(capacity int) *unsafeCache {
 		capacity:  int32(capacity),
 		mask:      uint32(capacity - 1),
 		maxLoad:   int32(float32(capacity) * DefaultLoadFactor),
-		hasher:    newFNVHasher(),       // Default to FNV-1a for speed
-		pool:      getGlobalEntryPool(), // Use global pool for efficiency
-		skipCheck: true,                 // Skip goroutine checking - safe under mutex
+		hasher:    newFNVHasher(), // Default to FNV-1a for speed
+		pool:      NewEntryPool(), // Create new pool for this instance
+		skipCheck: true,           // Skip goroutine checking - safe under mutex
 	}
 }
 

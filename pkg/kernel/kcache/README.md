@@ -1,206 +1,218 @@
 # kcache
 
-Package kcache provides high-performance cache implementations for the Kitsunium
-SDK kernel layer.
+Cache implementations with explicit thread safety selection for kernel-level
+operations.
 
-## Overview
+## Package Design
 
-The kcache package offers multiple cache implementations with different
-trade-offs between safety and performance. All implementations support key-value
-storage with interface{} types.
+The kcache package provides cache implementations requiring explicit safety
+choice:
 
-## Cache Types
+- **Unsafe caches**: Single-threaded access only, no synchronization overhead
+- **Safe caches**: Thread-safe with mutex protection for concurrent access
+- **Sharded variants**: Distribute keys across multiple buckets to reduce
+  contention
 
-### Basic Caches
+All caches must be explicitly instantiated. No global instances are provided -
+the application or framework decides on instance management.
 
-- **UnsafeCache**: Single-threaded cache without synchronization. Fastest option
-  for single-threaded use.
-- **SafeCache**: Thread-safe cache using RWMutex. Suitable for low-to-moderate
-  concurrent access.
+## Thread Safety Selection
 
-### Sharded Caches
+### Explicit Safety Requirement
 
-- **UnsafeShardedCache**: Sharded cache without synchronization. For
-  single-threaded use with better cache locality.
-- **SafeShardedCache**: Thread-safe sharded cache. Reduces contention through
-  sharding for high-concurrency scenarios.
-
-## Features
-
-### Core Operations
-
-- `Set(key, value)`: Store key-value pair
-- `Get(key)`: Retrieve value by key
-- `Has(key)`: Check key existence
-- `Delete(key)`: Remove key
-- `Clear()`: Remove all entries
-- `Len()`: Get entry count
-- `Cap()`: Get capacity
-
-### Batch Operations
-
-All cache types support batch operations for improved throughput:
-
-- `SetBatch(keys, values)`: Store multiple pairs
-- `GetBatch(keys)`: Retrieve multiple values
-- `HasBatch(keys)`: Check multiple keys
-- `DeleteBatch(keys)`: Remove multiple keys
-
-### Global Cache
-
-A global singleton cache instance is available via `Global()` for convenient
-access across the application.
-
-## Usage
-
-### Single-Threaded
+Every cache creation requires an explicit choice between safe and unsafe
+variants:
 
 ```go
-cache := kcache.NewUnsafeCache(1000)
+// Single-threaded context: use unsafe cache
+cache := kcache.NewUnsafeCache(10000)
+
+// Multi-threaded context: use safe cache
+cache := kcache.NewSafeCache(10000)
+
+// High contention: use sharded safe cache
+cache := kcache.NewSafeShardedCache(10000, 32)
+```
+
+### Basic Operations
+
+```go
+// Set a key-value pair
 cache.Set("key", "value")
+
+// Get a value
 value, found := cache.Get("key")
+if found {
+    // Use value
+}
+
+// Check if key exists
+if cache.Has("key") {
+    // Key exists
+}
+
+// Delete a key
+deleted := cache.Delete("key")
+
+// Clear all entries
+cache.Clear()
+
+// Get cache statistics
+size := cache.Len()
+capacity := cache.Cap()
 ```
 
-### Multi-Threaded
+## Implementation Variants
 
-```go
-cache := kcache.NewSafeCache(1000)
-// Safe for concurrent access
-go cache.Set("key1", "value1")
-go cache.Set("key2", "value2")
-```
+### Unsafe Cache (`NewUnsafeCache`)
 
-### High Concurrency
+- **Usage**: Single-threaded contexts only
+- **Synchronization**: None
+- **Access**: Will panic if accessed from multiple goroutines (development
+  builds)
+- **Typical latency**: 20-30 ns/operation
 
-```go
-cache := kcache.NewSafeShardedCache(1000, 32) // 32 shards
-// Reduced contention through sharding
-```
+### Safe Cache (`NewSafeCache`)
 
-### With Options
+- **Usage**: Multi-threaded contexts with low to moderate contention
+- **Synchronization**: Single RWMutex for entire cache
+- **Access**: Thread-safe for concurrent operations
+- **Typical latency**: 60-80 ns/operation
 
-```go
-cache := kcache.NewCache(
-    kcache.WithCapacity(10000),
-    kcache.WithShards(64),
-    kcache.WithThreadSafe(true),
-)
-```
+### Unsafe Sharded Cache (`NewUnsafeShardedCache`)
+
+- **Usage**: Single-threaded contexts with large datasets
+- **Synchronization**: None (sharding for cache locality only)
+- **Access**: Will panic if accessed from multiple goroutines (development
+  builds)
+- **Typical latency**: 25-35 ns/operation
+
+### Safe Sharded Cache (`NewSafeShardedCache`)
+
+- **Usage**: Multi-threaded contexts with high contention
+- **Synchronization**: Per-shard RWMutex
+- **Access**: Thread-safe with reduced contention through sharding
+- **Typical latency**: 40-50 ns/operation
 
 ## Build Configuration
 
-### Development Mode
+### Development Builds (default)
 
-In development builds (without `kcache_benchmark` tag), the package includes:
+- Goroutine safety checks enabled for unsafe caches
+- Detects concurrent access violations
+- Panics with diagnostic message on safety violations
+- Minimal overhead through sampling (1 in 512 operations)
 
-- Goroutine safety checks to detect concurrent access violations
-- Runtime validation for unsafe operations
-- Additional debugging information
+### Production Builds
 
-### Benchmark Mode
+- Build tag: `unsafe_no_check`
+- All safety checks compiled out
+- Zero overhead for safety checking
+- Responsibility for correct usage lies with the application
 
-With `kcache_benchmark` build tag:
+## Instance Management
 
-- Goroutine checks disabled
-- Optimized for maximum performance
-- Suitable for production and benchmarking
+### No Global State
 
-### Build Examples
+- All caches require explicit instantiation
+- No global pools or caches provided
+- Application/framework manages instance lifecycle
+- Allows for proper resource control and testing
 
-```bash
-# Development build (with safety checks)
-go build ./...
+### Object Pooling
 
-# Benchmark/production build (optimized)
-go build -tags kcache_benchmark ./...
+Applications can create pools for reduced allocations:
 
-# Bazel development build
-bazel build //pkg/kernel/kcache:test
+```go
+// Application-managed entry pool
+entryPool := kcache.NewEntryPool()
 
-# Bazel benchmark build
-bazel build --config=benchmark //pkg/kernel/kcache:bench
+// Application-managed batch pool
+batchPool := kcache.NewBatchPool()
 ```
 
-## Performance Characteristics
+## Batch Operations
 
-### Operation Latencies (approximate)
+Caches implement batch interfaces for bulk operations:
 
-| Operation | UnsafeCache | SafeCache | UnsafeSharded | SafeSharded |
-| --------- | ----------- | --------- | ------------- | ----------- |
-| Get       | 20-30 ns    | 60-80 ns  | 25-35 ns      | 40-60 ns    |
-| Set       | 25-35 ns    | 70-90 ns  | 30-40 ns      | 50-70 ns    |
+```go
+// Batch set operations
+cache.SetBatch(keys, values)
+
+// Batch get operations
+values, found := cache.GetBatch(keys)
+
+// Batch delete operations
+deleted := cache.DeleteBatch(keys)
+```
+
+## Technical Implementation
+
+### Hash Table Design
+
+- Robin Hood hashing for collision resolution
+- Power-of-2 sizing for bitwise modulo
+- Pre-computed hash storage to avoid recomputation
+- Entry states: empty, active, deleted (tombstone)
 
 ### Memory Layout
 
-- Cache-line aligned structures to prevent false sharing
-- Optimized entry size (48 bytes) for efficient memory usage
-- Sharded caches use power-of-2 shard counts for fast modulo operations
+- Cache-line aligned structures (64 bytes)
+- Padding to prevent false sharing
+- Inline entry storage for cache locality
+- Careful field ordering for access patterns
 
-## Implementation Details
+### Sharding Strategy
 
-### Hashing
+- Power-of-2 shard count for fast selection
+- FNV-1a hash function for distribution
+- Independent shard management
+- Per-shard size tracking
 
-- Multiple hash algorithms: FNV-1a, xxHash, CityHash, Murmur3
-- Automatic algorithm selection based on key type
-- Optimized for common types (string, int, etc.)
+## Usage Guidelines
 
-### Collision Resolution
+### Single-Threaded Contexts
 
-- Open addressing with quadratic probing
-- Dynamic resizing at configurable load factors
-- Tombstone entries for deletion handling
+- Use unsafe variants for zero synchronization overhead
+- Development builds will detect accidental concurrent access
+- Suitable for request-scoped caches in single-threaded handlers
 
-### Memory Management
+### Multi-Threaded Contexts
 
-- Object pooling for reduced allocations
-- Batch operations for improved locality
-- Streaming batch API for large datasets
+- Use safe variants for automatic synchronization
+- Consider sharded variants when contention exceeds 10%
+- Shard count typically 4x CPU cores for optimal distribution
 
-## Thread Safety
+### Memory Pressure
 
-### Safe Variants
-
-- Use RWMutex for reader-writer separation
-- Sharded variants reduce lock contention
-- Safe for concurrent access from multiple goroutines
-
-### Unsafe Variants
-
-- No synchronization overhead
-- Must be externally synchronized or used single-threaded
-- Development builds include goroutine checks to detect violations
+- Caches retain internal structures after Clear()
+- Call runtime.GC() explicitly if immediate reclamation needed
+- Use pools for frequently allocated/deallocated caches
 
 ## Testing
 
+### Unit Tests
+
 ```bash
-# Run tests
-bazel test //pkg/kernel/kcache:test
+# Run with safety checks (default)
+bazel test //pkg/kernel/kcache:kcache_test
 
-# Run benchmarks
-bazel test //pkg/kernel/kcache:bench --config=benchmark
-
-# Run with race detector
-bazel test //pkg/kernel/kcache:test --features=race
+# Run specific test
+bazel test //pkg/kernel/kcache:kcache_test --test_filter=TestUnsafeCache
 ```
 
-## Configuration Constants
+### Benchmarks
 
-Key configuration constants can be found in `constants.go`:
+```bash
+# Run benchmarks without safety checks
+bazel test //pkg/kernel/kcache:kcache_bench_test --test_arg=-test.bench=. \
+  --define gotags=unsafe_no_check
 
-- `DefaultCapacity`: 16 entries
-- `DefaultLoadFactor`: 0.75
-- `DefaultShardCount`: 32 shards
-- `CacheLineSize`: 64 bytes
-- `MaxCapacity`: 16 million entries
+# Run specific benchmark
+bazel test //pkg/kernel/kcache:kcache_bench_test \
+  --test_arg=-test.bench=BenchmarkUnsafeCache
+```
 
-## Dependencies
+## Build Tags
 
-The package has minimal dependencies:
-
-- Standard library only
-- No external dependencies
-- Unsafe package for performance optimizations
-
-## License
-
-Part of the Kitsunium SDK. See repository LICENSE for details.
+- `unsafe_no_check`: Removes goroutine safety checks for production builds

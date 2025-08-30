@@ -1,25 +1,26 @@
+// Package kcache provides cache implementations with configurable thread safety.
+// This file contains object pooling utilities for reducing allocation overhead.
 package kcache
 
 import (
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
-// entryPool manages a pool of reusable entry objects.
-// Reduces allocation pressure in hot paths.
-type entryPool struct {
+// EntryPool manages a pool of reusable entry objects.
+// Each cache instance can create its own pool to reduce allocation pressure.
+type EntryPool struct {
 	pool    *sync.Pool   // Underlying sync.Pool
 	size    atomic.Int64 // Current pool size estimate
 	maxSize int64        // Maximum pool size
 	_       [32]byte     // Cache line padding
 }
 
-// newEntryPool creates a new entry object pool.
-// Pre-allocates entries to avoid startup allocation spike.
-func newEntryPool() *entryPool {
-	ep := &entryPool{
+// NewEntryPool creates a new entry object pool.
+// The pool pre-allocates entries to avoid startup allocation spike.
+func NewEntryPool() *EntryPool {
+	ep := &EntryPool{
 		maxSize: DefaultPoolSize,
 	}
 
@@ -38,7 +39,7 @@ func newEntryPool() *entryPool {
 }
 
 // prewarm pre-allocates entries to avoid startup latency.
-func (ep *entryPool) prewarm(count int) {
+func (ep *EntryPool) prewarm(count int) {
 	entries := make([]*entry, count)
 	for i := range entries {
 		entries[i] = &entry{}
@@ -52,11 +53,11 @@ func (ep *entryPool) prewarm(count int) {
 	ep.size.Store(int64(count))
 }
 
-// get retrieves an entry from the pool or creates a new one.
-// Resets the entry to zero values for safety.
+// Get retrieves an entry from the pool or creates a new one.
+// The entry is reset to zero values for safety.
 //
 //go:inline
-func (ep *entryPool) get() *entry {
+func (ep *EntryPool) Get() *entry {
 	// Get from pool
 	if obj := ep.pool.Get(); obj != nil {
 		e := obj.(*entry)
@@ -72,11 +73,11 @@ func (ep *entryPool) get() *entry {
 	return &entry{}
 }
 
-// put returns an entry to the pool for reuse.
-// Clears sensitive data before pooling.
+// Put returns an entry to the pool for reuse.
+// Sensitive data is cleared before pooling.
 //
 //go:inline
-func (ep *entryPool) put(e *entry) {
+func (ep *EntryPool) Put(e *entry) {
 	// Don't pool if at capacity
 	if ep.size.Load() >= ep.maxSize {
 		return
@@ -93,18 +94,19 @@ func (ep *entryPool) put(e *entry) {
 	ep.size.Add(1)
 }
 
-// keyPool manages string key allocations.
-// Optimizes for common key patterns.
-type keyPool struct {
+// KeyPool manages string key allocations.
+// Optimizes for common key size patterns.
+type KeyPool struct {
 	small  *sync.Pool // Pool for small strings (<= 64 bytes)
 	medium *sync.Pool // Pool for medium strings (<= 256 bytes)
 	large  *sync.Pool // Pool for large strings (<= 1024 bytes)
 	_      [32]byte   // Cache line padding
 }
 
-// newKeyPool creates a pool for string keys.
-func newKeyPool() *keyPool {
-	return &keyPool{
+// NewKeyPool creates a pool for string keys.
+// Separates pools by size for better memory efficiency.
+func NewKeyPool() *KeyPool {
+	return &KeyPool{
 		small: &sync.Pool{
 			New: func() interface{} {
 				b := make([]byte, 64)
@@ -126,10 +128,10 @@ func newKeyPool() *keyPool {
 	}
 }
 
-// getBuffer retrieves a buffer of appropriate size.
+// GetBuffer retrieves a buffer of appropriate size.
 //
 //go:inline
-func (kp *keyPool) getBuffer(size int) *[]byte {
+func (kp *KeyPool) GetBuffer(size int) *[]byte {
 	switch {
 	case size <= 64:
 		return kp.small.Get().(*[]byte)
@@ -144,10 +146,10 @@ func (kp *keyPool) getBuffer(size int) *[]byte {
 	}
 }
 
-// putBuffer returns a buffer to the appropriate pool.
+// PutBuffer returns a buffer to the appropriate pool.
 //
 //go:inline
-func (kp *keyPool) putBuffer(buf *[]byte) {
+func (kp *KeyPool) PutBuffer(buf *[]byte) {
 	size := cap(*buf)
 	// Reset length but keep capacity
 	*buf = (*buf)[:0]
@@ -164,9 +166,9 @@ func (kp *keyPool) putBuffer(buf *[]byte) {
 	}
 }
 
-// nodePool manages hash table node allocations.
-// Used for collision chain nodes in advanced implementations.
-type nodePool struct {
+// NodePool manages hash table node allocations.
+// Used for collision chain nodes in hash table implementations.
+type NodePool struct {
 	pool    *sync.Pool
 	maxSize int64
 	size    atomic.Int64
@@ -181,9 +183,9 @@ type node struct {
 	next  *node
 }
 
-// newNodePool creates a pool for collision chain nodes.
-func newNodePool() *nodePool {
-	return &nodePool{
+// NewNodePool creates a pool for collision chain nodes.
+func NewNodePool() *NodePool {
+	return &NodePool{
 		maxSize: MaxPoolSize,
 		pool: &sync.Pool{
 			New: func() interface{} {
@@ -193,10 +195,10 @@ func newNodePool() *nodePool {
 	}
 }
 
-// get retrieves a node from the pool.
+// Get retrieves a node from the pool.
 //
 //go:inline
-func (np *nodePool) get() *node {
+func (np *NodePool) Get() *node {
 	if obj := np.pool.Get(); obj != nil {
 		n := obj.(*node)
 		// Reset node
@@ -209,10 +211,10 @@ func (np *nodePool) get() *node {
 	return &node{}
 }
 
-// put returns a node to the pool.
+// Put returns a node to the pool.
 //
 //go:inline
-func (np *nodePool) put(n *node) {
+func (np *NodePool) Put(n *node) {
 	if np.size.Load() >= np.maxSize {
 		return
 	}
@@ -227,77 +229,9 @@ func (np *nodePool) put(n *node) {
 	np.size.Add(1)
 }
 
-// globalPools holds globally shared pools.
-// Reduces per-cache memory overhead.
-var globalPools struct {
-	entries *entryPool
-	keys    *keyPool
-	nodes   *nodePool
-	once    sync.Once
-}
-
-// initGlobalPools initializes the global pools once.
-func initGlobalPools() {
-	globalPools.once.Do(func() {
-		globalPools.entries = newEntryPool()
-		globalPools.keys = newKeyPool()
-		globalPools.nodes = newNodePool()
-
-		// Register cleanup on GC
-		runtime.SetFinalizer(&globalPools, cleanupPoolsInternal)
-	})
-}
-
-// cleanupPools releases pool resources.
-// This is the internal cleanup function for the finalizer.
-func cleanupPoolsInternal(gp *struct {
-	entries *entryPool
-	keys    *keyPool
-	nodes   *nodePool
-	once    sync.Once
-}) {
-	// Pools are automatically cleaned by GC
-	// This is just for explicit cleanup if needed
-}
-
-// cleanupPools is the exported cleanup function for testing.
-func cleanupPools() {
-	// This function is primarily for testing purposes
-	// to force cleanup of global pools
-	if globalPools.entries != nil || globalPools.keys != nil || globalPools.nodes != nil {
-		cleanupPoolsInternal(&globalPools)
-	}
-}
-
-// getGlobalEntryPool returns the global entry pool.
-//
-//go:inline
-func getGlobalEntryPool() *entryPool {
-	initGlobalPools()
-	return globalPools.entries
-}
-
-// getGlobalKeyPool returns the global key pool.
-//
-//go:inline
-func getGlobalKeyPool() *keyPool {
-	initGlobalPools()
-	return globalPools.keys
-}
-
-// getGlobalNodePool returns the global node pool.
-//
-//go:inline
-func getGlobalNodePool() *nodePool {
-	initGlobalPools()
-	return globalPools.nodes
-}
-
-// Memory allocation optimizations
-
-// allocator provides custom memory allocation strategies.
-// Bypasses standard allocator for specific patterns.
-type allocator struct {
+// Allocator provides custom memory allocation strategies.
+// Can be used to implement arena allocation for specific use cases.
+type Allocator struct {
 	arena    []byte           // Memory arena
 	offset   uintptr          // Current allocation offset
 	size     uintptr          // Arena size
@@ -305,9 +239,10 @@ type allocator struct {
 	_        [32]byte         // Cache line padding
 }
 
-// newAllocator creates a custom allocator with arena.
-func newAllocator(size int) *allocator {
-	return &allocator{
+// NewAllocator creates a custom allocator with arena.
+// The arena size determines how much memory is pre-allocated.
+func NewAllocator(size int) *Allocator {
+	return &Allocator{
 		arena:  make([]byte, size),
 		size:   uintptr(size),
 		offset: 0,
@@ -317,12 +252,12 @@ func newAllocator(size int) *allocator {
 	}
 }
 
-// alloc allocates memory from the arena.
-// Falls back to standard allocator if arena exhausted.
+// Alloc allocates memory from the arena.
+// Falls back to standard allocator if arena is exhausted.
 //
 //go:inline
 //go:nosplit
-func (a *allocator) alloc(size int) []byte {
+func (a *Allocator) Alloc(size int) []byte {
 	// Save original size
 	origSize := size
 	// Align to 8 bytes for memory alignment
@@ -340,8 +275,9 @@ func (a *allocator) alloc(size int) []byte {
 	return a.arena[start : start+uintptr(origSize) : start+uintptr(alignedSize)]
 }
 
-// reset resets the allocator for reuse.
-func (a *allocator) reset() {
+// Reset resets the allocator for reuse.
+// Clears the arena for security.
+func (a *Allocator) Reset() {
 	atomic.StoreUintptr(&a.offset, 0)
 	// Clear arena for security
 	for i := range a.arena {
@@ -349,16 +285,15 @@ func (a *allocator) reset() {
 	}
 }
 
-// Object pooling for batch operations
-
-// batchPool pools batch operation buffers.
-type batchPool struct {
+// BatchPool pools batch operation buffers.
+// Reduces allocation overhead for batch operations.
+type BatchPool struct {
 	pool *sync.Pool
 }
 
-// newBatchPool creates a pool for batch buffers.
-func newBatchPool() *batchPool {
-	return &batchPool{
+// NewBatchPool creates a pool for batch buffers.
+func NewBatchPool() *BatchPool {
+	return &BatchPool{
 		pool: &sync.Pool{
 			New: func() interface{} {
 				return &batchBuffer{
@@ -372,50 +307,35 @@ func newBatchPool() *batchPool {
 	}
 }
 
-// get retrieves a batch buffer from the pool.
+// Get retrieves a batch buffer from the pool.
 //
 //go:inline
-func (bp *batchPool) get() *batchBuffer {
+func (bp *BatchPool) Get() *batchBuffer {
 	buf := bp.pool.Get().(*batchBuffer)
 	buf.reset()
 	return buf
 }
 
-// put returns a batch buffer to the pool.
+// Put returns a batch buffer to the pool.
 //
 //go:inline
-func (bp *batchPool) put(buf *batchBuffer) {
+func (bp *BatchPool) Put(buf *batchBuffer) {
 	buf.reset()
 	bp.pool.Put(buf)
 }
 
-// Global batch pool instance
-var globalBatchPool = newBatchPool()
-
-// getBatchBuffer gets a pooled batch buffer.
-//
-//go:inline
-func getBatchBuffer() *batchBuffer {
-	return globalBatchPool.get()
-}
-
-// putBatchBuffer returns a batch buffer to the pool.
-//
-//go:inline
-func putBatchBuffer(buf *batchBuffer) {
-	globalBatchPool.put(buf)
-}
-
-// Memory pressure handling
-
-// handleMemoryPressure responds to memory pressure.
-// Clears pools to release memory back to OS.
-func handleMemoryPressure() {
-	// Clear global pools
-	if globalPools.entries != nil {
+// HandleMemoryPressure can be called to release pooled objects.
+// This is useful when the application detects high memory usage.
+// Each pool instance should implement its own memory pressure handling.
+func HandleMemoryPressure(pools ...*sync.Pool) {
+	// Clear specified pools
+	for _, pool := range pools {
+		if pool == nil {
+			continue
+		}
 		// Force pool to release objects
 		for i := 0; i < 100; i++ {
-			if obj := globalPools.entries.pool.Get(); obj != nil {
+			if obj := pool.Get(); obj != nil {
 				// Don't put back, let GC reclaim
 				_ = obj
 			} else {
@@ -427,28 +347,4 @@ func handleMemoryPressure() {
 	// Force GC to reclaim memory
 	runtime.GC()
 	runtime.GC() // Second GC to handle finalizers
-}
-
-// monitorMemory monitors memory usage and triggers cleanup.
-func monitorMemory() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	// Check if memory usage is high
-	if m.Alloc > uint64(MaxCapacity*EntrySize) {
-		handleMemoryPressure()
-	}
-}
-
-// init registers memory monitor
-func init() {
-	// Periodic memory monitoring
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			monitorMemory()
-		}
-	}()
 }

@@ -198,12 +198,12 @@ func TestFactoryFunctions(t *testing.T) {
 	})
 }
 
-// TestGlobalPoolInterface verifies the global pool instance is accessible.
-// Tests that pool singleton is properly initialized.
-func TestGlobalPoolInterface(t *testing.T) {
-	pool := GetGlobalPool()
+// TestPoolInterface verifies the pool instance works correctly.
+// Tests that pool is properly initialized.
+func TestPoolInterface(t *testing.T) {
+	pool := NewPool()
 	if pool == nil {
-		t.Fatal("GetGlobalPool returned nil")
+		t.Fatal("NewPool returned nil")
 	}
 
 	// Test basic pool operations
@@ -393,7 +393,7 @@ func TestInterfacePanicRecovery(t *testing.T) {
 		}()
 
 		// These operations should be safe
-		pool := GetGlobalPool()
+		pool := NewPool()
 		pool.PutBuffer(nil)
 	})
 
@@ -563,7 +563,7 @@ func BenchmarkUtilityFunctions(b *testing.B) {
 
 // BenchmarkGlobalPool benchmarks global pool operations.
 func BenchmarkGlobalPool(b *testing.B) {
-	pool := GetGlobalPool()
+	pool := NewPool()
 
 	b.Run("GetBuffer", func(b *testing.B) {
 		b.ResetTimer()

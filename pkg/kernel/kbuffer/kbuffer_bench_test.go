@@ -3,6 +3,9 @@ package kbuffer
 import (
 	"bytes"
 	"fmt"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -161,7 +164,7 @@ func BenchmarkShardedBuffer_Balance(b *testing.B) {
 // Benchmark pool operations
 
 func BenchmarkPool_GetPut(b *testing.B) {
-	pool := GetGlobalPool()
+	pool := NewPool()
 
 	sizes := []int{256, 1024, 4096, 16384}
 
@@ -178,7 +181,7 @@ func BenchmarkPool_GetPut(b *testing.B) {
 }
 
 func BenchmarkPool_GetBufferPutBuffer(b *testing.B) {
-	pool := GetGlobalPool()
+	pool := NewPool()
 
 	b.ResetTimer()
 
@@ -222,16 +225,20 @@ func BenchmarkConcurrent_ShardedBuffer(b *testing.B) {
 
 func BenchmarkPool_ParallelGetPut(b *testing.B) {
 	sizes := []int{256, 1024, 4096}
-	p := newPool()
+	pool := NewPool()
 
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
 			b.SetBytes(int64(size))
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
-					buf := p.Get(size)
-					copy(buf[:min(10, size)], []byte("test data"))
-					p.Put(buf)
+					buf := pool.Get(size)
+					limit := 10
+					if size < limit {
+						limit = size
+					}
+					copy(buf[:limit], []byte("test data"))
+					pool.Put(buf)
 				}
 			})
 		})
@@ -239,6 +246,7 @@ func BenchmarkPool_ParallelGetPut(b *testing.B) {
 }
 
 func BenchmarkBuffer_Concurrent(b *testing.B) {
+	pool := NewPool()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			buf := pool.Get(1024)
@@ -263,7 +271,7 @@ func BenchmarkBuffer_ParallelWrite(b *testing.B) {
 		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
 			b.SetBytes(int64(size))
 			b.RunParallel(func(pb *testing.PB) {
-				buf := NewBuffer(size * 2)
+				buf := NewUnsafeBuffer(size * 2)
 				for pb.Next() {
 					buf.Reset()
 					buf.Write(data)
@@ -278,7 +286,7 @@ func BenchmarkBuffer_ParallelMixed(b *testing.B) {
 	str := "string data"
 
 	b.RunParallel(func(pb *testing.PB) {
-		buf := NewBuffer(4096)
+		buf := NewUnsafeBuffer(4096)
 		i := 0
 		for pb.Next() {
 			buf.Reset()
@@ -309,7 +317,7 @@ func BenchmarkAllocation_StandardBuffer(b *testing.B) {
 }
 
 func BenchmarkAllocation_WithPool(b *testing.B) {
-	pool := GetGlobalPool()
+	pool := NewPool()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
@@ -440,40 +448,37 @@ func BenchmarkCacheEfficiency_Random(b *testing.B) {
 // Contention benchmarks
 
 func BenchmarkContention_Sharded(b *testing.B) {
-	data := []byte("test")
+	pool := NewPool()
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			buf := p.Get(1024)
+			buf := pool.Get(1024)
 			copy(buf[:4], []byte("test"))
-			p.Put(buf)
+			pool.Put(buf)
 		}
 	})
 }
 
 func BenchmarkPool_ParallelContention(b *testing.B) {
-	p := newPool()
+	pool := NewPool()
 	sizes := []int{64, 256, 1024, 4096}
 
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
 			size := sizes[i%len(sizes)]
-			buf := p.Get(size)
-			for j := 0; j < min(10, size); j++ {
+			buf := pool.Get(size)
+			limit := 10
+			if size < limit {
+				limit = size
+			}
+			for j := 0; j < limit; j++ {
 				buf[j] = byte(j)
 			}
-			p.Put(buf)
+			pool.Put(buf)
 			i++
 		}
 	})
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func BenchmarkUnsafe_BytesAccess(b *testing.B) {

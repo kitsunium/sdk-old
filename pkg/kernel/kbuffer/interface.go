@@ -327,15 +327,6 @@ func NewSafeShardedBuffer(capacity, shards int, opts ...Option) Sharded {
 	return newSafeShardedBuffer(capacity, shards, opts...)
 }
 
-// GetGlobalPool returns the global buffer pool instance.
-// The global pool is shared across the entire application and provides
-// optimized buffer pooling with size classes from 64 bytes to 4MB.
-// It is thread-safe and can be used concurrently from multiple goroutines.
-func GetGlobalPool() Pool {
-	// Implementation will be in global.go
-	return globalPool
-}
-
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================

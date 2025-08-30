@@ -1,3 +1,5 @@
+// Package kcache provides cache implementations with configurable thread safety.
+// This file contains configuration constants for cache sizing, performance tuning, and memory optimization.
 package kcache
 
 import "unsafe"

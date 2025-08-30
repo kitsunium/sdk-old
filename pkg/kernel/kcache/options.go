@@ -1,3 +1,5 @@
+// Package kcache provides cache implementations with configurable thread safety.
+// This file contains functional options for configuring cache creation and behavior.
 package kcache
 
 // Option is a functional option for configuring cache creation.

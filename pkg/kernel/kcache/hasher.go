@@ -1,3 +1,5 @@
+// Package kcache provides cache implementations with configurable thread safety.
+// This file contains hash function implementations including FNV-1a, xxHash, and CityHash algorithms.
 package kcache
 
 import (

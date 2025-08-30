@@ -42,7 +42,6 @@ go_test(
     name = "kbuffer_test",
     size = "small",
     srcs = [
-        "global_test.go",
         "goroutine_check_test.go",
         "interface_test.go",
         "kbuffer_bench_test.go",
