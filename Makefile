@@ -134,19 +134,16 @@ test/coverage:
 ## bench: run benchmarks and save results to SQLite database
 # Usage:
 #   make bench                   - run benchmarks for current commit
-#   make bench COMMIT=<hash>     - run benchmarks for specific commit (with clone)
+#   make bench <hash>            - run benchmarks for specific commit (with clone)
 .PHONY: bench
 bench:
 	@if [ ! -f benchmarks.sqlite ]; then \
 		echo "$(YELLOW)▶ No local benchmark database found, initializing...$(NC)"; \
 		touch benchmarks.sqlite; \
 	fi
-	@if [ -n "$(COMMIT)" ]; then \
-		echo "$(YELLOW)▶ Running benchmarks for commit $(COMMIT) with isolation...$(NC)"; \
-		python3 scripts/bench_runner.py run $(COMMIT) --clone; \
-	elif [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "$(YELLOW)▶ Running benchmarks for commit $(filter-out $@,$(MAKECMDGOALS)) with isolation...$(NC)"; \
-		python3 scripts/bench_runner.py run $(filter-out $@,$(MAKECMDGOALS)) --clone; \
+	@if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "$(YELLOW)▶ Running benchmarks for commit $(filter-out $@,$(MAKECMDGOALS))...$(NC)"; \
+		python3 scripts/bench_runner.py run $(filter-out $@,$(MAKECMDGOALS)); \
 	else \
 		echo "$(YELLOW)▶ Running benchmarks for current commit...$(NC)"; \
 		python3 scripts/bench_runner.py run HEAD; \
