@@ -144,10 +144,17 @@ bench:
 	@if [ -n "$(COMMIT)" ]; then \
 		echo "$(YELLOW)▶ Running benchmarks for commit $(COMMIT) with isolation...$(NC)"; \
 		python3 scripts/bench_runner.py run $(COMMIT) --clone; \
+	elif [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "$(YELLOW)▶ Running benchmarks for commit $(filter-out $@,$(MAKECMDGOALS)) with isolation...$(NC)"; \
+		python3 scripts/bench_runner.py run $(filter-out $@,$(MAKECMDGOALS)) --clone; \
 	else \
 		echo "$(YELLOW)▶ Running benchmarks for current commit...$(NC)"; \
 		python3 scripts/bench_runner.py run HEAD; \
 	fi
+
+# Allow passing commit hash directly as argument
+%:
+	@:
 
 ## bench/scaling: analyze parallel scaling for current commit
 .PHONY: bench/scaling

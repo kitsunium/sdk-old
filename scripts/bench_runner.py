@@ -270,11 +270,10 @@ class BenchmarkRunner:
         print(f"  {Colors.BLUE}Date: {commit_info['commit_date']}{Colors.NC}")
         print(f"  {Colors.BLUE}Message: {commit_info['message']}{Colors.NC}")
         
-        work_dir = os.getcwd()
-        
-        # Clone to temp directory if requested
+        # Setup working directory (either clone or current)
         if use_clone and commit != "HEAD":
-            with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = tempfile.mkdtemp()
+            try:
                 clone_dir = os.path.join(tmpdir, "repo")
                 print(f"{Colors.YELLOW}Cloning repository to {clone_dir}...{Colors.NC}")
                 
@@ -291,147 +290,181 @@ class BenchmarkRunner:
                 )
                 
                 work_dir = clone_dir
+            except Exception as e:
+                import shutil
+                shutil.rmtree(tmpdir, ignore_errors=True)
+                raise e
+        else:
+            work_dir = os.getcwd()
+            tmpdir = None
         
-        # Get system info
-        go_version = subprocess.run(
-            ["go", "version"], capture_output=True, text=True
-        ).stdout.strip()
-        
-        os_info = os.uname()
-        
-        # Find benchmark packages
-        result = subprocess.run(
-            ["bazel", "query", '//pkg/...'],
-            cwd=work_dir, capture_output=True, text=True
-        )
-        
-        if result.returncode != 0:
-            print(f"{Colors.RED}Failed to find benchmark targets{Colors.NC}")
-            return False
-        
-        all_targets = [t for t in result.stdout.strip().split('\n') if t.startswith('//') and ':bench' in t]
-        
-        # Separate single and multi targets
-        single_targets = [t for t in all_targets if not t.endswith(':bench_multi')]
-        multi_targets = [t for t in all_targets if t.endswith(':bench_multi')]
-        
-        if not single_targets and not multi_targets:
-            print(f"{Colors.YELLOW}No benchmark targets found{Colors.NC}")
-            return False
-        
-        print(f"{Colors.GREEN}Found {len(single_targets)} single-core and {len(multi_targets)} multi-core benchmark targets{Colors.NC}")
-        
-        # Get number of cores
         try:
-            cores = os.cpu_count() or 4
-        except:
-            cores = 4
-        
-        run_date = datetime.now().isoformat()
-        
-        # Run single-core benchmarks
-        if single_targets:
-            print(f"\n{Colors.CYAN}━━━ Single-Core Benchmarks ━━━{Colors.NC}")
-            for i, target in enumerate(single_targets, 1):
-                pkg_name = target.split(':')[0].split('/')[-1]
-                print(f"  [{i}/{len(single_targets)}] Running {pkg_name} (single-core)...")
-                
-                try:
-                    # Build target first
-                    subprocess.run(
-                        ["bazel", "build", target],
-                        cwd=work_dir, capture_output=True, check=False
-                    )
+            # Get system info
+            go_version = subprocess.run(
+                ["go", "version"], capture_output=True, text=True
+            ).stdout.strip()
+            
+            os_info = os.uname()
+            
+            # Find benchmark packages
+            result = subprocess.run(
+                ["bazel", "query", '//pkg/...'],
+                cwd=work_dir, capture_output=True, text=True
+            )
+            
+            if result.returncode != 0:
+                print(f"{Colors.RED}Failed to find benchmark targets{Colors.NC}")
+                return False
+            
+            all_targets = [t for t in result.stdout.strip().split('\n') if t.startswith('//') and ':bench' in t]
+            
+            # Separate single and multi targets
+            single_targets = [t for t in all_targets if not t.endswith(':bench_multi')]
+            multi_targets = [t for t in all_targets if t.endswith(':bench_multi')]
+            
+            if not single_targets and not multi_targets:
+                print(f"{Colors.YELLOW}No benchmark targets found{Colors.NC}")
+                return False
+            
+            print(f"{Colors.GREEN}Found {len(single_targets)} single-core and {len(multi_targets)} multi-core benchmark targets{Colors.NC}")
+            
+            # Get number of cores
+            try:
+                cores = os.cpu_count() or 4
+            except:
+                cores = 4
+            
+            run_date = datetime.now().isoformat()
+            
+            # Run single-core benchmarks
+            if single_targets:
+                print(f"\n{Colors.CYAN}━━━ Single-Core Benchmarks ━━━{Colors.NC}")
+                for i, target in enumerate(single_targets, 1):
+                    pkg_name = target.split(':')[0].split('/')[-1]
+                    print(f"  [{i}/{len(single_targets)}] Running {pkg_name} (single-core)...")
                     
-                    # Get binary path
-                    binary_result = subprocess.run(
-                        ["bazel", "cquery", "--output=files", target],
-                        cwd=work_dir, capture_output=True, text=True
-                    )
+                    try:
+                    # Run benchmark using bazel run when in clone mode
+                        env = {**os.environ, "GOMAXPROCS": "1", "PAGER": "cat"}
+                        if use_clone and commit != "HEAD":
+                            # Use bazel run in clone mode
+                            result = subprocess.run(
+                                ["bazel", "run", target, "--", "-test.bench=.", "-test.benchtime=100ms"],
+                                cwd=work_dir, capture_output=True, text=True,
+                                env=env,
+                                timeout=60  # 1 minute timeout
+                            )
+                        else:
+                            # Build and run directly when in local mode
+                            subprocess.run(
+                                ["bazel", "build", target],
+                                cwd=work_dir, capture_output=True, check=False
+                            )
+                            
+                            # Get binary path
+                            binary_result = subprocess.run(
+                                ["bazel", "cquery", "--output=files", target],
+                                cwd=work_dir, capture_output=True, text=True
+                            )
+                            
+                            if binary_result.returncode != 0:
+                                print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} - could not find binary")
+                                continue
+                            
+                            binary_path = binary_result.stdout.strip()
+                            if not os.path.isabs(binary_path):
+                                binary_path = os.path.join(work_dir, binary_path)
+                            
+                            result = subprocess.run(
+                                [binary_path, "-test.bench=.", "-test.benchtime=100ms"],
+                                cwd=work_dir, capture_output=True, text=True,
+                                env=env,
+                                timeout=60  # 1 minute timeout
+                            )
+                        
+                        if result.returncode == 0:
+                            benchmarks = self._parse_benchmark_output(result.stdout, "single", 1)
+                            for bench in benchmarks:
+                                bench.update(commit_info)
+                                bench['run_date'] = run_date
+                                bench['go_version'] = go_version
+                                bench['os'] = os_info.sysname
+                                bench['arch'] = os_info.machine
+                                self.db.save_benchmark(bench)
+                            print(f"  {Colors.GREEN}✓{Colors.NC} {pkg_name} complete ({len(benchmarks)} benchmarks)")
+                        else:
+                            print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} failed")
+                    except subprocess.TimeoutExpired:
+                        print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} timed out")
+            
+            # Run multi-core benchmarks
+            if multi_targets:
+                print(f"\n{Colors.CYAN}━━━ Multi-Core Benchmarks ({cores} cores) ━━━{Colors.NC}")
+                for i, target in enumerate(multi_targets, 1):
+                    pkg_name = target.split(':')[0].split('/')[-1]
+                    print(f"  [{i}/{len(multi_targets)}] Running {pkg_name} ({cores} cores)...")
                     
-                    if binary_result.returncode != 0:
-                        print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} - could not find binary")
-                        continue
-                    
-                    binary_path = binary_result.stdout.strip()
-                    
-                    # Run benchmark directly
-                    env = {**os.environ, "GOMAXPROCS": "1"}
-                    result = subprocess.run(
-                        [binary_path, "-test.bench=.", "-test.benchtime=100ms"],
-                        cwd=work_dir, capture_output=True, text=True,
-                        env=env,
-                        timeout=60  # 1 minute timeout
-                    )
-                    
-                    if result.returncode == 0:
-                        benchmarks = self._parse_benchmark_output(result.stdout, "single", 1)
-                        for bench in benchmarks:
-                            bench.update(commit_info)
-                            bench['run_date'] = run_date
-                            bench['go_version'] = go_version
-                            bench['os'] = os_info.sysname
-                            bench['arch'] = os_info.machine
-                            self.db.save_benchmark(bench)
-                        print(f"  {Colors.GREEN}✓{Colors.NC} {pkg_name} complete ({len(benchmarks)} benchmarks)")
-                    else:
-                        print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} failed")
-                except subprocess.TimeoutExpired:
-                    print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} timed out")
-        
-        # Run multi-core benchmarks
-        if multi_targets:
-            print(f"\n{Colors.CYAN}━━━ Multi-Core Benchmarks ({cores} cores) ━━━{Colors.NC}")
-            for i, target in enumerate(multi_targets, 1):
-                pkg_name = target.split(':')[0].split('/')[-1]
-                print(f"  [{i}/{len(multi_targets)}] Running {pkg_name} ({cores} cores)...")
-                
-                try:
-                    # Build target first
-                    subprocess.run(
-                        ["bazel", "build", target],
-                        cwd=work_dir, capture_output=True, check=False
-                    )
-                    
-                    # Get binary path
-                    binary_result = subprocess.run(
-                        ["bazel", "cquery", "--output=files", target],
-                        cwd=work_dir, capture_output=True, text=True
-                    )
-                    
-                    if binary_result.returncode != 0:
-                        print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} - could not find binary")
-                        continue
-                    
-                    binary_path = binary_result.stdout.strip()
-                    
-                    # Run benchmark directly
-                    env = {**os.environ, "GOMAXPROCS": str(cores)}
-                    # Multi-core benchmarks should be fast now with the refactoring
-                    result = subprocess.run(
-                        [binary_path, "-test.bench=.", "-test.benchtime=100ms"],
-                        cwd=work_dir, capture_output=True, text=True,
-                        env=env,
-                        timeout=60  # 1 minute timeout
-                    )
-                    
-                    if result.returncode == 0:
-                        benchmarks = self._parse_benchmark_output(result.stdout, "multi", cores)
-                        for bench in benchmarks:
-                            bench.update(commit_info)
-                            bench['run_date'] = run_date
-                            bench['go_version'] = go_version
-                            bench['os'] = os_info.sysname
-                            bench['arch'] = os_info.machine
-                            self.db.save_benchmark(bench)
-                        print(f"  {Colors.GREEN}✓{Colors.NC} {pkg_name} complete ({len(benchmarks)} benchmarks)")
-                    else:
-                        print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} failed")
-                except subprocess.TimeoutExpired:
-                    print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} timed out")
-        
-        print(f"\n{Colors.GREEN}✓ Benchmark results saved to {self.db.db_path}{Colors.NC}")
-        return True
+                    try:
+                    # Run benchmark using bazel run when in clone mode
+                        env = {**os.environ, "GOMAXPROCS": str(cores), "PAGER": "cat"}
+                        if use_clone and commit != "HEAD":
+                            # Use bazel run in clone mode
+                            result = subprocess.run(
+                                ["bazel", "run", target, "--", "-test.bench=.", "-test.benchtime=100ms"],
+                                cwd=work_dir, capture_output=True, text=True,
+                                env=env,
+                                timeout=60  # 1 minute timeout
+                            )
+                        else:
+                            # Build and run directly when in local mode
+                            subprocess.run(
+                                ["bazel", "build", target],
+                                cwd=work_dir, capture_output=True, check=False
+                            )
+                            
+                            # Get binary path
+                            binary_result = subprocess.run(
+                                ["bazel", "cquery", "--output=files", target],
+                                cwd=work_dir, capture_output=True, text=True
+                            )
+                            
+                            if binary_result.returncode != 0:
+                                print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} - could not find binary")
+                                continue
+                            
+                            binary_path = binary_result.stdout.strip()
+                            if not os.path.isabs(binary_path):
+                                binary_path = os.path.join(work_dir, binary_path)
+                            
+                            result = subprocess.run(
+                                [binary_path, "-test.bench=.", "-test.benchtime=100ms"],
+                                cwd=work_dir, capture_output=True, text=True,
+                                env=env,
+                                timeout=60  # 1 minute timeout
+                            )
+                        
+                        if result.returncode == 0:
+                            benchmarks = self._parse_benchmark_output(result.stdout, "multi", cores)
+                            for bench in benchmarks:
+                                bench.update(commit_info)
+                                bench['run_date'] = run_date
+                                bench['go_version'] = go_version
+                                bench['os'] = os_info.sysname
+                                bench['arch'] = os_info.machine
+                                self.db.save_benchmark(bench)
+                            print(f"  {Colors.GREEN}✓{Colors.NC} {pkg_name} complete ({len(benchmarks)} benchmarks)")
+                        else:
+                            print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} failed")
+                    except subprocess.TimeoutExpired:
+                        print(f"  {Colors.RED}✗{Colors.NC} {pkg_name} timed out")
+            
+            print(f"\n{Colors.GREEN}✓ Benchmark results saved to {self.db.db_path}{Colors.NC}")
+            return True
+        finally:
+            # Cleanup temp directory if we created one
+            if tmpdir:
+                import shutil
+                shutil.rmtree(tmpdir, ignore_errors=True)
 
 class BenchmarkComparator:
     """Compare benchmark results between commits."""
