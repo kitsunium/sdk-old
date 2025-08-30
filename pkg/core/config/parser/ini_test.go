@@ -925,6 +925,365 @@ func BenchmarkINI_LoadReader_Large(b *testing.B) {
 	}
 }
 
+// Tests for missing coverage in INI parser - error paths and edge cases
+
+func TestINI_Load_ReadError(t *testing.T) {
+	// Test general read error handling (not file not found)
+	tmpDir := t.TempDir()
+	iniPath := filepath.Join(tmpDir, "unreadable.ini")
+
+	// Write file first
+	if err := os.WriteFile(iniPath, []byte(`[section]\nkey=value`), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Make it unreadable by changing permissions
+	if err := os.Chmod(iniPath, 0000); err != nil {
+		t.Fatalf("Failed to change file permissions: %v", err)
+	}
+
+	// Restore permissions after test
+	defer os.Chmod(iniPath, 0644)
+
+	ini := NewINI(iniPath)
+	_, err := ini.Load()
+	if err == nil {
+		t.Error("Load() should error on unreadable file")
+	}
+	if !errors.Is(err, ErrReadFailed) {
+		t.Errorf("Expected ErrReadFailed for read error, got: %v", err)
+	}
+}
+
+func TestINI_LoadBytes_LastLineWithoutNewline(t *testing.T) {
+	// Test processing a file that doesn't end with newline
+	content := []byte(`[section1]
+key1=value1
+
+[section2]
+key2=value2`) // No trailing newline
+
+	ini := NewINI("")
+	result, err := ini.LoadBytes(content)
+	if err != nil {
+		t.Fatalf("LoadBytes() error = %v", err)
+	}
+
+	expected := map[string]string{
+		"section1.key1": "value1",
+		"section2.key2": "value2",
+	}
+
+	for key, expectedValue := range expected {
+		if value, ok := result[key]; !ok || value != expectedValue {
+			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
+		}
+	}
+}
+
+func TestINI_LoadBytes_SingleLineNoNewline(t *testing.T) {
+	// Test single line without newline
+	content := []byte(`key=value`) // No newline at all
+
+	ini := NewINI("")
+	result, err := ini.LoadBytes(content)
+	if err != nil {
+		t.Fatalf("LoadBytes() error = %v", err)
+	}
+
+	if result["key"] != "value" {
+		t.Errorf("key = %q, want %q", result["key"], "value")
+	}
+}
+
+func TestINI_ProcessLine_EdgeCases(t *testing.T) {
+	// Test edge cases in line processing
+	ini := NewINI("")
+
+	testCases := []struct {
+		name            string
+		content         string
+		expectedResults map[string]string
+	}{
+		{
+			name:    "carriage return handling",
+			content: "[section]\r\nkey=value\r\n",
+			expectedResults: map[string]string{
+				"section.key": "value",
+			},
+		},
+		{
+			name:    "mixed line endings",
+			content: "[section1]\nkey1=value1\r\n[section2]\r\nkey2=value2\n",
+			expectedResults: map[string]string{
+				"section1.key1": "value1",
+				"section2.key2": "value2",
+			},
+		},
+		{
+			name:    "only carriage returns",
+			content: "[section]\rkey=value\r",
+			expectedResults: map[string]string{
+				"section.key": "value",
+			},
+		},
+		{
+			name:    "section with spaces inside brackets",
+			content: "[ section with spaces ]\nkey=value",
+			expectedResults: map[string]string{
+				"section.with.spaces.key": "value",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := ini.LoadBytes([]byte(tc.content))
+			if err != nil {
+				t.Fatalf("LoadBytes() error = %v", err)
+			}
+
+			for key, expectedValue := range tc.expectedResults {
+				if value, ok := result[key]; !ok || value != expectedValue {
+					t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
+				}
+			}
+		})
+	}
+}
+
+func TestINI_FindSeparator_EdgeCases(t *testing.T) {
+	// Test findSeparator with various scenarios
+	ini := &INI{}
+
+	testCases := []struct {
+		name     string
+		line     string
+		expected int
+	}{
+		{
+			name:     "equals first",
+			line:     "key=value:extra",
+			expected: 3, // Position of first '='
+		},
+		{
+			name:     "colon first",
+			line:     "key:value=extra",
+			expected: 3, // Position of first ':'
+		},
+		{
+			name:     "no separator",
+			line:     "just text",
+			expected: -1,
+		},
+		{
+			name:     "separator at start",
+			line:     "=value",
+			expected: 0,
+		},
+		{
+			name:     "separator at end",
+			line:     "key=",
+			expected: 3,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ini.findSeparator([]byte(tc.line))
+			if result != tc.expected {
+				t.Errorf("findSeparator(%q) = %d, want %d", tc.line, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestINI_ProcessValue_QuotingEdgeCases(t *testing.T) {
+	// Test processValue with various quoting scenarios
+	ini := &INI{}
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "single quote incomplete",
+			input:    "'incomplete",
+			expected: "'incomplete",
+		},
+		{
+			name:     "double quote incomplete",
+			input:    "\"incomplete",
+			expected: "\"incomplete",
+		},
+		{
+			name:     "mismatched quotes",
+			input:    "'double\"",
+			expected: "'double\"",
+		},
+		{
+			name:     "empty quotes",
+			input:    "\"\"",
+			expected: "",
+		},
+		{
+			name:     "single char in quotes",
+			input:    "'a'",
+			expected: "a",
+		},
+		{
+			name:     "quotes with spaces",
+			input:    "  \"  spaced  \"  ",
+			expected: "  spaced  ",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ini.processValue([]byte(tc.input))
+			resultStr := string(result)
+			if resultStr != tc.expected {
+				t.Errorf("processValue(%q) = %q, want %q", tc.input, resultStr, tc.expected)
+			}
+		})
+	}
+}
+
+func TestINI_TrimBytes_EdgeCases(t *testing.T) {
+	// Test trimBytes with various whitespace scenarios
+	ini := &INI{}
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "all whitespace",
+			input:    "   \t\t\r\r   ",
+			expected: "",
+		},
+		{
+			name:     "only tabs",
+			input:    "\t\t\t",
+			expected: "",
+		},
+		{
+			name:     "only spaces",
+			input:    "    ",
+			expected: "",
+		},
+		{
+			name:     "only carriage returns",
+			input:    "\r\r\r",
+			expected: "",
+		},
+		{
+			name:     "mixed whitespace around text",
+			input:    " \t\r text \t\r ",
+			expected: "text",
+		},
+		{
+			name:     "preserve newlines",
+			input:    " \n text \n ",
+			expected: "\n text \n",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ini.trimBytes([]byte(tc.input))
+			resultStr := string(result)
+			if resultStr != tc.expected {
+				t.Errorf("trimBytes(%q) = %q, want %q", tc.input, resultStr, tc.expected)
+			}
+		})
+	}
+}
+
+func TestINI_TrimRight_vs_TrimRightBytes(t *testing.T) {
+	// Test that trimRight (line-end whitespace) differs from trimRightBytes (all whitespace)
+	ini := &INI{}
+
+	testInput := "text\r  \t" // Text followed by \r, spaces, and tabs
+
+	// trimRight should only remove spaces and tabs at end (not \r)
+	trimRightResult := ini.trimRight([]byte(testInput))
+	expectedTrimRight := "text\r"
+	if string(trimRightResult) != expectedTrimRight {
+		t.Errorf("trimRight(%q) = %q, want %q", testInput, string(trimRightResult), expectedTrimRight)
+	}
+
+	// trimRightBytes should remove all whitespace including \r
+	trimRightBytesResult := ini.trimRightBytes([]byte(testInput))
+	expectedTrimRightBytes := "text"
+	if string(trimRightBytesResult) != expectedTrimRightBytes {
+		t.Errorf("trimRightBytes(%q) = %q, want %q", testInput, string(trimRightBytesResult), expectedTrimRightBytes)
+	}
+}
+
+func TestINI_WhitespaceValidation(t *testing.T) {
+	// Test whitespace detection functions
+	ini := &INI{}
+
+	// Test isTrimWhitespace
+	trimWhitespaceTests := []struct {
+		char     byte
+		expected bool
+	}{
+		{' ', true},
+		{'\t', true},
+		{'\r', true},
+		{'\n', false},
+		{'a', false},
+		{'0', false},
+	}
+
+	for _, test := range trimWhitespaceTests {
+		result := ini.isTrimWhitespace(test.char)
+		if result != test.expected {
+			t.Errorf("isTrimWhitespace(%q) = %v, want %v", test.char, result, test.expected)
+		}
+	}
+
+	// Test isLineEndWhitespace
+	lineEndTests := []struct {
+		char     byte
+		expected bool
+	}{
+		{' ', true},
+		{'\t', true},
+		{'\r', false}, // This is the key difference
+		{'\n', false},
+		{'a', false},
+	}
+
+	for _, test := range lineEndTests {
+		result := ini.isLineEndWhitespace(test.char)
+		if result != test.expected {
+			t.Errorf("isLineEndWhitespace(%q) = %v, want %v", test.char, result, test.expected)
+		}
+	}
+}
+
+func TestINI_BytesToString_Coverage(t *testing.T) {
+	// Test iniBytesToString function
+	testBytes := []byte("test string")
+	result := iniBytesToString(testBytes)
+	expected := "test string"
+
+	if result != expected {
+		t.Errorf("iniBytesToString() = %q, want %q", result, expected)
+	}
+
+	// Test with empty bytes
+	emptyResult := iniBytesToString([]byte{})
+	if emptyResult != "" {
+		t.Errorf("iniBytesToString([]) = %q, want empty string", emptyResult)
+	}
+}
+
 func BenchmarkINI_LoadBytes(b *testing.B) {
 	content := []byte(`
 [database]
@@ -946,4 +1305,342 @@ workers=4
 	for i := 0; i < b.N; i++ {
 		_, _ = ini.LoadBytes(content)
 	}
+}
+
+// Concurrent Tests
+
+func TestINI_LoadReader_Concurrent(t *testing.T) {
+	content := `
+[database]
+host = localhost
+port = 5432
+name = testdb
+
+[server]
+host = 0.0.0.0
+port = 8080
+debug = true
+`
+
+	const numGoroutines = 100
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			ini := NewINI("")
+			reader := strings.NewReader(content)
+			result, err := ini.LoadReader(reader)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			// Verify result consistency
+			if result["database.host"] != "localhost" {
+				t.Errorf("Concurrent test %d: database.host = %q, want %q", i, result["database.host"], "localhost")
+			}
+			if result["server.debug"] != "true" {
+				t.Errorf("Concurrent test %d: server.debug = %q, want %q", i, result["server.debug"], "true")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent test error: %v", err)
+		}
+	}
+}
+
+func TestINI_LoadBytes_Concurrent(t *testing.T) {
+	content := []byte(`
+[section1]
+key1=value1
+key2=value2
+
+[section2]
+key3=value3
+key4=value4
+`)
+
+	const numGoroutines = 50
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			ini := NewINI("")
+			result, err := ini.LoadBytes(content)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["section1.key1"] != "value1" {
+				t.Errorf("Concurrent bytes test %d: section1.key1 = %q, want %q", i, result["section1.key1"], "value1")
+			}
+			if result["section2.key3"] != "value3" {
+				t.Errorf("Concurrent bytes test %d: section2.key3 = %q, want %q", i, result["section2.key3"], "value3")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent bytes test error: %v", err)
+		}
+	}
+}
+
+func TestINI_Load_Concurrent(t *testing.T) {
+	// Create temporary files concurrently
+	tmpDir := t.TempDir()
+
+	const numGoroutines = 20
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			// Create unique file for each goroutine
+			iniPath := filepath.Join(tmpDir, fmt.Sprintf("test_%d.ini", id))
+			content := fmt.Sprintf(`
+[section]
+worker_id=%d
+host=localhost
+port=%d
+`, id, 8080+id)
+
+			if err := os.WriteFile(iniPath, []byte(content), 0644); err != nil {
+				errors <- err
+				return
+			}
+
+			ini := NewINI(iniPath)
+			result, err := ini.Load()
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			// Each result should have unique worker_id
+			if result["section.host"] != "localhost" {
+				t.Errorf("Concurrent load test: section.host = %q, want %q", result["section.host"], "localhost")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent load test error: %v", err)
+		}
+	}
+}
+
+// Panic Recovery Tests
+
+func TestINI_LoadReader_PanicRecovery(t *testing.T) {
+	// Test with various malformed inputs that could cause panics
+	malformedContents := []string{
+		"",                              // empty
+		string([]byte{0, 1, 2, 3, 255}), // binary data
+		strings.Repeat("[section]\nkey=value\n", 10000),        // very large content
+		"[" + strings.Repeat("section", 1000) + "]\nkey=value", // very long section name
+		"[section]\n" + strings.Repeat("key", 1000) + "=value", // very long key
+		"[section]\nkey=" + strings.Repeat("value", 1000),      // very long value
+		"[section]\nkey=value\x00with\x00nulls",                // null bytes
+		"[测试]\n键=值",                                            // unicode
+		"[section]\nkey=value\n\x1b[31mANSI codes\x1b[0m",      // ANSI escape codes
+		"\xff\xfe[section]\nkey=value",                         // BOM and unusual encoding
+	}
+
+	for i, content := range malformedContents {
+		t.Run(fmt.Sprintf("malformed_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("LoadReader panicked with input %d: %v", i, r)
+				}
+			}()
+
+			ini := NewINI("")
+			reader := strings.NewReader(content)
+			_, _ = ini.LoadReader(reader)
+		})
+	}
+}
+
+func TestINI_LoadBytes_PanicRecovery(t *testing.T) {
+	// Test with potentially panic-inducing byte sequences
+	panicInputs := [][]byte{
+		nil,                   // nil slice
+		{},                    // empty slice
+		{0},                   // single null byte
+		make([]byte, 1000000), // very large empty content
+		bytes.Repeat([]byte("[section]\nkey=value\n"), 50000),         // extremely large valid content
+		[]byte("[section\nkey=value"),                                 // malformed section
+		[]byte("[section]\nkey"),                                      // incomplete key-value
+		[]byte(strings.Repeat("=", 10000)),                            // just equals signs
+		[]byte(strings.Repeat("[", 1000) + strings.Repeat("]", 1000)), // unbalanced brackets
+	}
+
+	for i, content := range panicInputs {
+		t.Run(fmt.Sprintf("panic_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("LoadBytes panicked with input %d: %v", i, r)
+				}
+			}()
+
+			ini := NewINI("")
+			_, _ = ini.LoadBytes(content)
+		})
+	}
+}
+
+func TestINI_Load_PanicRecovery(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Test with various file scenarios that could cause panics
+	testCases := []struct {
+		name    string
+		setup   func() string
+		cleanup func(string)
+	}{
+		{
+			name: "empty_file",
+			setup: func() string {
+				path := filepath.Join(tmpDir, "empty.ini")
+				os.WriteFile(path, []byte{}, 0644)
+				return path
+			},
+			cleanup: func(path string) { os.Remove(path) },
+		},
+		{
+			name: "binary_file",
+			setup: func() string {
+				path := filepath.Join(tmpDir, "binary.ini")
+				os.WriteFile(path, make([]byte, 1000), 0644)
+				return path
+			},
+			cleanup: func(path string) { os.Remove(path) },
+		},
+		{
+			name: "very_large_file",
+			setup: func() string {
+				path := filepath.Join(tmpDir, "large.ini")
+				content := strings.Repeat("[section]\nkey=value\n", 100000)
+				os.WriteFile(path, []byte(content), 0644)
+				return path
+			},
+			cleanup: func(path string) { os.Remove(path) },
+		},
+		{
+			name: "unicode_file",
+			setup: func() string {
+				path := filepath.Join(tmpDir, "unicode.ini")
+				content := "[测试节]\n键=值\n中文=内容"
+				os.WriteFile(path, []byte(content), 0644)
+				return path
+			},
+			cleanup: func(path string) { os.Remove(path) },
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := tc.setup()
+			defer tc.cleanup(path)
+
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Load panicked with %s: %v", tc.name, r)
+				}
+			}()
+
+			ini := NewINI(path)
+			_, _ = ini.Load()
+		})
+	}
+}
+
+// Multi-threaded Benchmarks
+
+func BenchmarkINI_LoadReader_Concurrent_Small(b *testing.B) {
+	content := `
+[section1]
+key1=value1
+key2=value2
+
+[section2]
+key3=value3
+key4=value4
+`
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ini := NewINI("")
+			reader := strings.NewReader(content)
+			_, _ = ini.LoadReader(reader)
+		}
+	})
+}
+
+func BenchmarkINI_LoadReader_Concurrent_Large(b *testing.B) {
+	var buf bytes.Buffer
+	for i := 0; i < 100; i++ {
+		fmt.Fprintf(&buf, "[section%d]\n", i)
+		for j := 0; j < 20; j++ {
+			fmt.Fprintf(&buf, "key%d=value_%d_%d\n", j, i, j)
+		}
+	}
+	content := buf.String()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ini := NewINI("")
+			reader := strings.NewReader(content)
+			_, _ = ini.LoadReader(reader)
+		}
+	})
+}
+
+func BenchmarkINI_LoadBytes_Concurrent(b *testing.B) {
+	content := []byte(`
+[database]
+host=localhost
+port=5432
+user=admin
+password=secret
+
+[server]
+host=0.0.0.0
+port=8080
+workers=4
+`)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ini := NewINI("")
+			_, _ = ini.LoadBytes(content)
+		}
+	})
 }

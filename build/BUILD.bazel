@@ -1,0 +1,2 @@
+# Build directory - contains Bazel build macros and utilities
+exports_files(["go_rules.bzl"])

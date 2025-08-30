@@ -1,35 +1,60 @@
-load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("@rules_go//go:def.bzl", "go_test")
+load("//build:go_rules.bzl", "kitsunium_go_benchmark", "kitsunium_go_library", "kitsunium_go_test")
 
-go_library(
+# =============================================================================
+# Kitsunium SDK - kerror package
+# 2 modes: TEST (with race detection) and BENCHMARK (production performance)
+# =============================================================================
+
+kitsunium_go_library(
     name = "kerror",
-    srcs = [
-        "config.go",
-        "context.go",
-        "error.go",
-        "instance.go",
-        "metrics.go",
-        "registry.go",
-        "result.go",
-    ],
     importpath = "github.com/kitsunium/sdk/pkg/kernel/kerror",
-    visibility = ["//visibility:public"],
+    is_kernel = True,
     deps = [
         "//pkg/kernel/kcache",
     ],
 )
 
+# =============================================================================
+# MODE 1: TEST - Unit tests with race detection and safety checks
+# =============================================================================
+
+kitsunium_go_test(
+    name = "test",
+    size = "small",
+    embed = [":kerror"],
+    deps = ["//pkg/kernel/kcache"],
+)
+
+# =============================================================================
+# MODE 2: BENCHMARK - Production benchmarks without safety checks
+# =============================================================================
+
+# Single-core benchmark
+kitsunium_go_benchmark(
+    name = "bench",
+    embed = [":kerror"],
+    deps = ["//pkg/kernel/kcache"],
+)
+
+# Multi-core benchmark
+kitsunium_go_benchmark(
+    name = "bench_multi",
+    srcs = ["kerror_bench_test.go"],
+    embed = [":kerror"],
+    deps = ["//pkg/kernel/kcache"],
+)
+
 go_test(
     name = "kerror_test",
     size = "small",
-    timeout = "short",
     srcs = [
         "config_test.go",
         "context_test.go",
-        "error_bench_test.go",
         "error_test.go",
         "instance_test.go",
+        "kerror_bench_test.go",
         "metrics_test.go",
-        "performance_test.go",
         "registry_test.go",
         "result_test.go",
     ],
@@ -37,12 +62,8 @@ go_test(
     deps = ["//pkg/kernel/kcache"],
 )
 
-go_test(
-    name = "kerror_bench_test",
-    srcs = ["error_bench_test.go"],
-    embed = [":kerror"],
-    tags = [
-        "bench",
-        "manual",
-    ],
+alias(
+    name = "go_default_library",
+    actual = ":kerror",
+    visibility = ["//visibility:public"],
 )

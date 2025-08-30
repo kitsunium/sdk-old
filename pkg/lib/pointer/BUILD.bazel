@@ -1,18 +1,43 @@
-load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("@rules_go//go:def.bzl", "go_test")
+load("//build:go_rules.bzl", "kitsunium_go_library", "kitsunium_go_test")
 
-go_library(
+# =============================================================================
+# Kitsunium SDK - pointer package
+# 2 modes: TEST (with race detection) and BENCHMARK (production performance)
+# =============================================================================
+
+kitsunium_go_library(
     name = "pointer",
-    srcs = ["pointer.go"],
     importpath = "github.com/kitsunium/sdk/pkg/lib/pointer",
-    visibility = ["//visibility:public"],
 )
+
+# =============================================================================
+# MODE 1: TEST - Unit tests with race detection and safety checks
+# =============================================================================
+
+kitsunium_go_test(
+    name = "test",
+    size = "small",
+    embed = [":pointer"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+    ],
+)
+
+# No benchmark files exist for this package
 
 go_test(
     name = "pointer_test",
     size = "small",
     srcs = ["pointer_test.go"],
     deps = [
-        ":pointer",
+        ":pointer",  # keep
         "@com_github_stretchr_testify//assert",
     ],
+)
+
+alias(
+    name = "go_default_library",
+    actual = ":pointer",
+    visibility = ["//visibility:public"],
 )

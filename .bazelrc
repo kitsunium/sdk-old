@@ -1,73 +1,227 @@
-# Bazel configuration for Kitsunium SDK
+# Kitsunium SDK - Unified Bazel Configuration
+# Production-ready configuration with dev and prod modes
+
+# =============================================================================
+# COMMON CONFIGURATION - Applied to all builds
+# =============================================================================
 
 # Enable bzlmod (Bazel modules)
 common --enable_bzlmod
 
-# Build configuration
+# Core build settings - Maximum performance
 build --jobs=auto
 build --incompatible_strict_action_env
 build --sandbox_default_allow_network=false
 build --guard_against_concurrent_changes
 
-# Go-specific settings
-build --@rules_go//go/config:pure
-# race disabled by default if not specified
+# Performance optimizations
+build --experimental_reuse_sandbox_directories
+build --noslim_profile
+build --heap_dump_on_oom
+build --worker_max_instances=auto
+build --worker_sandboxing
+build --spawn_strategy=worker,sandboxed,local
+build --genrule_strategy=worker,sandboxed,local
 
-# Test configuration (optimized for speed)
+# Memory and CPU optimizations
+build --local_resources=cpu=HOST_CPUS
+build --local_resources=memory=HOST_RAM*.8
+build --local_termination_grace_seconds=15
+
+# Parallel execution
+build --keep_going
+build --nobuild_runfile_links
+build --experimental_inmemory_jdeps_files
+build --experimental_inmemory_dotd_files
+
+# Go-specific defaults and optimizations
+build --@rules_go//go/config:pure
+# Static builds are not supported on macOS
+# build --@rules_go//go/config:static
+
+# Go build cache optimizations
+build --features=thin_lto
+build --features=use_lld
+build --features=-per_object_debug_info
+
+# Remote caching preparation (can be enabled with remote cache)
+build --experimental_remote_merkle_tree_cache
+build --experimental_remote_merkle_tree_cache_size=10000
+build --remote_download_minimal
+
+# =============================================================================
+# COMPILER OPTIMIZATION FLAGS - Maximum performance for all builds
+# =============================================================================
+
+# Base C/C++ compiler optimizations (used by CGO if enabled)
+build --copt=-O3
+build --copt=-march=native
+build --copt=-mtune=native
+build --copt=-fomit-frame-pointer
+build --copt=-fno-stack-protector
+build --copt=-ffast-math
+build --copt=-funroll-loops
+build --copt=-fpic
+build --copt=-ffunction-sections
+build --copt=-fdata-sections
+# Note: -fprefetch-loop-arrays is not supported on macOS/clang
+
+# Link-time optimizations
+build --linkopt=-O3
+build --linkopt=-flto
+build --linkopt=-dead_strip
+# Note: -fuse-ld=lld may not be available on all platforms
+
+# Go compiler optimizations - ALWAYS strip debug info and symbols
+# These flags are applied to ALL builds for maximum performance
+build --@rules_go//go/config:gc_linkopts=-s,-w
+
+# =============================================================================
+# DEV MODE - Production optimizations WITH safety checks (default)
+# =============================================================================
+# 99% production-ready, keeps safety checks for development
+
+build:dev --compilation_mode=opt
+build:dev --strip=always
+build:dev --@rules_go//go/config:pure
+# Static builds not supported on macOS
+# build:dev --@rules_go//go/config:static
+
+# Dev mode uses all optimizations but NO unsafe_no_check tag
+# This ensures safety checks remain active during development
+
+# Tests in dev mode should catch safety issues
+test:dev --test_output=errors
+test:dev --test_verbose_timeout_warnings
+test:dev --cache_test_results=yes
+test:dev --local_test_jobs=auto
+test:dev --jobs=auto
+
+# =============================================================================
+# PROD MODE - Maximum performance with unsafe optimizations
+# =============================================================================
+# 100% optimized for production deployment
+
+build:prod --compilation_mode=opt
+build:prod --strip=always
+build:prod --@rules_go//go/config:pure
+# Static builds not supported on macOS
+# build:prod --@rules_go//go/config:static
+
+# CRITICAL: Enable unsafe_no_check for maximum performance
+# This disables bounds checking and other safety features
+build:prod --@rules_go//go/config:tags=unsafe_no_check
+
+# Production test settings (if needed for verification)
+test:prod --test_output=errors
+test:prod --cache_test_results=no
+test:prod --local_test_jobs=auto
+test:prod --jobs=auto
+
+# =============================================================================
+# TEST CONFIGURATION - Optimized for speed
+# =============================================================================
+
 test --test_output=errors
 test --test_verbose_timeout_warnings
 test --cache_test_results=yes
-# Default size for Go tests
 test --test_size_filters=small,medium
-# Use all available CPU cores for faster execution
 test --local_test_jobs=auto
 test --jobs=auto
 
-# Coverage configuration
-coverage --combined_report=lcov
-coverage --instrumentation_filter="^//(pkg|cmd|internal)[/:]"
+# Test performance optimizations
+test --test_tmpdir=/tmp
+test --test_strategy=exclusive
+test --flaky_test_attempts=1
+test --runs_per_test=1
+test --test_sharding_strategy=explicit
+test --experimental_ui_max_stdouterr_bytes=1048576
 
-# CI configuration
+# =============================================================================
+# BENCHMARK CONFIGURATIONS
+# =============================================================================
+
+# Base benchmark configuration - common settings for all benchmarks
+# Inherits from dev by default (use --config=prod before --config=benchmark for prod mode)
+test:benchmark --config=dev
+test:benchmark --test_arg=-test.bench=.
+test:benchmark --test_arg=-test.run=^$
+test:benchmark --test_arg=-test.benchtime=10000x
+test:benchmark --test_arg=-test.benchmem
+test:benchmark --test_output=all
+test:benchmark --nocache_test_results
+test:benchmark --test_timeout=600
+# Single-core specific settings
+test:benchmark --test_arg=-test.cpu=1
+test:benchmark --local_test_jobs=1
+test:benchmark --jobs=1
+test:benchmark --test_env=GOMAXPROCS=1
+
+# Multi-core benchmark configuration
+# Inherits all settings from benchmark, overrides only parallelism settings
+test:benchmark-multi --config=benchmark
+# Remove single-core cpu restriction (override parent)
+test:benchmark-multi --test_arg=-test.cpu=
+# Override parallelism settings for multi-core
+test:benchmark-multi --local_test_jobs=auto
+test:benchmark-multi --jobs=auto
+test:benchmark-multi --test_env=GOMAXPROCS=0
+
+# =============================================================================
+# CI CONFIGURATION
+# =============================================================================
+
+build:ci --config=dev
 build:ci --build_event_json_file=build_events.json
 build:ci --noshow_progress
 test:ci --test_output=all
 test:ci --nocache_test_results
 
-# Debug configuration
+# =============================================================================
+# DEBUG CONFIGURATION (for troubleshooting)
+# =============================================================================
+
+build:debug --compilation_mode=dbg
 build:debug --strip=never
 build:debug --copt=-g
+build:debug --copt=-O0
 build:debug --@rules_go//go/config:race
 
-# Release configuration
-build:release --compilation_mode=opt
-build:release --strip=always
+# =============================================================================
+# COVERAGE CONFIGURATION
+# =============================================================================
 
-# Performance optimized configuration for production builds
-build:perf --compilation_mode=opt
-build:perf --@rules_go//go/config:pure
-build:perf --@rules_go//go/config:static
-build:perf --strip=always
-# Go linker optimizations (strip debug info)
-build:perf --@rules_go//go/config:gc_linkopts=-s
-build:perf --@rules_go//go/config:gc_linkopts=-w
-# Enable compiler optimizations
+coverage --combined_report=lcov
+# Coverage for ALL files recursively - no filter
+coverage --instrument_test_targets
 
-# Import benchmark configuration
-import .bazelrc.benchmark
-build:perf --copt=-O2
+# =============================================================================
+# LOCAL DEVELOPMENT CACHE - Aggressive caching for performance
+# =============================================================================
 
-# SDK build configuration (for library distribution)
-build:sdk --compilation_mode=opt
-build:sdk --@rules_go//go/config:pure
-# Keep debug symbols for better stack traces
-build:sdk --strip=never
-# Standard optimizations
-build:sdk --copt=-O2
+# Always use local cache by default
+build --disk_cache=~/.cache/bazel-disk-cache
+build --repository_cache=~/.cache/bazel-repo-cache
 
-# Remote cache (uncomment and configure if needed)
-# build --remote_cache=grpc://cache.example.com:9092
-# build --remote_download_minimal
+# Aggressive cache settings
+build --experimental_repository_cache_hardlinks
+build --remote_cache_compression
+build --remote_cache_async
 
-# Local development settings
+# Additional cache config for local builds
 build:local --disk_cache=~/.cache/bazel-disk-cache
 build:local --repository_cache=~/.cache/bazel-repo-cache
+
+# =============================================================================
+# SDK DISTRIBUTION BUILD
+# =============================================================================
+# Special configuration for building the SDK for distribution
+
+build:sdk --config=prod
+build:sdk --strip=never  # Keep symbols for better debugging by consumers
+
+# =============================================================================
+# DEFAULT CONFIGURATION
+# =============================================================================
+# Default settings are already included in common/build/test sections above
+# Use --config=dev or --config=prod explicitly when building

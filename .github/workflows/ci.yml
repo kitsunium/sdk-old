@@ -154,6 +154,7 @@ jobs:
           # Run all tests and capture results
           set +e  # Don't exit immediately on failure
           bazel test //... \
+            --config=dev \
             --test_output=errors \
             --test_size_filters=small,medium \
             --nocache_test_results \
@@ -247,12 +248,19 @@ jobs:
           disk-cache: ${{ github.workflow }}
           repository-cache: true
 
-      - name: 🔨 Build all targets
+      - name: 🔨 Build all targets (dev mode)
         run: |
-          echo "🔨 Building all targets..."
-          # Build everything in the repository
-          bazel build //...
-          echo "✅ Build successful"
+          echo "🔨 Building all targets in dev mode..."
+          # Build everything in the repository (dev mode with safety checks)
+          bazel build //... --config=dev
+          echo "✅ Build successful (dev mode)"
+
+      - name: 🚀 Build all targets (prod mode)
+        run: |
+          echo "🚀 Building all targets in production mode..."
+          # Build everything in production mode (no safety checks, max optimization)
+          bazel build //... --config=prod
+          echo "✅ Build successful (prod mode)"
 
       - name: 📤 Upload build artifacts
         uses: actions/upload-artifact@v4

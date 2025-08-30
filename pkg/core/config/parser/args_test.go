@@ -2,7 +2,9 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -516,4 +518,292 @@ func BenchmarkARGS_ParseArgsStrict(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = parser.ParseArgsStrict(args)
 	}
+}
+
+// Concurrent Tests
+
+func TestARGS_ParseArgs_Concurrent(t *testing.T) {
+	args := []string{
+		"--database-url=postgres://localhost:5432/test",
+		"--redis-host=localhost",
+		"--redis-port=6379",
+		"--app-name=test-app",
+		"--log-level", "debug",
+		"--max-connections", "100",
+		"-v",
+		"--enable-feature",
+	}
+
+	parser := NewARGS(false)
+
+	// Test concurrent access to ParseArgs
+	const numGoroutines = 100
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			result, err := parser.ParseArgs(args)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			// Verify result consistency
+			if result["database-url"] != "postgres://localhost:5432/test" {
+				t.Errorf("Concurrent test %d: database-url = %q, want %q", i, result["database-url"], "postgres://localhost:5432/test")
+			}
+			if result["redis-host"] != "localhost" {
+				t.Errorf("Concurrent test %d: redis-host = %q, want %q", i, result["redis-host"], "localhost")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent test error: %v", err)
+		}
+	}
+}
+
+func TestARGS_ParseArgsStrict_Concurrent(t *testing.T) {
+	validArgs := []string{"--key=value", "-f", "file.txt", "--verbose"}
+	parser := NewARGS(false)
+
+	const numGoroutines = 50
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			result, err := parser.ParseArgsStrict(validArgs)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["key"] != "value" {
+				t.Errorf("Concurrent strict test %d: key = %q, want %q", i, result["key"], "value")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent strict test error: %v", err)
+		}
+	}
+}
+
+func TestARGS_Load_Concurrent(t *testing.T) {
+	// Save and restore os.Args
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"program", "--concurrent=test", "--threads=100"}
+	parser := NewARGS(true)
+
+	const numGoroutines = 50
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			result, err := parser.Load()
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["concurrent"] != "test" {
+				t.Errorf("Concurrent load test %d: concurrent = %q, want %q", i, result["concurrent"], "test")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent load test error: %v", err)
+		}
+	}
+}
+
+// Panic Recovery Tests
+
+func TestARGS_ParseArgs_PanicRecovery(t *testing.T) {
+	// Test with extremely malformed input that could cause panics
+	malformedInputs := [][]string{
+		nil,                          // nil slice
+		{},                           // empty slice
+		{"", "", ""},                 // empty strings
+		{"--", "--", "--"},           // just dashes
+		{"---", "----", "-----"},     // invalid dash patterns
+		{string([]byte{0, 1, 2, 3})}, // binary data
+		{strings.Repeat("--very-long-key=", 1000) + "value"}, // extremely long input
+		{"--\x00null\x00key=\x00value"},                      // null bytes
+	}
+
+	parser := NewARGS(false)
+
+	for i, args := range malformedInputs {
+		t.Run(fmt.Sprintf("malformed_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("ParseArgs panicked with input %v: %v", args, r)
+				}
+			}()
+
+			// Should not panic, just handle gracefully
+			result, err := parser.ParseArgs(args)
+
+			// We don't care about the exact result, just that it doesn't panic
+			_ = result
+			_ = err
+		})
+	}
+}
+
+func TestARGS_ParseArgsStrict_PanicRecovery(t *testing.T) {
+	parser := NewARGS(false)
+
+	// Test with inputs that could cause panics in strict mode
+	panicInputs := [][]string{
+		nil,
+		{},
+		{string(make([]byte, 10000))}, // very large input
+		{strings.Repeat("a", 50000)},  // extremely long non-flag
+		{"--" + strings.Repeat("k", 1000) + "=value"}, // very long key
+	}
+
+	for i, args := range panicInputs {
+		t.Run(fmt.Sprintf("panic_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("ParseArgsStrict panicked with input %v: %v", args, r)
+				}
+			}()
+
+			_, _ = parser.ParseArgsStrict(args)
+		})
+	}
+}
+
+func TestARGS_Load_PanicRecovery(t *testing.T) {
+	// Test Load with various os.Args configurations that could cause panics
+	testCases := []struct {
+		name string
+		args []string
+	}{
+		{"nil_args", nil},
+		{"empty_args", []string{}},
+		{"single_empty", []string{""}},
+		{"binary_data", []string{string([]byte{0, 1, 2, 3, 4})}},
+		{"very_long_args", []string{"program", strings.Repeat("--key=", 1000) + "value"}},
+		{"unicode_args", []string{"程序", "--键=值", "--flagü", "wëird_valué"}},
+		{"special_chars", []string{"prog!", "--key!=value@", "#--flag$", "%value^"}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Save and restore os.Args
+			oldArgs := os.Args
+			defer func() { os.Args = oldArgs }()
+
+			os.Args = tc.args
+			parser := NewARGS(true)
+
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Load panicked with args %v: %v", tc.args, r)
+				}
+			}()
+
+			_, _ = parser.Load()
+		})
+	}
+}
+
+// Multi-threaded Benchmarks
+
+func BenchmarkARGS_ParseArgs_Concurrent(b *testing.B) {
+	args := []string{
+		"--database-url=postgres://localhost:5432/test",
+		"--redis-host=localhost",
+		"--redis-port=6379",
+		"--app-name=test-app",
+		"--log-level", "debug",
+		"--max-connections", "100",
+		"-v",
+		"--enable-feature",
+	}
+
+	parser := NewARGS(false)
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = parser.ParseArgs(args)
+		}
+	})
+}
+
+func BenchmarkARGS_ParseArgsStrict_Concurrent(b *testing.B) {
+	args := []string{
+		"--database-url=postgres://localhost:5432/test",
+		"--redis-host=localhost",
+		"--redis-port=6379",
+		"--app-name=test-app",
+		"--log-level", "debug",
+		"--max-connections", "100",
+		"-v",
+		"--enable-feature",
+	}
+
+	parser := NewARGS(false)
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = parser.ParseArgsStrict(args)
+		}
+	})
+}
+
+func BenchmarkARGS_Load_Concurrent(b *testing.B) {
+	// Save and restore os.Args
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{
+		"program",
+		"--database-url=postgres://localhost:5432/test",
+		"--redis-host=localhost",
+		"--redis-port=6379",
+		"--app-name=test-app",
+		"--log-level", "debug",
+		"--max-connections", "100",
+		"-v",
+		"--enable-feature",
+	}
+
+	parser := NewARGS(true)
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = parser.Load()
+		}
+	})
 }

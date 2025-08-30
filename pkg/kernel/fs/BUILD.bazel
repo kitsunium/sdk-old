@@ -1,21 +1,57 @@
-load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("@rules_go//go:def.bzl", "go_test")
+load("//build:go_rules.bzl", "kitsunium_go_benchmark", "kitsunium_go_library", "kitsunium_go_test")
 
-go_library(
+# =============================================================================
+# Kitsunium SDK - fs package
+# 2 modes: TEST (with race detection) and BENCHMARK (production performance)
+# =============================================================================
+
+kitsunium_go_library(
     name = "fs",
-    srcs = [
-        "archive.go",
-        "directory.go",
-        "file.go",
-        "host.go",
-        "option.go",
-        "stats.go",
-        "system.go",
-    ],
     importpath = "github.com/kitsunium/sdk/pkg/kernel/fs",
-    visibility = ["//visibility:public"],
+    is_kernel = True,
     deps = [
         "//pkg/lib/pointer",
         "@org_golang_x_sys//unix",
+    ],
+)
+
+# =============================================================================
+# MODE 1: TEST - Unit tests with race detection and safety checks
+# =============================================================================
+
+kitsunium_go_test(
+    name = "test",
+    size = "small",
+    embed = [":fs"],
+    deps = [
+        "//pkg/lib/pointer",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
+
+# =============================================================================
+# MODE 2: BENCHMARK - Production benchmarks without safety checks
+# =============================================================================
+
+# Single-core benchmark
+kitsunium_go_benchmark(
+    name = "bench",
+    embed = [":fs"],
+    deps = [
+        "//pkg/lib/pointer",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
+
+# Multi-core benchmark
+kitsunium_go_benchmark(
+    name = "bench_multi",
+    srcs = ["fs_bench_test.go"],
+    embed = [":fs"],
+    deps = [
+        "//pkg/lib/pointer",
+        "@com_github_stretchr_testify//assert",
     ],
 )
 
@@ -26,11 +62,20 @@ go_test(
         "archive_test.go",
         "directory_test.go",
         "file_test.go",
+        "fs_bench_test.go",
+        "host_test.go",
+        "option_test.go",
         "stats_test.go",
     ],
     deps = [
-        ":fs",
-        "//pkg/lib/pointer",
+        ":fs",  # keep
+        "//pkg/lib/pointer",  # keep
         "@com_github_stretchr_testify//assert",
     ],
+)
+
+alias(
+    name = "go_default_library",
+    actual = ":fs",
+    visibility = ["//visibility:public"],
 )

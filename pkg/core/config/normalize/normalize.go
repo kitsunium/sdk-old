@@ -46,34 +46,36 @@ const (
 )
 
 var (
-	toLowerTable    [tableSize]byte
-	underscoreToDot [tableSize]byte
+	toLowerTable         [tableSize]byte
+	underscoreSpaceToDot [tableSize]byte
 )
 
 func init() {
 	for i := startIndex; i < tableSize; i++ {
 		toLowerTable[i] = byte(i)
-		underscoreToDot[i] = byte(i)
+		underscoreSpaceToDot[i] = byte(i)
 	}
 	for i := asciiUpperCaseStart; i <= asciiUpperCaseEnd; i++ {
 		toLowerTable[i] = byte(i + asciiCaseDiff)
 	}
-	underscoreToDot['_'] = '.'
+	underscoreSpaceToDot['_'] = '.'
+	underscoreSpaceToDot[' '] = '.'
 }
 
 // Key normalizes a configuration key by converting to lowercase and
-// replacing underscores with dots. This function uses pre-computed lookup
+// replacing underscores and spaces with dots. This function uses pre-computed lookup
 // tables for optimal performance and avoids allocations when possible.
 //
 // The normalization process:
 //   - Converts uppercase letters to lowercase
-//   - Replaces underscores with dots
+//   - Replaces underscores and spaces with dots
 //   - Returns the original string if no transformation is needed
 //
 // Example:
 //
 //	Key("DATABASE_URL") // returns "database.url"
 //	Key("Redis_Host")   // returns "redis.host"
+//	Key("section with spaces") // returns "section.with.spaces"
 //	Key("api.key")      // returns "api.key" (unchanged)
 func Key(key string) string {
 	if len(key) == startIndex {
@@ -91,7 +93,7 @@ func Key(key string) string {
 func needsKeyTransform(key string) bool {
 	for i := startIndex; i < len(key); i++ {
 		c := key[i]
-		if c == '_' || isUpperCase(c) {
+		if c == '_' || c == ' ' || isUpperCase(c) {
 			return true
 		}
 	}
@@ -120,7 +122,7 @@ func transformKey(key string) string {
 // transformByte applies transformations to a single byte
 func transformByte(c byte) byte {
 	c = toLowerTable[c]
-	c = underscoreToDot[c]
+	c = underscoreSpaceToDot[c]
 	return c
 }
 

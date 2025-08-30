@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -734,6 +735,251 @@ func BenchmarkJSON_LoadBytes_Large(b *testing.B) {
 	}
 }
 
+// Tests for missing coverage in JSON parser - error paths and edge cases
+
+func TestJSON_LoadBytes_ExceedsMaxSize(t *testing.T) {
+	// Test JSON size validation - create data larger than MaxJSONSize (10MB)
+	j := NewJSON("")
+
+	// Create data that exceeds MaxJSONSize
+	bigData := make([]byte, MaxJSONSize+1)
+	copy(bigData, []byte(`{"key": "`))
+	for i := 10; i < len(bigData)-2; i++ {
+		bigData[i] = 'a'
+	}
+	copy(bigData[len(bigData)-2:], []byte(`"}`))
+
+	_, err := j.LoadBytes(bigData)
+	if err == nil {
+		t.Error("LoadBytes() should error on data exceeding MaxJSONSize")
+	}
+	if !errors.Is(err, ErrJSONParse) {
+		t.Errorf("Expected ErrJSONParse for size violation, got: %v", err)
+	}
+}
+
+func TestJSON_LoadBytes_TrailingData(t *testing.T) {
+	// Test detection of trailing data after valid JSON
+	j := NewJSON("")
+
+	// Valid JSON followed by extra data
+	content := []byte(`{"key": "value"} {"extra": "data"}`)
+
+	_, err := j.LoadBytes(content)
+	if err == nil {
+		t.Error("LoadBytes() should error on trailing data")
+	}
+	if !errors.Is(err, ErrJSONParse) {
+		t.Errorf("Expected ErrJSONParse for trailing data, got: %v", err)
+	}
+}
+
+func TestJSON_LoadBytes_MaxDepthExceeded(t *testing.T) {
+	// Test maximum nesting depth protection
+	j := NewJSON("")
+
+	// Create deeply nested JSON that exceeds MaxJSONDepth
+	var content strings.Builder
+	content.WriteString(`{`)
+	for i := 0; i < MaxJSONDepth+5; i++ {
+		content.WriteString(fmt.Sprintf(`"level%d": {`, i))
+	}
+	content.WriteString(`"deep": "value"`)
+	for i := 0; i < MaxJSONDepth+5; i++ {
+		content.WriteString(`}`)
+	}
+	content.WriteString(`}`)
+
+	_, err := j.LoadBytes([]byte(content.String()))
+	if err == nil {
+		t.Error("LoadBytes() should error on excessive nesting depth")
+	}
+	if !errors.Is(err, ErrJSONParse) {
+		t.Errorf("Expected ErrJSONParse for depth violation, got: %v", err)
+	}
+}
+
+func TestJSON_Load_ReadError(t *testing.T) {
+	// Test general read error handling (not file not found)
+	// Create a file that exists but can't be read (permission error simulation)
+	tmpDir := t.TempDir()
+	jsonPath := filepath.Join(tmpDir, "unreadable.json")
+
+	// Write file first
+	if err := os.WriteFile(jsonPath, []byte(`{"key": "value"}`), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Make it unreadable by changing permissions
+	if err := os.Chmod(jsonPath, 0000); err != nil {
+		t.Fatalf("Failed to change file permissions: %v", err)
+	}
+
+	// Restore permissions after test
+	defer os.Chmod(jsonPath, 0644)
+
+	j := NewJSON(jsonPath)
+	_, err := j.Load()
+	if err == nil {
+		t.Error("Load() should error on unreadable file")
+	}
+	if !errors.Is(err, ErrReadFailed) {
+		t.Errorf("Expected ErrReadFailed for read error, got: %v", err)
+	}
+}
+
+func TestJSON_ProcessValue_AllTypeBranches(t *testing.T) {
+	// Test all type branches in processValue function
+	testCases := []struct {
+		name     string
+		content  []byte
+		expected map[string]string
+	}{
+		{
+			name:    "int64 type",
+			content: []byte(`{"int64": 9223372036854775807}`),
+			expected: map[string]string{
+				"int64": "9223372036854775807",
+			},
+		},
+		{
+			name:    "default type case",
+			content: []byte(`{"custom": 123}`),
+			expected: map[string]string{
+				"custom": "123",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			j := NewJSON("")
+			result, err := j.LoadBytes(tc.content)
+			if err != nil {
+				t.Fatalf("LoadBytes() error = %v", err)
+			}
+
+			for key, expected := range tc.expected {
+				if actual, ok := result[key]; !ok || actual != expected {
+					t.Errorf("key %q = %q, want %q", key, actual, expected)
+				}
+			}
+		})
+	}
+}
+
+func TestJSON_ProcessArray_NestedArrayError(t *testing.T) {
+	// Test array processing with nested structures that might cause depth errors
+	j := NewJSON("")
+
+	// Create an array with deeply nested maps to test depth handling
+	var content strings.Builder
+	content.WriteString(`{"array": [{`)
+	for i := 0; i < MaxJSONDepth-5; i++ {
+		content.WriteString(fmt.Sprintf(`"level%d": {`, i))
+	}
+	content.WriteString(`"deep": "value"`)
+	for i := 0; i < MaxJSONDepth-5; i++ {
+		content.WriteString(`}`)
+	}
+	content.WriteString(`}]}`)
+
+	_, err := j.LoadBytes([]byte(content.String()))
+	// This should succeed as it's within limits
+	if err != nil {
+		t.Errorf("LoadBytes() should handle deep but valid nesting, got error: %v", err)
+	}
+}
+
+func TestJSON_FastFloat64ToString_EdgeCases(t *testing.T) {
+	// Test the fastFloat64ToString helper function edge cases
+	testCases := []struct {
+		input    float64
+		expected string
+	}{
+		{42.0, "42"},
+		{42.5, "42.5"},
+		{0.0, "0"},
+		{-0.0, "0"},
+		{1e10, "10000000000"},
+		{1e-10, "1e-10"},
+		{3.14159265359, "3.14159265359"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("float64_%v", tc.input), func(t *testing.T) {
+			result := fastFloat64ToString(tc.input)
+			if result != tc.expected {
+				t.Errorf("fastFloat64ToString(%v) = %q, want %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestJSON_NormalizeJSONNumber_Coverage(t *testing.T) {
+	// Test normalizeJSONNumber function coverage
+	number := json.Number("123.456")
+	result := normalizeJSONNumber(number)
+	if result != "123.456" {
+		t.Errorf("normalizeJSONNumber() = %q, want %q", result, "123.456")
+	}
+
+	// Test with scientific notation
+	number2 := json.Number("1.23e10")
+	result2 := normalizeJSONNumber(number2)
+	if result2 != "1.23e10" {
+		t.Errorf("normalizeJSONNumber() = %q, want %q", result2, "1.23e10")
+	}
+}
+
+func TestJSON_BuildKey_Coverage(t *testing.T) {
+	// Test buildKey function coverage
+	j := &JSON{}
+	keyBuilder := &strings.Builder{}
+
+	// Test with prefix and dot
+	result := j.buildKey(keyBuilder, "prefix", "key", true)
+	expected := "prefix.key"
+	if result != expected {
+		t.Errorf("buildKey() = %q, want %q", result, expected)
+	}
+
+	// Test without prefix (no dot needed)
+	result2 := j.buildKey(keyBuilder, "", "key", false)
+	expected2 := "key"
+	if result2 != expected2 {
+		t.Errorf("buildKey() = %q, want %q", result2, expected2)
+	}
+}
+
+func TestJSON_ArrayProcessing_ComplexNesting(t *testing.T) {
+	// Test complex array processing scenarios
+	content := []byte(`{
+		"complex": [
+			{"nested": [{"deep": "value1"}]},
+			{"nested": [{"deep": "value2"}]}
+		]
+	}`)
+
+	j := NewJSON("")
+	result, err := j.LoadBytes(content)
+	if err != nil {
+		t.Fatalf("LoadBytes() error = %v", err)
+	}
+
+	// Verify complex nested array structure
+	expected := map[string]string{
+		"complex.0.nested.0.deep": "value1",
+		"complex.1.nested.0.deep": "value2",
+	}
+
+	for key, expectedValue := range expected {
+		if value, ok := result[key]; !ok || value != expectedValue {
+			t.Errorf("key %q = %q (exists=%v), want %q", key, value, ok, expectedValue)
+		}
+	}
+}
+
 func BenchmarkJSON_LoadReader(b *testing.B) {
 	content := `{
 		"database": {
@@ -754,4 +1000,349 @@ func BenchmarkJSON_LoadReader(b *testing.B) {
 		reader := strings.NewReader(content)
 		_, _ = j.LoadReader(reader)
 	}
+}
+
+// Concurrent Tests
+
+func TestJSON_LoadReader_Concurrent(t *testing.T) {
+	content := `{
+		"database": {
+			"host": "localhost",
+			"port": 5432,
+			"name": "testdb"
+		},
+		"server": {
+			"host": "0.0.0.0",
+			"port": 8080
+		}
+	}`
+
+	const numGoroutines = 100
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			j := NewJSON("")
+			reader := strings.NewReader(content)
+			result, err := j.LoadReader(reader)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["database.host"] != "localhost" {
+				t.Errorf("Concurrent test %d: database.host = %q, want %q", i, result["database.host"], "localhost")
+			}
+			if result["server.port"] != "8080" {
+				t.Errorf("Concurrent test %d: server.port = %q, want %q", i, result["server.port"], "8080")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent test error: %v", err)
+		}
+	}
+}
+
+func TestJSON_LoadBytes_Concurrent(t *testing.T) {
+	content := []byte(`{
+		"array": ["item1", "item2", "item3"],
+		"object": {
+			"nested": {
+				"value": "test"
+			}
+		},
+		"number": 42,
+		"bool": true
+	}`)
+
+	const numGoroutines = 50
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			j := NewJSON("")
+			result, err := j.LoadBytes(content)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["array.0"] != "item1" {
+				t.Errorf("Concurrent bytes test %d: array.0 = %q, want %q", i, result["array.0"], "item1")
+			}
+			if result["object.nested.value"] != "test" {
+				t.Errorf("Concurrent bytes test %d: object.nested.value = %q, want %q", i, result["object.nested.value"], "test")
+			}
+			if result["number"] != "42" {
+				t.Errorf("Concurrent bytes test %d: number = %q, want %q", i, result["number"], "42")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent bytes test error: %v", err)
+		}
+	}
+}
+
+func TestJSON_Load_Concurrent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	const numGoroutines = 20
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			jsonPath := filepath.Join(tmpDir, fmt.Sprintf("test_%d.json", id))
+			content := fmt.Sprintf(`{
+				"worker_id": %d,
+				"host": "localhost",
+				"port": %d,
+				"config": {
+					"timeout": 30,
+					"retries": 3
+				}
+			}`, id, 8080+id)
+
+			if err := os.WriteFile(jsonPath, []byte(content), 0644); err != nil {
+				errors <- err
+				return
+			}
+
+			j := NewJSON(jsonPath)
+			result, err := j.Load()
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["host"] != "localhost" {
+				t.Errorf("Concurrent load test: host = %q, want %q", result["host"], "localhost")
+			}
+			if result["config.timeout"] != "30" {
+				t.Errorf("Concurrent load test: config.timeout = %q, want %q", result["config.timeout"], "30")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent load test error: %v", err)
+		}
+	}
+}
+
+// Panic Recovery Tests
+
+func TestJSON_LoadReader_PanicRecovery(t *testing.T) {
+	malformedContents := []string{
+		"",                              // empty
+		"{",                             // incomplete
+		"}",                             // incomplete
+		`{"key":}`,                      // missing value
+		`{"key": "value",}`,             // trailing comma
+		string([]byte{0, 1, 2, 3, 255}), // binary data
+		strings.Repeat(`{"key": "value"},`, 10000),         // very large malformed
+		`{"` + strings.Repeat("key", 1000) + `": "value"}`, // very long key
+		`{"key": "` + strings.Repeat("value", 1000) + `"}`, // very long value
+		`{"key": "value\x00with\x00nulls"}`,                // null bytes
+		`{"测试": "值"}`,                                      // unicode
+		`{"\u0000": "null char key"}`,                      // null character in key
+		`{"key": "\u{invalid}"}`,                           // invalid unicode
+	}
+
+	for i, content := range malformedContents {
+		t.Run(fmt.Sprintf("malformed_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("LoadReader panicked with input %d: %v", i, r)
+				}
+			}()
+
+			j := NewJSON("")
+			reader := strings.NewReader(content)
+			_, _ = j.LoadReader(reader)
+		})
+	}
+}
+
+func TestJSON_LoadBytes_PanicRecovery(t *testing.T) {
+	panicInputs := [][]byte{
+		nil,                    // nil slice
+		{},                     // empty slice
+		{0},                    // single null byte
+		make([]byte, 10000000), // very large empty content
+		bytes.Repeat([]byte(`{"key": "value"},`), 100000), // extremely large malformed
+		[]byte(`{`),                       // just opening brace
+		[]byte(`}`),                       // just closing brace
+		[]byte(strings.Repeat(`{`, 1000)), // many opening braces
+		[]byte(strings.Repeat(`}`, 1000)), // many closing braces
+		[]byte(`{"key": ` + strings.Repeat(`[`, 1000) + `}`), // unbalanced brackets
+	}
+
+	for i, content := range panicInputs {
+		t.Run(fmt.Sprintf("panic_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("LoadBytes panicked with input %d: %v", i, r)
+				}
+			}()
+
+			j := NewJSON("")
+			_, _ = j.LoadBytes(content)
+		})
+	}
+}
+
+func TestJSON_Load_PanicRecovery(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	testCases := []struct {
+		name    string
+		setup   func() string
+		cleanup func(string)
+	}{
+		{
+			name: "empty_file",
+			setup: func() string {
+				path := filepath.Join(tmpDir, "empty.json")
+				os.WriteFile(path, []byte{}, 0644)
+				return path
+			},
+			cleanup: func(path string) { os.Remove(path) },
+		},
+		{
+			name: "binary_file",
+			setup: func() string {
+				path := filepath.Join(tmpDir, "binary.json")
+				os.WriteFile(path, make([]byte, 1000), 0644)
+				return path
+			},
+			cleanup: func(path string) { os.Remove(path) },
+		},
+		{
+			name: "very_large_file",
+			setup: func() string {
+				path := filepath.Join(tmpDir, "large.json")
+				largeObject := make(map[string]interface{})
+				for i := 0; i < 10000; i++ {
+					largeObject[fmt.Sprintf("key_%d", i)] = fmt.Sprintf("value_%d", i)
+				}
+				content, _ := json.Marshal(largeObject)
+				os.WriteFile(path, content, 0644)
+				return path
+			},
+			cleanup: func(path string) { os.Remove(path) },
+		},
+		{
+			name: "unicode_file",
+			setup: func() string {
+				path := filepath.Join(tmpDir, "unicode.json")
+				content := `{"测试": "值", "🌍": "world", "العربية": "arabic"}`
+				os.WriteFile(path, []byte(content), 0644)
+				return path
+			},
+			cleanup: func(path string) { os.Remove(path) },
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := tc.setup()
+			defer tc.cleanup(path)
+
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Load panicked with %s: %v", tc.name, r)
+				}
+			}()
+
+			j := NewJSON(path)
+			_, _ = j.Load()
+		})
+	}
+}
+
+// Multi-threaded Benchmarks
+
+func BenchmarkJSON_LoadReader_Concurrent(b *testing.B) {
+	content := `{
+		"database": {
+			"host": "localhost",
+			"port": 5432
+		},
+		"server": {
+			"host": "0.0.0.0",
+			"port": 8080
+		}
+	}`
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			j := NewJSON("")
+			reader := strings.NewReader(content)
+			_, _ = j.LoadReader(reader)
+		}
+	})
+}
+
+func BenchmarkJSON_LoadBytes_Concurrent_Small(b *testing.B) {
+	content := []byte(`{
+		"key1": "value1",
+		"key2": 42,
+		"nested": {
+			"key3": true
+		}
+	}`)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			j := NewJSON("")
+			_, _ = j.LoadBytes(content)
+		}
+	})
+}
+
+func BenchmarkJSON_LoadBytes_Concurrent_Large(b *testing.B) {
+	data := make(map[string]interface{})
+	for i := 0; i < 1000; i++ {
+		section := make(map[string]interface{})
+		for j := 0; j < 10; j++ {
+			section[fmt.Sprintf("key_%d", j)] = fmt.Sprintf("value_%d_%d", i, j)
+		}
+		data[fmt.Sprintf("section_%d", i)] = section
+	}
+	content, _ := json.Marshal(data)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			j := NewJSON("")
+			_, _ = j.LoadBytes(content)
+		}
+	})
 }

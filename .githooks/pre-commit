@@ -1,5 +1,13 @@
 #!/bin/bash
-# Pre-commit hook: automatically format code before commit
+# Pre-commit hook: check code quality and format code before commit
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
 # Source the main branch protection hook
 HOOK_DIR="$(dirname "$0")"
@@ -7,6 +15,63 @@ if [ -f "$HOOK_DIR/pre-commit-main-protection" ]; then
     source "$HOOK_DIR/pre-commit-main-protection"
 fi
 
+echo "🔍 Running pre-commit checks..."
+
+# Function to check for t.Skip() usage
+check_test_skip() {
+    echo "Checking for t.Skip() usage in test files..."
+    
+    # Find all test files that are staged
+    test_files=$(git diff --cached --name-only --diff-filter=ACM | grep '_test\.go$' || true)
+    
+    if [ -z "$test_files" ]; then
+        return 0
+    fi
+    
+    # Check each test file for t.Skip
+    found_skip=false
+    for file in $test_files; do
+        # Check the staged content (not the working directory)
+        if git diff --cached "$file" | grep -E '^\+.*t\.Skip\(' > /dev/null 2>&1; then
+            found_skip=true
+            echo -e "${RED}✗ Found t.Skip() in $file${NC}"
+            
+            # Show the lines with t.Skip
+            echo -e "${YELLOW}Lines with t.Skip():${NC}"
+            git diff --cached "$file" | grep -E '^\+.*t\.Skip\(' | sed 's/^+/  /'
+        fi
+    done
+    
+    if [ "$found_skip" = true ]; then
+        echo ""
+        echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
+        echo -e "${RED}✗ COMMIT BLOCKED: t.Skip() detected in test files${NC}"
+        echo -e "${RED}════════════════════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "${YELLOW}Using t.Skip() is a bad practice that should be avoided.${NC}"
+        echo ""
+        echo "Instead of skipping tests, you should:"
+        echo "  1. Fix the package if the test logic is correct"
+        echo "  2. Adjust the test expectations without compromising its purpose"
+        echo "  3. Remove the test if it's no longer relevant"
+        echo ""
+        echo "Tests should either:"
+        echo "  • Pass (✓) - indicating the code works correctly"
+        echo "  • Fail (✗) - indicating a real issue that needs fixing"
+        echo ""
+        echo "Skipping tests hides problems and reduces confidence in the codebase."
+        echo ""
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓ No t.Skip() found in test files${NC}"
+    return 0
+}
+
+# Check for t.Skip() first (blocking check)
+check_test_skip || exit 1
+
+echo ""
 echo "🎨 Running pre-commit formatting..."
 
 # Get list of staged Go files

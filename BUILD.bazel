@@ -3,4 +3,20 @@ load("@gazelle//:def.bzl", "gazelle")
 # gazelle:prefix github.com/kitsunium/sdk
 # gazelle:exclude vendor
 # gazelle:exclude bazel-*
-gazelle(name = "gazelle")
+# gazelle:go_naming_convention import_alias
+# gazelle:build_file_name BUILD.bazel
+# gazelle:go_generate_proto false
+
+# Resolve internal imports
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/core/config/normalize //pkg/core/config/normalize
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/core/config/parser //pkg/core/config/parser
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/kernel/fs //pkg/kernel/fs
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/kernel/kbuffer //pkg/kernel/kbuffer
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/kernel/kcache //pkg/kernel/kcache
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/kernel/kerror //pkg/kernel/kerror
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/lib/pointer //pkg/lib/pointer
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/lib/value //pkg/lib/value
+# gazelle:resolve go github.com/kitsunium/sdk/pkg/core/storage //pkg/core/storage
+gazelle(
+    name = "gazelle",
+)

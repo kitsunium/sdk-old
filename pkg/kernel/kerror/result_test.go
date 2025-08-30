@@ -54,3 +54,54 @@ func TestResultTypes(t *testing.T) {
 		t.Error("Struct result field should be 'test'")
 	}
 }
+
+// Benchmarks from performance_test.go
+
+func BenchmarkResult_NewResult_Ok(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewResult[int](42, true)
+	}
+}
+
+func BenchmarkResult_NewResult_Err(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var zero int
+		_ = NewResult[int](zero, false)
+	}
+}
+
+func BenchmarkResult_CheckOk(b *testing.B) {
+	result := NewResult[int](42, true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = result.Ok
+	}
+}
+
+func BenchmarkResult_CheckErr(b *testing.B) {
+	var zero int
+	result := NewResult[int](zero, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = !result.Ok
+	}
+}
+
+func BenchmarkResult_Unwrap(b *testing.B) {
+	result := NewResult[int](42, true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = result.Unwrap()
+	}
+}
+
+func BenchmarkResult_UnwrapOr(b *testing.B) {
+	var zero int
+	result := NewResult[int](zero, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = result.UnwrapOr(99)
+	}
+}

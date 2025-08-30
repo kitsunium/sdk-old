@@ -90,8 +90,13 @@ func (p *bufferPool) Get(size int) []byte {
 
 	// Track statistics
 	if bufPtr != nil {
-		// Resize to requested length
-		return (*bufPtr)[:size]
+		// Ensure buffer has sufficient capacity before slicing
+		if cap(*bufPtr) >= size {
+			// Resize to requested length
+			return (*bufPtr)[:size]
+		}
+		// Buffer too small (shouldn't happen but handle gracefully)
+		return make([]byte, size)
 	}
 
 	// Shouldn't happen due to New function, but handle gracefully

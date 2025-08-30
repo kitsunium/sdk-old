@@ -512,6 +512,243 @@ port = 8080
 	}
 }
 
+// Tests for missing coverage in TOML parser - error paths and edge cases
+
+func TestTOML_Load_ReadError(t *testing.T) {
+	// Test general read error handling (not file not found)
+	tmpDir := t.TempDir()
+	tomlPath := filepath.Join(tmpDir, "unreadable.toml")
+
+	// Write file first
+	if err := os.WriteFile(tomlPath, []byte(`key = "value"`), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Make it unreadable by changing permissions
+	if err := os.Chmod(tomlPath, 0000); err != nil {
+		t.Fatalf("Failed to change file permissions: %v", err)
+	}
+
+	// Restore permissions after test
+	defer os.Chmod(tomlPath, 0644)
+
+	toml := NewTOML(tomlPath)
+	_, err := toml.Load()
+	if err == nil {
+		t.Error("Load() should error on unreadable file")
+	}
+	if !errors.Is(err, ErrReadFailed) {
+		t.Errorf("Expected ErrReadFailed for read error, got: %v", err)
+	}
+}
+
+func TestTOML_LoadReader_ReaderError(t *testing.T) {
+	// Test LoadReader with reader that fails
+	toml := NewTOML("")
+	reader := &tomlErrorReader{err: io.ErrUnexpectedEOF}
+
+	_, err := toml.LoadReader(reader)
+	if err == nil {
+		t.Error("LoadReader() should return error from reader")
+	}
+	if !errors.Is(err, ErrReadFailed) {
+		t.Errorf("Expected ErrReadFailed for reader error, got: %v", err)
+	}
+}
+
+func TestTOML_LoadBytes_MalformedTOML(t *testing.T) {
+	// Test various malformed TOML scenarios
+	testCases := []struct {
+		name    string
+		content []byte
+	}{
+		{
+			name:    "unclosed string",
+			content: []byte(`key = "unclosed string`),
+		},
+		{
+			name:    "invalid table header",
+			content: []byte(`[invalid table name with spaces`),
+		},
+		{
+			name:    "duplicate keys",
+			content: []byte(`key = "value1"\nkey = "value2"`),
+		},
+		{
+			name:    "invalid datetime",
+			content: []byte(`date = 2020-13-01T25:00:00Z`), // Invalid month and hour
+		},
+		{
+			name:    "invalid nested table",
+			content: []byte(`[a]\n[a.b]\nb = 1\n[a]\nc = 2`), // Redefining table
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			toml := NewTOML("")
+			_, err := toml.LoadBytes(tc.content)
+			if err == nil {
+				t.Error("LoadBytes() should error on malformed TOML")
+			}
+			if !errors.Is(err, ErrTOMLParse) {
+				t.Errorf("Expected ErrTOMLParse for malformed TOML, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestTOML_LoadBytes_Empty(t *testing.T) {
+	// Test with empty TOML content
+	toml := NewTOML("")
+	result, err := toml.LoadBytes([]byte{})
+	if err != nil {
+		t.Fatalf("LoadBytes() should handle empty content, got error: %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for empty TOML, got %d items", len(result))
+	}
+}
+
+func TestTOML_LoadBytes_OnlyWhitespace(t *testing.T) {
+	// Test with only whitespace and comments
+	content := []byte(`
+		# This is just a comment
+		
+		# Another comment
+	`)
+
+	toml := NewTOML("")
+	result, err := toml.LoadBytes(content)
+	if err != nil {
+		t.Fatalf("LoadBytes() should handle whitespace and comments, got error: %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for whitespace-only TOML, got %d items", len(result))
+	}
+}
+
+func TestTOML_LoadBytes_ComplexEdgeCases(t *testing.T) {
+	// Test complex TOML edge cases
+	content := []byte(`
+# Global key
+global = "value"
+
+# Table with special characters
+["special-table.with.dots"]
+key = "table value"
+
+# Array of tables
+[[fruits]]
+name = "apple"
+
+[[fruits]]  
+name = "orange"
+
+# Nested table
+[a.b.c]
+nested = "deep"
+
+# Inline table
+inline = { x = 1, y = 2 }
+
+# Various data types
+string = "text"
+integer = 123
+float = 45.67
+boolean = true
+datetime = 1979-05-27T07:32:00Z
+
+# Arrays
+simple_array = [1, 2, 3]
+string_array = ["a", "b", "c"]
+mixed_nested = [[1, 2], [3, 4]]
+`)
+
+	toml := NewTOML("")
+	result, err := toml.LoadBytes(content)
+	if err != nil {
+		t.Fatalf("LoadBytes() error = %v", err)
+	}
+
+	// Verify some key values
+	expectedChecks := map[string]string{
+		"global":                      "value",
+		"special-table.with.dots.key": "table value",
+		"fruits.0.name":               "apple",
+		"fruits.1.name":               "orange",
+		"a.b.c.nested":                "deep",
+		"a.b.c.inline.x":              "1",
+		"a.b.c.inline.y":              "2",
+		"a.b.c.string":                "text",
+		"a.b.c.integer":               "123",
+		"a.b.c.float":                 "45.67",
+		"a.b.c.boolean":               "true",
+		"a.b.c.simple.array.0":        "1",
+		"a.b.c.string.array.0":        "a",
+		"a.b.c.mixed.nested.0":        "[1 2]",
+		"a.b.c.mixed.nested.1":        "[3 4]",
+	}
+
+	for key, expected := range expectedChecks {
+		if actual, exists := result[key]; !exists {
+			t.Errorf("Key %q not found in result", key)
+		} else if actual != expected {
+			t.Errorf("Key %q = %q, want %q", key, actual, expected)
+		}
+	}
+}
+
+func TestTOML_LoadBytes_InvalidSyntaxVariations(t *testing.T) {
+	// Test various invalid TOML syntax patterns
+	invalidTOMLs := []struct {
+		name    string
+		content []byte
+		reason  string
+	}{
+		{
+			name:    "bare key with space",
+			content: []byte(`bare key = "value"`),
+			reason:  "bare keys cannot contain spaces",
+		},
+		{
+			name:    "table name not closed",
+			content: []byte(`[table\nkey = "value"`),
+			reason:  "table name bracket not closed",
+		},
+		{
+			name:    "string not closed",
+			content: []byte(`key = "unclosed`),
+			reason:  "string literal not properly closed",
+		},
+		{
+			name:    "invalid escape sequence",
+			content: []byte(`key = "invalid\x escape"`),
+			reason:  "invalid escape sequence in string",
+		},
+		{
+			name:    "array not closed",
+			content: []byte(`key = [1, 2, 3`),
+			reason:  "array not properly closed",
+		},
+	}
+
+	for _, tc := range invalidTOMLs {
+		t.Run(tc.name, func(t *testing.T) {
+			toml := NewTOML("")
+			_, err := toml.LoadBytes(tc.content)
+			if err == nil {
+				t.Errorf("LoadBytes() should error for %s", tc.reason)
+			}
+			if !errors.Is(err, ErrTOMLParse) {
+				t.Errorf("Expected ErrTOMLParse for %s, got: %v", tc.reason, err)
+			}
+		})
+	}
+}
+
 func BenchmarkTOML_LoadReader_WithoutPool(b *testing.B) {
 	content := `
 [database]
@@ -530,4 +767,196 @@ port = 8080
 		reader := strings.NewReader(content)
 		_, _ = toml.LoadReader(reader)
 	}
+}
+
+// Concurrent Tests
+
+func TestTOML_LoadReader_Concurrent(t *testing.T) {
+	content := `
+[database]
+host = "localhost"
+port = 5432
+name = "testdb"
+
+[server]
+host = "0.0.0.0"
+port = 8080
+debug = true
+`
+
+	const numGoroutines = 100
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			toml := NewTOML("")
+			reader := strings.NewReader(content)
+			result, err := toml.LoadReader(reader)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["database.host"] != "localhost" {
+				t.Errorf("Concurrent test %d: database.host = %q, want %q", i, result["database.host"], "localhost")
+			}
+			if result["server.debug"] != "true" {
+				t.Errorf("Concurrent test %d: server.debug = %q, want %q", i, result["server.debug"], "true")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent test error: %v", err)
+		}
+	}
+}
+
+func TestTOML_LoadBytes_Concurrent(t *testing.T) {
+	content := []byte(`
+[section1]
+key1 = "value1"
+key2 = 42
+
+[section2]
+key3 = true
+array = ["item1", "item2"]
+`)
+
+	const numGoroutines = 50
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			toml := NewTOML("")
+			result, err := toml.LoadBytes(content)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["section1.key1"] != "value1" {
+				t.Errorf("Concurrent bytes test %d: section1.key1 = %q, want %q", i, result["section1.key1"], "value1")
+			}
+			if result["section2.array.0"] != "item1" {
+				t.Errorf("Concurrent bytes test %d: section2.array.0 = %q, want %q", i, result["section2.array.0"], "item1")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent bytes test error: %v", err)
+		}
+	}
+}
+
+// Panic Recovery Tests
+
+func TestTOML_LoadReader_PanicRecovery(t *testing.T) {
+	malformedContents := []string{
+		"",                              // empty
+		"[",                             // incomplete section
+		"key = ",                        // incomplete value
+		"key = [unclosed",               // unclosed array
+		string([]byte{0, 1, 2, 3, 255}), // binary data
+		strings.Repeat("[section]\nkey = \"value\"\n", 10000),        // very large
+		"[" + strings.Repeat("section", 1000) + "]\nkey = \"value\"", // very long section
+		"[section]\n" + strings.Repeat("key", 1000) + " = \"value\"", // very long key
+		"[section]\nkey = \"" + strings.Repeat("value", 1000) + "\"", // very long value
+		"[section]\nkey = \"value\x00with\x00nulls\"",                // null bytes
+		"[测试]\n键 = \"值\"",                                            // unicode
+	}
+
+	for i, content := range malformedContents {
+		t.Run(fmt.Sprintf("malformed_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("LoadReader panicked with input %d: %v", i, r)
+				}
+			}()
+
+			toml := NewTOML("")
+			reader := strings.NewReader(content)
+			_, _ = toml.LoadReader(reader)
+		})
+	}
+}
+
+func TestTOML_LoadBytes_PanicRecovery(t *testing.T) {
+	panicInputs := [][]byte{
+		nil,                   // nil slice
+		{},                    // empty slice
+		{0},                   // single null byte
+		make([]byte, 1000000), // very large empty content
+		bytes.Repeat([]byte("[section]\nkey = \"value\"\n"), 50000), // extremely large
+		[]byte("[incomplete"),             // incomplete section
+		[]byte("key = [unclosed"),         // unclosed array
+		[]byte(strings.Repeat("[", 1000)), // many opening brackets
+	}
+
+	for i, content := range panicInputs {
+		t.Run(fmt.Sprintf("panic_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("LoadBytes panicked with input %d: %v", i, r)
+				}
+			}()
+
+			toml := NewTOML("")
+			_, _ = toml.LoadBytes(content)
+		})
+	}
+}
+
+// Multi-threaded Benchmarks
+
+func BenchmarkTOML_LoadReader_Concurrent(b *testing.B) {
+	content := `
+[database]
+host = "localhost" 
+port = 5432
+[server]
+host = "0.0.0.0"
+port = 8080
+`
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			toml := NewTOML("")
+			reader := strings.NewReader(content)
+			_, _ = toml.LoadReader(reader)
+		}
+	})
+}
+
+func BenchmarkTOML_LoadBytes_Concurrent(b *testing.B) {
+	content := []byte(`
+[section]
+key1 = "value1"
+key2 = 42
+key3 = true
+`)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			toml := NewTOML("")
+			_, _ = toml.LoadBytes(content)
+		}
+	})
 }

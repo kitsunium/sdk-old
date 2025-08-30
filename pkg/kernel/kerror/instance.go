@@ -65,7 +65,11 @@ func (e KError) New() *Instance {
 func (e KError) Newf(format string, args ...any) *Instance {
 	inst := instancePool.Get().(*Instance)
 	inst.err = e
-	inst.message = fmt.Sprintf(format, args...)
+	if format == "" {
+		inst.message = e.message
+	} else {
+		inst.message = fmt.Sprintf(format, args...)
+	}
 	inst.cause = nil
 	inst.context = nil
 	inst.stack = inst.stack[:0]
@@ -112,7 +116,11 @@ func (e KError) Wrapf(cause error, format string, args ...any) *Instance {
 	inst := instancePool.Get().(*Instance)
 	inst.err = e
 	inst.cause = cause
-	inst.message = fmt.Sprintf(format, args...)
+	if format == "" {
+		inst.message = e.message
+	} else {
+		inst.message = fmt.Sprintf(format, args...)
+	}
 	inst.context = nil
 	inst.stack = inst.stack[:0]
 

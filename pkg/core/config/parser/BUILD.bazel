@@ -1,20 +1,53 @@
-load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("@rules_go//go:def.bzl", "go_test")
+load("//build:go_rules.bzl", "kitsunium_go_benchmark", "kitsunium_go_library", "kitsunium_go_test")
 
-go_library(
+# =============================================================================
+# Kitsunium SDK - parser package
+# 2 modes: TEST (with race detection) and BENCHMARK (production performance)
+# =============================================================================
+
+kitsunium_go_library(
     name = "parser",
-    srcs = [
-        "args.go",
-        "env.go",
-        "errors.go",
-        "ini.go",
-        "interface.go",
-        "json.go",
-        "toml.go",
-        "xml.go",
-        "yaml.go",
-    ],
     importpath = "github.com/kitsunium/sdk/pkg/core/config/parser",
-    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/core/config/normalize",
+        "//pkg/kernel/kerror",
+        "@com_github_pelletier_go_toml_v2//:go-toml",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+# =============================================================================
+# MODE 1: TEST - Unit tests with race detection and safety checks
+# =============================================================================
+
+kitsunium_go_test(
+    name = "test",
+    size = "small",
+    embed = [":parser"],
+)
+
+# =============================================================================
+# MODE 2: BENCHMARK - Production benchmarks without safety checks
+# =============================================================================
+
+# Single-core benchmark
+kitsunium_go_benchmark(
+    name = "bench",
+    embed = [":parser"],
+    deps = [
+        "//pkg/core/config/normalize",
+        "//pkg/kernel/kerror",
+        "@com_github_pelletier_go_toml_v2//:go-toml",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+# Multi-core benchmark
+kitsunium_go_benchmark(
+    name = "bench_multi",
+    srcs = ["parser_bench_test.go"],
+    embed = [":parser"],
     deps = [
         "//pkg/core/config/normalize",
         "//pkg/kernel/kerror",
@@ -25,14 +58,22 @@ go_library(
 
 go_test(
     name = "parser_test",
+    size = "small",
     srcs = [
         "args_test.go",
         "env_test.go",
         "ini_test.go",
         "json_test.go",
+        "parser_bench_test.go",
         "toml_test.go",
         "xml_test.go",
         "yaml_test.go",
     ],
     embed = [":parser"],
+)
+
+alias(
+    name = "go_default_library",
+    actual = ":parser",
+    visibility = ["//visibility:public"],
 )

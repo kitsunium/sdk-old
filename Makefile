@@ -40,14 +40,19 @@ help:
 	@echo '  make <target>'
 	@echo ''
 	@echo 'Development:'
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "build" "build all packages with Bazel"
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test" "run all tests with Bazel"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "build" "build all packages (dev mode with safety)"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "build/prod" "build all packages (prod mode, no safety)"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test" "run all tests (dev mode)"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/prod" "run all tests (prod mode)"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/unit" "run unit tests only"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "test/coverage" "run tests with coverage report"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "deps" "download and verify dependencies"
 	@echo ''
 	@echo 'Benchmarks:'
-	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run and save benchmark results"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench" "run benchmarks (single & multi-core)"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/single" "run single-core benchmarks only"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/multi" "run multi-core benchmarks only"
+	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/prod" "run benchmarks in prod mode"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/update" "download latest benchmark database"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/compare" "compare two benchmark commits"
 	@printf "  $(YELLOW)%-20s$(NC) %s\n" "bench/list" "list saved benchmark results"
@@ -91,23 +96,35 @@ confirm:
 # DEVELOPMENT
 # ==================================================================================== #
 
-## build: build all packages with Bazel
+## build: build all packages with Bazel (dev mode)
 .PHONY: build
 build:
-	@echo "$(YELLOW)▶ Building all packages...$(NC)"
-	@$(BAZEL) build //...
+	@echo "$(YELLOW)▶ Building all packages (dev mode)...$(NC)"
+	@$(BAZEL) build //... --config=dev
 
-## test: run all tests with Bazel
+## build/prod: build all packages with Bazel (production mode)
+.PHONY: build/prod
+build/prod:
+	@echo "$(YELLOW)▶ Building all packages (production mode - no safety checks)...$(NC)"
+	@$(BAZEL) build //... --config=prod
+
+## test: run all tests with Bazel (dev mode)
 .PHONY: test
-test:
-	@echo "$(YELLOW)▶ Running tests...$(NC)"
-	@$(BAZEL) test //... --test_output=errors
+test: fmt
+	@echo "$(YELLOW)▶ Running tests (dev mode with safety checks)...$(NC)"
+	@$(BAZEL) test //... --config=dev --test_output=errors
+
+## test/prod: run all tests with Bazel (production mode)
+.PHONY: test/prod
+test/prod:
+	@echo "$(YELLOW)▶ Running tests (production mode - no safety checks)...$(NC)"
+	@$(BAZEL) test //... --config=prod --test_output=errors
 
 ## test/unit: run unit tests only
 .PHONY: test/unit
 test/unit:
 	@echo "$(YELLOW)▶ Running unit tests...$(NC)"
-	@$(BAZEL) test //... --test_output=errors --test_size_filters=small,medium
+	@$(BAZEL) test //... --config=dev --test_output=errors --test_size_filters=small,medium
 
 ## test/coverage: run tests with coverage report
 .PHONY: test/coverage
@@ -204,6 +221,39 @@ bench:
 .PHONY: bench/save
 bench/save:
 	@$(MAKE) bench PRESERVE=true
+
+## bench/single: run single-core benchmarks only
+.PHONY: bench/single
+bench/single:
+	@echo "$(YELLOW)▶ Running single-core benchmarks (dev mode)...$(NC)"
+	@BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
+	if [ -z "$$BENCH_TARGETS" ]; then \
+		echo "$(RED)❌ No benchmark targets found$(NC)"; \
+		exit 1; \
+	fi; \
+	bazel test --config=benchmark $$BENCH_TARGETS
+
+## bench/multi: run multi-core benchmarks only
+.PHONY: bench/multi
+bench/multi:
+	@echo "$(YELLOW)▶ Running multi-core benchmarks (dev mode)...$(NC)"
+	@BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
+	if [ -z "$$BENCH_TARGETS" ]; then \
+		echo "$(RED)❌ No benchmark targets found$(NC)"; \
+		exit 1; \
+	fi; \
+	bazel test --config=benchmark-multi $$BENCH_TARGETS
+
+## bench/prod: run benchmarks in production mode
+.PHONY: bench/prod
+bench/prod:
+	@echo "$(YELLOW)▶ Running benchmarks in production mode (no safety checks)...$(NC)"
+	@BENCH_TARGETS=$$(bazel query 'filter(".*_bench_test$$", //pkg/...)' 2>/dev/null | grep '^//' | tr '\n' ' '); \
+	if [ -z "$$BENCH_TARGETS" ]; then \
+		echo "$(RED)❌ No benchmark targets found$(NC)"; \
+		exit 1; \
+	fi; \
+	bazel test --config=prod --config=benchmark $$BENCH_TARGETS
 
 ## bench/update: fetch benchmark database from BENCH release
 .PHONY: bench/update

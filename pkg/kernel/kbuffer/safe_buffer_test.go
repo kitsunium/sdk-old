@@ -2,6 +2,7 @@ package kbuffer
 
 import (
 	"bytes"
+	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -97,7 +98,10 @@ func TestNewSafeBuffer(t *testing.T) {
 		{"zero capacity", 0, nil, defaultBufferSize},
 		{"negative capacity", -100, nil, defaultBufferSize},
 		{"below minimum", minBufferSize - 1, nil, minBufferSize},
+		{"at minimum", minBufferSize, nil, minBufferSize},
 		{"normal capacity", 1024, nil, 1024},
+		{"above maximum", maxBufferSize + 1, nil, maxBufferSize},
+		{"at maximum", maxBufferSize, nil, maxBufferSize},
 		{"above maximum", maxBufferSize + 1000, nil, maxBufferSize},
 		{"with options", 512, []Option{func(b Buffer) error { return nil }}, 512},
 	}
@@ -726,4 +730,271 @@ func TestSafeBufferMemoryAlignment(t *testing.T) {
 	if size := unsafe.Sizeof(*buf); size%64 != 0 {
 		t.Logf("Warning: safeBuffer size %d is not cache-line aligned", size)
 	}
+}
+
+// TestSafeBufferPanicRecovery tests panic recovery in safe buffer operations.
+func TestSafeBufferPanicRecovery(t *testing.T) {
+	t.Run("RecoverFromNilWrite", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Should not panic on nil write: %v", r)
+			}
+		}()
+
+		b := NewSafeBuffer(256)
+		b.Write(nil) // Should handle gracefully
+	})
+
+	t.Run("RecoverFromInvalidTruncate", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Should not panic on invalid truncate: %v", r)
+			}
+		}()
+
+		b := NewSafeBuffer(256)
+		b.Write([]byte("test"))
+		b.Truncate(-1)   // Should handle gracefully
+		b.Truncate(1000) // Should handle gracefully
+	})
+
+	t.Run("RecoverFromInvalidGrow", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Should not panic on invalid grow: %v", r)
+			}
+		}()
+
+		b := NewSafeBuffer(256)
+		b.Grow(-100) // Should handle gracefully
+	})
+
+	t.Run("RecoverFromConcurrentModification", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Should not panic on concurrent modification: %v", r)
+			}
+		}()
+
+		b := NewSafeBuffer(256)
+		var wg sync.WaitGroup
+
+		// Multiple goroutines writing concurrently
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				for j := 0; j < 100; j++ {
+					b.Write([]byte{byte(id)})
+				}
+			}(i)
+		}
+		wg.Wait()
+	})
+}
+
+// Benchmarks for safe buffer operations
+
+// BenchmarkSafeBufferWrite benchmarks write operations.
+func BenchmarkSafeBufferWrite(b *testing.B) {
+	sizes := []int{16, 64, 256, 1024, 4096}
+	data := make([]byte, 4096)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	for _, size := range sizes {
+		b.Run(fmt.Sprintf("Size%d", size), func(b *testing.B) {
+			buf := NewSafeBuffer(4096)
+			writeData := data[:size]
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				buf.Reset()
+				buf.Write(writeData)
+			}
+		})
+	}
+}
+
+// BenchmarkSafeBufferWriteString benchmarks string write operations.
+func BenchmarkSafeBufferWriteString(b *testing.B) {
+	strings := []string{
+		"short",
+		"medium length string",
+		"this is a longer string that spans multiple cache lines for testing performance",
+		string(make([]byte, 256)),
+		string(make([]byte, 1024)),
+	}
+
+	for i, s := range strings {
+		b.Run(fmt.Sprintf("Len%d", len(s)), func(b *testing.B) {
+			buf := NewSafeBuffer(4096)
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for j := 0; j < b.N; j++ {
+				buf.Reset()
+				buf.WriteString(s)
+			}
+		})
+		_ = i
+	}
+}
+
+// BenchmarkSafeBufferWriteByte benchmarks single byte write operations.
+func BenchmarkSafeBufferWriteByte(b *testing.B) {
+	buf := NewSafeBuffer(4096)
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		if buf.Len() >= 4000 {
+			buf.Reset()
+		}
+		buf.WriteByte(byte(i))
+	}
+}
+
+// BenchmarkSafeBufferRead benchmarks read operations.
+func BenchmarkSafeBufferRead(b *testing.B) {
+	sizes := []int{16, 64, 256, 1024, 4096}
+
+	for _, size := range sizes {
+		b.Run(fmt.Sprintf("Size%d", size), func(b *testing.B) {
+			buf := NewSafeBuffer(size)
+			data := make([]byte, size)
+			for i := range data {
+				data[i] = byte(i)
+			}
+			buf.Write(data)
+
+			readBuf := make([]byte, size)
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				copy(readBuf, buf.Bytes())
+				buf.Reset()
+				buf.Write(data)
+			}
+		})
+	}
+}
+
+// BenchmarkSafeBufferClone benchmarks buffer cloning.
+func BenchmarkSafeBufferClone(b *testing.B) {
+	sizes := []int{64, 256, 1024, 4096}
+
+	for _, size := range sizes {
+		b.Run(fmt.Sprintf("Size%d", size), func(b *testing.B) {
+			buf := NewSafeBuffer(size)
+			data := make([]byte, size)
+			for i := range data {
+				data[i] = byte(i)
+			}
+			buf.Write(data)
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_ = buf.Clone()
+			}
+		})
+	}
+}
+
+// BenchmarkSafeBufferGrow benchmarks buffer growth operations.
+func BenchmarkSafeBufferGrow(b *testing.B) {
+	growSizes := []int{64, 256, 1024, 4096}
+
+	for _, growSize := range growSizes {
+		b.Run(fmt.Sprintf("Grow%d", growSize), func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				buf := NewSafeBuffer(64)
+				buf.Grow(growSize)
+			}
+		})
+	}
+}
+
+// BenchmarkSafeBufferConcurrentWrite benchmarks concurrent write operations.
+func BenchmarkSafeBufferConcurrentWrite(b *testing.B) {
+	data := []byte("test data")
+
+	b.Run("Parallel", func(b *testing.B) {
+		buf := NewSafeBuffer(4096)
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				buf.Write(data)
+				if buf.Len() > 3000 {
+					buf.Reset()
+				}
+			}
+		})
+	})
+}
+
+// BenchmarkSafeBufferConcurrentReadWrite benchmarks mixed operations.
+func BenchmarkSafeBufferConcurrentReadWrite(b *testing.B) {
+	buf := NewSafeBuffer(4096)
+	writeData := []byte("test data")
+	buf.Write(make([]byte, 1024)) // Pre-fill buffer
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		readBuf := make([]byte, 64)
+		for pb.Next() {
+			if i := 0; i%2 == 0 {
+				buf.Write(writeData)
+			} else {
+				copy(readBuf, buf.Bytes())
+			}
+		}
+	})
+}
+
+// BenchmarkSpinLock benchmarks spinlock performance.
+func BenchmarkSpinLock(b *testing.B) {
+	var lock spinLock
+
+	b.Run("LockUnlock", func(b *testing.B) {
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			lock.Lock()
+			lock.Unlock()
+		}
+	})
+
+	b.Run("TryLock", func(b *testing.B) {
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		for i := 0; i < b.N; i++ {
+			if lock.TryLock() {
+				lock.Unlock()
+			}
+		}
+	})
+
+	b.Run("Contended", func(b *testing.B) {
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				lock.Lock()
+				lock.Unlock()
+			}
+		})
+	})
 }

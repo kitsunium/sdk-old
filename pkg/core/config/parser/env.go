@@ -60,7 +60,7 @@ func (e *ENV) countMatchingVars(envVars []string) int {
 
 func (e *ENV) parseEnvVar(env string) (string, string, bool) {
 	idx := strings.IndexByte(env, '=')
-	if idx == -1 {
+	if idx == -1 || idx == 0 {
 		return "", "", false
 	}
 

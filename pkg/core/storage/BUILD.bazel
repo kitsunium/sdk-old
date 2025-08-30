@@ -1,8 +1,36 @@
-load("@rules_go//go:def.bzl", "go_library")
+load("@rules_go//go:def.bzl", "go_test")
+load("//build:go_rules.bzl", "kitsunium_go_library", "kitsunium_go_test")
 
-go_library(
+# =============================================================================
+# Kitsunium SDK - storage package
+# 2 modes: TEST (with race detection) and BENCHMARK (production performance)
+# =============================================================================
+
+kitsunium_go_library(
     name = "storage",
-    srcs = ["storage.go"],
     importpath = "github.com/kitsunium/sdk/pkg/core/storage",
+)
+
+# =============================================================================
+# MODE 1: TEST - Unit tests with race detection and safety checks
+# =============================================================================
+
+kitsunium_go_test(
+    name = "test",
+    embed = [":storage"],
+)
+
+# No benchmark files exist for this package
+
+alias(
+    name = "go_default_library",
+    actual = ":storage",
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "storage_test",
+    size = "small",
+    srcs = ["storage_test.go"],
+    embed = [":storage"],
 )

@@ -1,14 +1,40 @@
-load("@rules_go//go:def.bzl", "go_library", "go_test")
+load("@rules_go//go:def.bzl", "go_test")
+load("//build:go_rules.bzl", "kitsunium_go_library", "kitsunium_go_test")
 
-go_library(
+# =============================================================================
+# Kitsunium SDK - normalize package
+# 2 modes: TEST (with race detection) and BENCHMARK (production performance)
+# =============================================================================
+
+kitsunium_go_library(
     name = "normalize",
-    srcs = ["normalize.go"],
     importpath = "github.com/kitsunium/sdk/pkg/core/config/normalize",
-    visibility = ["//visibility:public"],
 )
+
+# =============================================================================
+# MODE 1: TEST - Unit tests with race detection and safety checks
+# =============================================================================
+
+kitsunium_go_test(
+    name = "test",
+    size = "small",
+    embed = [":normalize"],
+)
+
+# No benchmark files exist for this package
 
 go_test(
     name = "normalize_test",
-    srcs = ["normalize_test.go"],
+    size = "small",
+    srcs = [
+        "normalize_coverage_test.go",
+        "normalize_test.go",
+    ],
     embed = [":normalize"],
+)
+
+alias(
+    name = "go_default_library",
+    actual = ":normalize",
+    visibility = ["//visibility:public"],
 )

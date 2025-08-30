@@ -152,6 +152,45 @@ func TestSafeShardedBufferWriteString(t *testing.T) {
 	if buf.Len() != len(str) {
 		t.Errorf("Len() = %d, want %d", buf.Len(), len(str))
 	}
+
+	// Test work stealing for WriteString
+	t.Run("WorkStealingForWriteString", func(t *testing.T) {
+		// Create buffer with small shards
+		buf := newSafeShardedBuffer(256, 4).(*safeShardedBuffer)
+
+		// Fill first shard
+		shardCap := buf.shards[0].buffer.Cap()
+		fillData := make([]byte, shardCap)
+		buf.WriteToShard(0, fillData)
+
+		// Now WriteString should use work stealing
+		testStr := "work-stealing-string"
+		n, err := buf.WriteString(testStr)
+		if err != nil {
+			t.Fatalf("WriteString with work stealing error = %v", err)
+		}
+		if n != len(testStr) {
+			t.Errorf("WriteString = %d, want %d", n, len(testStr))
+		}
+	})
+
+	// Test all shards full for WriteString
+	t.Run("AllShardsFullWriteString", func(t *testing.T) {
+		buf := newSafeShardedBuffer(256, 2).(*safeShardedBuffer)
+
+		// Fill all shards
+		for i := 0; i < buf.ShardCount(); i++ {
+			shardCap := buf.shards[i].buffer.Cap()
+			fillData := make([]byte, shardCap)
+			buf.WriteToShard(i, fillData)
+		}
+
+		// Now WriteString should fail
+		_, err := buf.WriteString("should fail")
+		if err != errBufferFull {
+			t.Errorf("WriteString on full buffer = %v, want %v", err, errBufferFull)
+		}
+	})
 }
 
 // TestSafeShardedBufferWriteByte tests single byte write operations.
@@ -309,8 +348,8 @@ func TestSafeShardedBufferString(t *testing.T) {
 	}
 }
 
-// TestSafeShardedBufferBytesUnsafe tests unsafe byte access.
-func TestSafeShardedBufferBytesUnsafe(t *testing.T) {
+// TestSafeShardedBufferBytesUnsafeBasic tests unsafe byte access.
+func TestSafeShardedBufferBytesUnsafeBasic(t *testing.T) {
 	buf := newSafeShardedBuffer(100, 4).(*safeShardedBuffer)
 
 	// Empty buffer
@@ -904,4 +943,140 @@ func TestSafeShardedBufferEdgeCases(t *testing.T) {
 	if emptyBuf.Len() != 0 {
 		t.Error("Balance() on empty buffer changed length")
 	}
+}
+
+// TestSafeShardedBufferBytesUnsafe tests BytesUnsafe function.
+func TestSafeShardedBufferBytesUnsafe(t *testing.T) {
+	t.Run("EmptyBuffer", func(t *testing.T) {
+		buf := newSafeShardedBuffer(256, 4).(*safeShardedBuffer)
+		ptr, len := buf.BytesUnsafe()
+		if ptr != 0 || len != 0 {
+			t.Errorf("BytesUnsafe() on empty buffer = (%v, %d), want (0, 0)", ptr, len)
+		}
+	})
+
+	t.Run("WithData", func(t *testing.T) {
+		buf := newSafeShardedBuffer(256, 4).(*safeShardedBuffer)
+		// Write to first shard
+		data := []byte("test data")
+		buf.WriteToShard(0, data)
+
+		ptr, length := buf.BytesUnsafe()
+		if ptr == 0 {
+			t.Error("BytesUnsafe() returned nil pointer for non-empty buffer")
+		}
+		if length != len(data) {
+			t.Errorf("BytesUnsafe() length = %d, want %d", length, len(data))
+		}
+	})
+
+	t.Run("NoShards", func(t *testing.T) {
+		// Edge case: buffer with no shards (shouldn't happen normally)
+		buf := &safeShardedBuffer{
+			shardCount: 0,
+			shards:     []*safeBufferShard{},
+		}
+		ptr, length := buf.BytesUnsafe()
+		if ptr != 0 || length != 0 {
+			t.Errorf("BytesUnsafe() with no shards = (%v, %d), want (0, 0)", ptr, length)
+		}
+	})
+}
+
+// TestSafeShardedBufferWriteAtComprehensive tests WriteAt edge cases.
+func TestSafeShardedBufferWriteAtComprehensive(t *testing.T) {
+	t.Run("CrossShardBoundary", func(t *testing.T) {
+		buf := newSafeShardedBuffer(256, 4).(*safeShardedBuffer)
+		shardCapacity := int64(buf.cap) / int64(buf.shardCount)
+
+		// Write data that spans across two shards
+		data := make([]byte, 20)
+		for i := range data {
+			data[i] = byte('A' + i)
+		}
+
+		// Write at boundary minus 10 (will span to next shard)
+		offset := shardCapacity - 10
+		n, err := buf.WriteAt(data, offset)
+		if err != nil {
+			t.Fatalf("WriteAt crossing boundary error = %v", err)
+		}
+		if n != len(data) {
+			t.Errorf("WriteAt crossing boundary = %d, want %d", n, len(data))
+		}
+	})
+
+	t.Run("PartialWriteDueToCapacity", func(t *testing.T) {
+		buf := newSafeShardedBuffer(256, 4).(*safeShardedBuffer)
+
+		// Try to write more data than available from offset
+		offset := int64(buf.cap - 5)
+		data := make([]byte, 20) // Only 5 bytes should fit
+		n, err := buf.WriteAt(data, offset)
+		if err != nil {
+			t.Errorf("WriteAt partial write error = %v", err)
+		}
+		if n != 5 {
+			t.Errorf("WriteAt partial write = %d, want 5", n)
+		}
+	})
+
+	t.Run("WriteErrorFromShard", func(t *testing.T) {
+		// Test error propagation from shard WriteAt
+		buf := newSafeShardedBuffer(256, 4).(*safeShardedBuffer)
+
+		// Write at negative offset within shard (should cause error)
+		// This is caught at the buffer level, not shard level
+		_, err := buf.WriteAt([]byte("test"), -1)
+		if err != errInvalidOffset {
+			t.Errorf("WriteAt(-1) error = %v, want %v", err, errInvalidOffset)
+		}
+	})
+
+	t.Run("StopOnPartialWrite", func(t *testing.T) {
+		buf := newSafeShardedBuffer(256, 4).(*safeShardedBuffer)
+		shardCapacity := int64(buf.cap) / int64(buf.shardCount)
+
+		// Fill first shard partially
+		buf.WriteToShard(0, make([]byte, int(shardCapacity-5)))
+
+		// Try to write data that would span shards, but first shard has limited space
+		data := make([]byte, 20)
+		n, err := buf.WriteAt(data, shardCapacity-10)
+		// This should write what fits and stop
+		if err != nil && err != errBufferFull {
+			t.Errorf("WriteAt with limited space error = %v", err)
+		}
+		// WriteAt may write all data if there's space in subsequent shards
+		if n > len(data) {
+			t.Errorf("WriteAt wrote more than data size: %d bytes > %d", n, len(data))
+		}
+	})
+}
+
+// TestSafeShardedBufferWriteToShardAt tests writeToShardAt internal method.
+func TestSafeShardedBufferWriteToShardAt(t *testing.T) {
+	buf := newSafeShardedBuffer(256, 4).(*safeShardedBuffer)
+
+	t.Run("ValidShardIndex", func(t *testing.T) {
+		data := []byte("test")
+		n, err := buf.writeToShardAt(0, data, 0)
+		if err != nil {
+			t.Errorf("writeToShardAt(0) error = %v", err)
+		}
+		if n != len(data) {
+			t.Errorf("writeToShardAt(0) = %d, want %d", n, len(data))
+		}
+	})
+
+	t.Run("InvalidShardIndex", func(t *testing.T) {
+		data := []byte("test")
+		n, err := buf.writeToShardAt(10, data, 0) // Index beyond shardCount
+		if err != nil {
+			t.Errorf("writeToShardAt(invalid) error = %v, expected nil", err)
+		}
+		if n != 0 {
+			t.Errorf("writeToShardAt(invalid) = %d, want 0", n)
+		}
+	})
 }

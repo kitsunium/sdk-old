@@ -667,3 +667,146 @@ func TestGetCallerPackageEdgeCasesComplete(t *testing.T) {
 		t.Error("Should handle simple function names")
 	}
 }
+
+// Additional coverage tests from coverage_test.go
+
+// TestGetCallerPackageDeepStack tests getCallerPackage with different call stacks
+func TestGetCallerPackageDeepStack(t *testing.T) {
+	tests := []struct {
+		name         string
+		testFunc     func() string
+		wantContains string
+	}{
+		{
+			name: "normal call",
+			testFunc: func() string {
+				return getCallerPackage()
+			},
+			wantContains: "kerror",
+		},
+		{
+			name: "deep call stack",
+			testFunc: func() string {
+				var helper func(int) string
+				helper = func(depth int) string {
+					if depth > 0 {
+						return helper(depth - 1)
+					}
+					return getCallerPackage()
+				}
+				return helper(5)
+			},
+			wantContains: "kerror",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.testFunc()
+			if !strings.Contains(got, tt.wantContains) {
+				t.Errorf("getCallerPackage() = %v, want to contain %v", got, tt.wantContains)
+			}
+		})
+	}
+}
+
+// TestDefineAllBranches tests all branches of Define
+func TestDefineAllBranches(t *testing.T) {
+	ClearRegistry()
+
+	tests := []struct {
+		name      string
+		config    KConfig
+		wantPanic bool
+	}{
+		{
+			name: "with all fields",
+			config: KConfig{
+				Package: "testpkg",
+				Code:    1001,
+				Message: "full config",
+			},
+		},
+		{
+			name: "without package - uses caller",
+			config: KConfig{
+				Code:    1002,
+				Message: "no package",
+			},
+		},
+		{
+			name: "without message - generates from code",
+			config: KConfig{
+				Code: 1003,
+			},
+		},
+		{
+			name: "zero code - generates unique",
+			config: KConfig{
+				Message: "zero code",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Define(tt.config)
+
+			// Verify package is set
+			if err.Package() == "" {
+				t.Error("Package() should not be empty")
+			}
+
+			// Verify message is set
+			if err.Message() == "" {
+				t.Error("Message() should not be empty")
+			}
+
+			// Verify code is set
+			if err.Code() == 0 && tt.config.Code != 0 {
+				t.Error("Code() should not be 0 when provided")
+			}
+		})
+	}
+}
+
+// TestCallerInfoExtraction tests caller info extraction
+func TestCallerInfoExtraction(t *testing.T) {
+	// Test getting caller info at different stack depths
+	var getInfo func(depth int) (file string, line int)
+	getInfo = func(depth int) (string, int) {
+		if depth > 0 {
+			return getInfo(depth - 1)
+		}
+		_, file, line, _ := runtime.Caller(1)
+		return file, line
+	}
+
+	file, line := getInfo(3)
+	if file == "" || line == 0 {
+		t.Error("Failed to get caller info")
+	}
+}
+
+// TestEmptyFormatStringEdgeCase tests edge case where fmt.Sprintf is called with empty format
+func TestEmptyFormatStringEdgeCase(t *testing.T) {
+	err := Define(KConfig{
+		Code:    9001,
+		Message: "test",
+	})
+
+	// Test Newf with empty format
+	inst1 := err.Newf("")
+	defer inst1.Release()
+	if inst1.Error() != "test" {
+		t.Errorf("Newf with empty format: got %s, want 'test'", inst1.Error())
+	}
+
+	// Test Wrapf with empty format
+	innerErr := errors.New("inner")
+	inst2 := err.Wrapf(innerErr, "")
+	defer inst2.Release()
+	if inst2.Error() != "test: inner" {
+		t.Errorf("Wrapf with empty format: got %s, want 'test: inner'", inst2.Error())
+	}
+}

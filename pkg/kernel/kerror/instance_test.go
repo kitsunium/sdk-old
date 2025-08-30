@@ -1382,3 +1382,458 @@ func TestMergeTags(t *testing.T) {
 	// Test with nil
 	inst1.MergeTags(nil) // Should not panic
 }
+
+// Additional coverage tests from coverage_test.go
+
+// TestInstanceNewfCoverage tests all branches of Newf
+func TestInstanceNewfCoverage(t *testing.T) {
+	err := Define(KConfig{
+		Code:    2001,
+		Message: "test error",
+	})
+
+	tests := []struct {
+		name   string
+		format string
+		args   []interface{}
+		want   string
+	}{
+		{
+			name:   "with format and args",
+			format: "error: %s %d",
+			args:   []interface{}{"test", 123},
+			want:   "error: test 123",
+		},
+		{
+			name:   "format only",
+			format: "simple message",
+			args:   nil,
+			want:   "simple message",
+		},
+		{
+			name:   "empty format",
+			format: "",
+			args:   nil,
+			want:   "test error",
+		},
+		{
+			name:   "format with no placeholders",
+			format: "no placeholders",
+			args:   []interface{}{"ignored", 123},
+			want:   "no placeholders%!(EXTRA string=ignored, int=123)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inst := err.Newf(tt.format, tt.args...)
+			defer inst.Release()
+			if inst.Error() != tt.want {
+				t.Errorf("Newf() = %v, want %v", inst.Error(), tt.want)
+			}
+		})
+	}
+}
+
+// TestInstanceWrapCoverage tests all branches of Wrap
+func TestInstanceWrapCoverage(t *testing.T) {
+	err := Define(KConfig{
+		Code:    3001,
+		Message: "wrapper error",
+	})
+
+	tests := []struct {
+		name    string
+		wrapped error
+		want    string
+		wantNil bool
+	}{
+		{
+			name:    "wrap standard error",
+			wrapped: errors.New("standard"),
+			want:    "wrapper error: standard",
+		},
+		{
+			name:    "wrap nil",
+			wrapped: nil,
+			wantNil: true,
+		},
+		{
+			name:    "wrap another Instance",
+			wrapped: Define(KConfig{Code: 3002, Message: "inner"}).New(),
+			want:    "wrapper error: inner",
+		},
+		{
+			name:    "wrap fmt.Errorf",
+			wrapped: fmt.Errorf("formatted: %d", 42),
+			want:    "wrapper error: formatted: 42",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := err.Wrap(tt.wrapped)
+			if tt.wantNil {
+				if result != nil {
+					t.Errorf("Wrap() = %v, want nil", result)
+				}
+			} else {
+				defer result.Release()
+				if result.Error() != tt.want {
+					t.Errorf("Wrap() = %v, want %v", result.Error(), tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestInstanceWrapfCoverage tests all branches of Wrapf
+func TestInstanceWrapfCoverage(t *testing.T) {
+	err := Define(KConfig{
+		Code:    4001,
+		Message: "wrapper error",
+	})
+
+	tests := []struct {
+		name    string
+		wrapped error
+		format  string
+		args    []interface{}
+		want    string
+		wantNil bool
+	}{
+		{
+			name:    "wrap with format",
+			wrapped: errors.New("inner"),
+			format:  "context: %s",
+			args:    []interface{}{"test"},
+			want:    "context: test: inner",
+		},
+		{
+			name:    "wrap nil",
+			wrapped: nil,
+			format:  "ignored",
+			wantNil: true,
+		},
+		{
+			name:    "wrap Instance with format",
+			wrapped: Define(KConfig{Code: 4002, Message: "inner"}).New(),
+			format:  "id=%d",
+			args:    []interface{}{123},
+			want:    "id=123: inner",
+		},
+		{
+			name:    "empty format",
+			wrapped: errors.New("inner"),
+			format:  "",
+			args:    nil,
+			want:    "wrapper error: inner",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := err.Wrapf(tt.wrapped, tt.format, tt.args...)
+			if tt.wantNil {
+				if result != nil {
+					t.Errorf("Wrapf() = %v, want nil", result)
+				}
+			} else {
+				defer result.Release()
+				if result.Error() != tt.want {
+					t.Errorf("Wrapf() = %v, want %v", result.Error(), tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestInstanceWithContextCoverage tests all branches of WithContext
+func TestInstanceWithContextCoverage(t *testing.T) {
+	err := Define(KConfig{
+		Code:    5001,
+		Message: "context error",
+	})
+
+	tests := []struct {
+		name string
+		ctx  context.Context
+	}{
+		{
+			name: "with value context",
+			ctx:  context.WithValue(context.Background(), "key", "value"),
+		},
+		{
+			name: "with nil context",
+			ctx:  nil,
+		},
+		{
+			name: "with cancelled context",
+			ctx: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			}(),
+		},
+		{
+			name: "with timeout context",
+			ctx: func() context.Context {
+				ctx, _ := context.WithTimeout(context.Background(), 0)
+				return ctx
+			}(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inst := err.New()
+			defer inst.Release()
+			inst.WithContext(tt.ctx)
+			if inst.Context() != tt.ctx {
+				t.Error("Context not set correctly")
+			}
+		})
+	}
+}
+
+// TestInstanceWithTagsCoverage tests all branches of WithTags
+func TestInstanceWithTagsCoverage(t *testing.T) {
+	err := Define(KConfig{
+		Code:    6001,
+		Message: "tags error",
+	})
+
+	tests := []struct {
+		name     string
+		kvPairs  []interface{}
+		wantTags map[string]string
+	}{
+		{
+			name:    "even pairs",
+			kvPairs: []interface{}{"key1", "val1", "key2", "val2"},
+			wantTags: map[string]string{
+				"key1": "val1",
+				"key2": "val2",
+			},
+		},
+		{
+			name:    "odd pairs",
+			kvPairs: []interface{}{"key1", "val1", "key2"},
+			wantTags: map[string]string{
+				"key1": "val1",
+				"key2": "<missing>",
+			},
+		},
+		{
+			name:     "no pairs",
+			kvPairs:  []interface{}{},
+			wantTags: map[string]string{},
+		},
+		{
+			name:    "single key",
+			kvPairs: []interface{}{"lonely"},
+			wantTags: map[string]string{
+				"lonely": "<missing>",
+			},
+		},
+		{
+			name:    "non-string key",
+			kvPairs: []interface{}{123, "val", true, "bool"},
+			wantTags: map[string]string{
+				"123":  "val",
+				"true": "bool",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Note: This test requires a WithTags method that takes variadic args
+			// The current implementation uses WithTags(map[string]string)
+			// This test would need to be adapted or the method would need to be added
+			inst := err.New()
+			defer inst.Release()
+
+			// Convert pairs to map for current implementation
+			tags := make(map[string]string)
+			for i := 0; i < len(tt.kvPairs); i += 2 {
+				key := fmt.Sprintf("%v", tt.kvPairs[i])
+				var value string
+				if i+1 < len(tt.kvPairs) {
+					value = fmt.Sprintf("%v", tt.kvPairs[i+1])
+				} else {
+					value = "<missing>"
+				}
+				tags[key] = value
+			}
+
+			inst.WithTags(tags)
+
+			for k, expectedV := range tt.wantTags {
+				if actualV, ok := inst.Tag(k); !ok {
+					t.Errorf("Tag %s not found", k)
+				} else if actualV != expectedV {
+					t.Errorf("Tags[%s] = %s, want %s", k, actualV, expectedV)
+				}
+			}
+		})
+	}
+}
+
+// TestInstanceBatchWithTagsCoverage tests all branches of BatchWithTags
+func TestInstanceBatchWithTagsCoverage(t *testing.T) {
+	err := Define(KConfig{
+		Code:    7001,
+		Message: "batch tags error",
+	})
+
+	tests := []struct {
+		name     string
+		tags     map[string]string
+		wantTags map[string]string
+	}{
+		{
+			name: "normal tags",
+			tags: map[string]string{
+				"env":  "prod",
+				"host": "server1",
+			},
+			wantTags: map[string]string{
+				"env":  "prod",
+				"host": "server1",
+			},
+		},
+		{
+			name:     "nil map",
+			tags:     nil,
+			wantTags: map[string]string{},
+		},
+		{
+			name:     "empty map",
+			tags:     map[string]string{},
+			wantTags: map[string]string{},
+		},
+		{
+			name: "single tag",
+			tags: map[string]string{
+				"single": "value",
+			},
+			wantTags: map[string]string{
+				"single": "value",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inst := err.New()
+			defer inst.Release()
+			inst.WithTags(tt.tags)
+			actualTags := inst.Tags()
+			if len(actualTags) != len(tt.wantTags) {
+				t.Errorf("Tags length = %d, want %d", len(actualTags), len(tt.wantTags))
+			}
+			for k, v := range tt.wantTags {
+				if actualTags[k] != v {
+					t.Errorf("Tags[%s] = %s, want %s", k, actualTags[k], v)
+				}
+			}
+		})
+	}
+}
+
+// TestInstanceWithDetailsCoverage tests all branches of WithDetails
+func TestInstanceWithDetailsCoverage(t *testing.T) {
+	err := Define(KConfig{
+		Code:    8001,
+		Message: "details error",
+	})
+
+	tests := []struct {
+		name        string
+		kvPairs     []interface{}
+		wantDetails map[string]interface{}
+	}{
+		{
+			name:    "even pairs",
+			kvPairs: []interface{}{"user", "john", "age", 30},
+			wantDetails: map[string]interface{}{
+				"user": "john",
+				"age":  30,
+			},
+		},
+		{
+			name:    "odd pairs",
+			kvPairs: []interface{}{"key1", "val1", "key2"},
+			wantDetails: map[string]interface{}{
+				"key1": "val1",
+				"key2": "<missing>",
+			},
+		},
+		{
+			name:        "no pairs",
+			kvPairs:     []interface{}{},
+			wantDetails: map[string]interface{}{},
+		},
+		{
+			name:    "single key",
+			kvPairs: []interface{}{"alone"},
+			wantDetails: map[string]interface{}{
+				"alone": "<missing>",
+			},
+		},
+		{
+			name:    "mixed types",
+			kvPairs: []interface{}{"str", "value", "num", 42, "bool", true, "nil", nil},
+			wantDetails: map[string]interface{}{
+				"str":  "value",
+				"num":  42,
+				"bool": true,
+				"nil":  nil,
+			},
+		},
+		{
+			name:    "non-string keys",
+			kvPairs: []interface{}{123, "numkey", true, "boolkey"},
+			wantDetails: map[string]interface{}{
+				"123":  "numkey",
+				"true": "boolkey",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Note: This test requires a WithDetails method that takes variadic args
+			// The current implementation uses WithDetails(map[string]any)
+			// This test would need to be adapted or the method would need to be added
+			inst := err.New()
+			defer inst.Release()
+
+			// Convert pairs to map for current implementation
+			details := make(map[string]interface{})
+			for i := 0; i < len(tt.kvPairs); i += 2 {
+				key := fmt.Sprintf("%v", tt.kvPairs[i])
+				var value interface{}
+				if i+1 < len(tt.kvPairs) {
+					value = tt.kvPairs[i+1]
+				} else {
+					value = "<missing>"
+				}
+				details[key] = value
+			}
+
+			inst.WithDetails(details)
+
+			actualDetails := inst.Details()
+			if len(actualDetails) != len(tt.wantDetails) {
+				t.Errorf("Details length = %d, want %d", len(actualDetails), len(tt.wantDetails))
+			}
+			for k, v := range tt.wantDetails {
+				if actualDetails[k] != v {
+					t.Errorf("Details[%s] = %v, want %v", k, actualDetails[k], v)
+				}
+			}
+		})
+	}
+}

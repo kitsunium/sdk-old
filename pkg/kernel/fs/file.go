@@ -225,8 +225,8 @@ func (f *file) openFiles(dst string) (srcFD, dstFD int, err error) {
 // readFileAsync reads file data asynchronously and sends chunks to the channel.
 func (f *file) readFileAsync(fd int, readChan chan<- chunk) {
 	defer close(readChan)
-	buffer := make([]byte, *f.buffersize)
 	for {
+		buffer := make([]byte, *f.buffersize)
 		bytesRead, readErr := unix.Read(fd, buffer)
 		readChan <- chunk{
 			data: buffer[:bytesRead],

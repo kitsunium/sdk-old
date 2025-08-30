@@ -56,8 +56,10 @@ func getCallerPackage() string {
 	initCaches()
 
 	// Check cache first
-	if cached, found := callerPackageCache.Get(pc); found {
-		return cached
+	if v, found := callerPackageCache.Get(pc); found {
+		if pkg, ok := v.(string); ok {
+			return pkg
+		}
 	}
 
 	fn := runtime.FuncForPC(pc)
@@ -111,16 +113,16 @@ func Define(config KConfig) KError {
 	}
 
 	// Get or create package cache
-	var pkgCache kcache.Cache[int, *KError]
-	if existing, ok := registryByPkgCode.Get(pkg); ok {
-		pkgCache = existing
+	var pkgCache kcache.Cache
+	if v, ok := registryByPkgCode.Get(pkg); ok {
+		pkgCache = v.(kcache.Cache)
 		// Check package-specific limit
-		if pkgCache.Size() >= MaxErrorsPerPackage {
+		if pkgCache.Len() >= MaxErrorsPerPackage {
 			panic(fmt.Sprintf("kerror: maximum error definitions for package %s exceeded (%d)", pkg, MaxErrorsPerPackage))
 		}
 	} else {
-		// Create new cache with reasonable initial size
-		pkgCache = kcache.NewAtomicCache[int, *KError](min(100, MaxErrorsPerPackage))
+		// Create new sharded cache for thread-safety
+		pkgCache = kcache.NewSafeShardedCache(min(100, MaxErrorsPerPackage), 4)
 		registryByPkgCode.Set(pkg, pkgCache)
 	}
 
@@ -131,9 +133,11 @@ func Define(config KConfig) KError {
 	}
 
 	// Check for duplicates BEFORE allocating a new ID
-	if existing, ok := pkgCache.Get(config.Code); ok {
-		panic(fmt.Sprintf("kerror: duplicate error code %d in package %s (already defined with ID %d)",
-			config.Code, pkg, existing.id))
+	if v, ok := pkgCache.Get(config.Code); ok {
+		if existing, ok := v.(*KError); ok {
+			panic(fmt.Sprintf("kerror: duplicate error code %d in package %s (already defined with ID %d)",
+				config.Code, pkg, existing.id))
+		}
 	}
 
 	// Generate ID after duplicate check (avoids gaps)
@@ -150,6 +154,20 @@ func Define(config KConfig) KError {
 
 	// Store in optimized registry
 	registryByID.Set(id, err)
+
+	// Update lists for iteration support
+	registryMu.Lock()
+	allErrors = append(allErrors, err)
+
+	// Add package to list if new
+	if _, exists := packageCodes[pkg]; !exists {
+		packageList = append(packageList, pkg)
+		packageCodes[pkg] = make([]int, 0, 10)
+	}
+
+	// Add code to package codes
+	packageCodes[pkg] = append(packageCodes[pkg], config.Code)
+	registryMu.Unlock()
 
 	// Record metrics if enabled
 	if GetConfig().EnableMetrics {

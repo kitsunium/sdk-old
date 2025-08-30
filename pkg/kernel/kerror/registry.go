@@ -11,11 +11,17 @@ import (
 // Global registry variables
 var (
 	// Optimized registries using high-performance kcache
-	registryByID      kcache.Cache[uint32, *KError]
-	registryByPkgCode kcache.Cache[string, kcache.Cache[int, *KError]]
+	registryByID      kcache.Cache
+	registryByPkgCode kcache.Cache // Maps package to another cache of error codes
 
 	// Cache for caller package names
-	callerPackageCache kcache.Cache[uintptr, string]
+	callerPackageCache kcache.Cache
+
+	// Lists for iteration support (since kcache doesn't support iteration)
+	allErrors    []*KError        // All registered errors
+	packageList  []string         // All packages with errors
+	packageCodes map[string][]int // Map of package to error codes
+	registryMu   sync.RWMutex     // Protects the lists above
 
 	// Initialize caches once
 	cacheInit sync.Once
@@ -29,25 +35,40 @@ func init() {
 // initCaches initializes all caches with optimal settings
 func initCaches() {
 	cacheInit.Do(func() {
-		// Use AtomicCache for read-heavy workloads with pre-allocation
-		registryByID = kcache.NewAtomicCache[uint32, *KError](10000)
-		// Use more shards for better concurrency (128 instead of 64)
-		registryByPkgCode = kcache.NewShardedLRU[string, kcache.Cache[int, *KError]](1000, 128)
-		callerPackageCache = kcache.NewAtomicCache[uintptr, string](1000)
+		// Use sharded cache for better concurrency
+		registryByID = kcache.NewSafeShardedCache(10000, 32)
+		registryByPkgCode = kcache.NewSafeShardedCache(1000, 16)
+		callerPackageCache = kcache.NewSafeShardedCache(1000, 16)
+
+		// Initialize lists for iteration support
+		allErrors = make([]*KError, 0, 100)
+		packageList = make([]string, 0, 10)
+		packageCodes = make(map[string][]int)
 	})
 }
 
 // GetError retrieves a registered error by ID.
 func GetError(id uint32) (*KError, bool) {
 	initCaches()
-	return registryByID.Get(id)
+	if v, ok := registryByID.Get(id); ok {
+		if err, ok := v.(*KError); ok {
+			return err, true
+		}
+	}
+	return nil, false
 }
 
 // GetErrorByPackageCode retrieves a registered error by package and code.
 func GetErrorByPackageCode(pkg string, code int) (*KError, bool) {
 	initCaches()
-	if pkgCache, ok := registryByPkgCode.Get(pkg); ok {
-		return pkgCache.Get(code)
+	if v, ok := registryByPkgCode.Get(pkg); ok {
+		if pkgCache, ok := v.(kcache.Cache); ok {
+			if v2, ok := pkgCache.Get(code); ok {
+				if err, ok := v2.(*KError); ok {
+					return err, true
+				}
+			}
+		}
 	}
 	return nil, false
 }
@@ -55,58 +76,58 @@ func GetErrorByPackageCode(pkg string, code int) (*KError, bool) {
 // ListErrors returns all registered errors.
 func ListErrors() []KError {
 	initCaches()
-	var errors []KError
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 
-	if atomicCache, ok := registryByID.(*kcache.AtomicCache[uint32, *KError]); ok {
-		atomicCache.Range(func(id uint32, err *KError) bool {
-			if err != nil {
-				errors = append(errors, *err)
-			}
-			return true
-		})
+	// Return a copy of all errors
+	result := make([]KError, len(allErrors))
+	for i, err := range allErrors {
+		if err != nil {
+			result[i] = *err
+		}
 	}
-
-	return errors
+	return result
 }
 
 // ListPackageCodes returns all error codes defined for a specific package.
 func ListPackageCodes(pkg string) []int {
 	initCaches()
-	var codes []int
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 
-	if pkgCache, ok := registryByPkgCode.Get(pkg); ok {
-		if atomicCache, ok := pkgCache.(*kcache.AtomicCache[int, *KError]); ok {
-			atomicCache.Range(func(code int, err *KError) bool {
-				codes = append(codes, code)
-				return true
-			})
-		}
+	codes, exists := packageCodes[pkg]
+	if !exists {
+		return nil
 	}
 
-	return codes
+	// Return a copy of the codes
+	result := make([]int, len(codes))
+	copy(result, codes)
+	return result
 }
 
 // ListPackages returns all packages that have defined errors.
 func ListPackages() []string {
 	initCaches()
-	var packages []string
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 
-	if shardedCache, ok := registryByPkgCode.(*kcache.ShardedLRU[string, kcache.Cache[int, *KError]]); ok {
-		shardedCache.Range(func(pkg string, _ kcache.Cache[int, *KError]) bool {
-			packages = append(packages, pkg)
-			return true
-		})
-	}
-
-	return packages
+	// Return a copy of the package list
+	result := make([]string, len(packageList))
+	copy(result, packageList)
+	return result
 }
 
 // ValidatePackageCode checks if a code is already used in a package.
 func ValidatePackageCode(pkg string, code int) error {
 	initCaches()
-	if pkgCache, ok := registryByPkgCode.Get(pkg); ok {
-		if existing, ok := pkgCache.Get(code); ok {
-			return fmt.Errorf("code %d already used in package %s (ID: %d)", code, pkg, existing.id)
+	if v, ok := registryByPkgCode.Get(pkg); ok {
+		if pkgCache, ok := v.(kcache.Cache); ok {
+			if v2, ok := pkgCache.Get(code); ok {
+				if existing, ok := v2.(*KError); ok {
+					return fmt.Errorf("code %d already used in package %s (ID: %d)", code, pkg, existing.id)
+				}
+			}
 		}
 	}
 	return nil
@@ -115,10 +136,20 @@ func ValidatePackageCode(pkg string, code int) error {
 // ClearRegistry clears the error registry (useful for testing).
 func ClearRegistry() {
 	initCaches()
-	// Clear registries
+
+	// Clear caches
 	registryByID.Clear()
 	registryByPkgCode.Clear()
 	callerPackageCache.Clear()
+
+	// Clear lists
+	registryMu.Lock()
+	allErrors = allErrors[:0]
+	packageList = packageList[:0]
+	for k := range packageCodes {
+		delete(packageCodes, k)
+	}
+	registryMu.Unlock()
 
 	atomic.StoreUint32(&errorCounter, 0)
 }

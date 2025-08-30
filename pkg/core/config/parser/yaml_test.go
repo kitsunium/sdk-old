@@ -563,6 +563,291 @@ server:
 	}
 }
 
+// Tests for missing coverage in YAML parser - error paths and edge cases
+
+func TestYAML_Load_ReadError(t *testing.T) {
+	// Test general read error handling (not file not found)
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "unreadable.yaml")
+
+	// Write file first
+	if err := os.WriteFile(yamlPath, []byte(`key: value`), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Make it unreadable by changing permissions
+	if err := os.Chmod(yamlPath, 0000); err != nil {
+		t.Fatalf("Failed to change file permissions: %v", err)
+	}
+
+	// Restore permissions after test
+	defer os.Chmod(yamlPath, 0644)
+
+	yaml := NewYAML(yamlPath)
+	_, err := yaml.Load()
+	if err == nil {
+		t.Error("Load() should error on unreadable file")
+	}
+	if !errors.Is(err, ErrReadFailed) {
+		t.Errorf("Expected ErrReadFailed for read error, got: %v", err)
+	}
+}
+
+func TestYAML_LoadReader_ReaderError(t *testing.T) {
+	// Test LoadReader with reader that fails
+	yaml := NewYAML("")
+	reader := &yamlErrorReader{err: io.ErrUnexpectedEOF}
+
+	_, err := yaml.LoadReader(reader)
+	if err == nil {
+		t.Error("LoadReader() should return error from reader")
+	}
+	if !errors.Is(err, ErrReadFailed) {
+		t.Errorf("Expected ErrReadFailed for reader error, got: %v", err)
+	}
+}
+
+func TestYAML_LoadBytes_MalformedYAML(t *testing.T) {
+	// Test various malformed YAML scenarios
+	testCases := []struct {
+		name    string
+		content []byte
+	}{
+		{
+			name:    "invalid indentation",
+			content: []byte("key:\n value\n  nested: bad"),
+		},
+		{
+			name:    "unclosed bracket",
+			content: []byte("array: [item1, item2"),
+		},
+		{
+			name:    "unclosed brace",
+			content: []byte("object: {key1: value1, key2: value2"),
+		},
+		{
+			name:    "invalid anchor reference",
+			content: []byte("key: *undefined_anchor"),
+		},
+		{
+			name:    "mixed tabs and spaces indentation",
+			content: []byte("key:\n\tvalue1\n  value2"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			yaml := NewYAML("")
+			_, err := yaml.LoadBytes(tc.content)
+			if err == nil {
+				t.Error("LoadBytes() should error on malformed YAML")
+			}
+			if !errors.Is(err, ErrYAMLParse) {
+				t.Errorf("Expected ErrYAMLParse for malformed YAML, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestYAML_LoadBytes_Empty(t *testing.T) {
+	// Test with empty YAML content
+	yaml := NewYAML("")
+	result, err := yaml.LoadBytes([]byte{})
+	if err != nil {
+		t.Fatalf("LoadBytes() should handle empty content, got error: %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for empty YAML, got %d items", len(result))
+	}
+}
+
+func TestYAML_LoadBytes_OnlyComments(t *testing.T) {
+	// Test with only comments and whitespace
+	content := []byte(`
+# This is just a comment
+
+# Another comment
+---
+# Document separator with comment
+`)
+
+	yaml := NewYAML("")
+	result, err := yaml.LoadBytes(content)
+	if err != nil {
+		t.Fatalf("LoadBytes() should handle comments and whitespace, got error: %v", err)
+	}
+
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for comments-only YAML, got %d items", len(result))
+	}
+}
+
+func TestYAML_LoadBytes_ComplexEdgeCases(t *testing.T) {
+	// Test complex YAML edge cases
+	content := []byte(`
+# Global key
+global: value
+
+# Multi-line strings
+literal: |
+  This is a literal
+  multi-line string
+  
+folded: >
+  This is a folded
+  multi-line string
+
+# Flow sequences and mappings  
+flow_sequence: [item1, item2, item3]
+flow_mapping: {key1: value1, key2: value2}
+
+# Nested structures
+deeply:
+  nested:
+    structure:
+      with:
+        many:
+          levels: deep value
+
+# Arrays with mixed content
+mixed_array:
+  - string item
+  - 123
+  - true
+  - null
+  - {nested: object}
+  - [nested, array]
+
+# Anchors and aliases
+defaults: &default_settings
+  timeout: 30
+  retries: 3
+  
+development:
+  database: dev_db
+  <<: *default_settings
+  
+production:  
+  database: prod_db
+  <<: *default_settings
+  timeout: 60  # Override default
+
+# Various YAML types
+string_types:
+  plain: plain string
+  single_quoted: 'single quoted'
+  double_quoted: "double quoted"
+  
+numeric_types:
+  integer: 42
+  float: 3.14159
+  exponential: 1.23e10
+  octal: 0755
+  hex: 0xFF
+  
+boolean_types:
+  true_values: [true, True, TRUE, yes, Yes, YES, on, On, ON]
+  false_values: [false, False, FALSE, no, No, NO, off, Off, OFF]
+
+null_values: [null, Null, NULL, ~]
+
+# Timestamps
+timestamp1: 2023-12-25
+timestamp2: 2023-12-25T10:30:00Z
+timestamp3: 2023-12-25 10:30:00
+`)
+
+	yaml := NewYAML("")
+	result, err := yaml.LoadBytes(content)
+	if err != nil {
+		t.Fatalf("LoadBytes() error = %v", err)
+	}
+
+	// Verify some key values
+	expectedChecks := map[string]string{
+		"global":            "value",
+		"flow.sequence.0":   "item1",
+		"flow.mapping.key1": "value1",
+		"deeply.nested.structure.with.many.levels": "deep value",
+		"mixed.array.0":                "string item",
+		"mixed.array.1":                "123",
+		"mixed.array.2":                "true",
+		"mixed.array.3":                "",
+		"mixed.array.4.nested":         "object",
+		"development.database":         "dev_db",
+		"development.timeout":          "30",
+		"development.retries":          "3",
+		"production.database":          "prod_db",
+		"production.timeout":           "60", // Overridden
+		"production.retries":           "3",  // From anchor
+		"string.types.plain":           "plain string",
+		"string.types.single.quoted":   "single quoted",
+		"string.types.double.quoted":   "double quoted",
+		"numeric.types.integer":        "42",
+		"numeric.types.float":          "3.14159",
+		"boolean.types.true.values.0":  "true",
+		"boolean.types.false.values.0": "false",
+		"null.values.0":                "",
+	}
+
+	for key, expected := range expectedChecks {
+		if actual, exists := result[key]; !exists {
+			t.Errorf("Key %q not found in result", key)
+		} else if actual != expected {
+			t.Errorf("Key %q = %q, want %q", key, actual, expected)
+		}
+	}
+}
+
+func TestYAML_LoadBytes_InvalidSyntaxVariations(t *testing.T) {
+	// Test various invalid YAML syntax patterns
+	invalidYAMLs := []struct {
+		name    string
+		content []byte
+		reason  string
+	}{
+		{
+			name:    "inconsistent indentation",
+			content: []byte("key1:\n  subkey1: value1\n   subkey2: value2"),
+			reason:  "inconsistent indentation levels",
+		},
+		{
+			name:    "tab mixed with spaces",
+			content: []byte("key1:\n  subkey1: value1\n\tsubkey2: value2"),
+			reason:  "mixing tabs and spaces for indentation",
+		},
+		{
+			name:    "malformed flow mapping",
+			content: []byte("key: {key1: value1 key2: value2}"),
+			reason:  "missing comma in flow mapping",
+		},
+		{
+			name:    "invalid scalar",
+			content: []byte("key: |\n  line1\n line2"),
+			reason:  "inconsistent indentation in literal scalar",
+		},
+		{
+			name:    "invalid document separator",
+			content: []byte("key1: value1\n----\nkey2: value2"),
+			reason:  "invalid document separator",
+		},
+	}
+
+	for _, tc := range invalidYAMLs {
+		t.Run(tc.name, func(t *testing.T) {
+			yaml := NewYAML("")
+			_, err := yaml.LoadBytes(tc.content)
+			if err == nil {
+				t.Errorf("LoadBytes() should error for %s", tc.reason)
+			}
+			if !errors.Is(err, ErrYAMLParse) {
+				t.Errorf("Expected ErrYAMLParse for %s, got: %v", tc.reason, err)
+			}
+		})
+	}
+}
+
 func BenchmarkYAML_LoadReader_WithoutPool(b *testing.B) {
 	content := `
 database:
@@ -581,4 +866,197 @@ server:
 		reader := strings.NewReader(content)
 		_, _ = yaml.LoadReader(reader)
 	}
+}
+
+// Concurrent Tests
+
+func TestYAML_LoadReader_Concurrent(t *testing.T) {
+	content := `
+database:
+  host: localhost
+  port: 5432
+  name: testdb
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  debug: true
+`
+
+	const numGoroutines = 100
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			yaml := NewYAML("")
+			reader := strings.NewReader(content)
+			result, err := yaml.LoadReader(reader)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["database.host"] != "localhost" {
+				t.Errorf("Concurrent test %d: database.host = %q, want %q", i, result["database.host"], "localhost")
+			}
+			if result["server.debug"] != "true" {
+				t.Errorf("Concurrent test %d: server.debug = %q, want %q", i, result["server.debug"], "true")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent test error: %v", err)
+		}
+	}
+}
+
+func TestYAML_LoadBytes_Concurrent(t *testing.T) {
+	content := []byte(`
+array:
+  - item1
+  - item2
+  - item3
+nested:
+  value: test
+  number: 42
+  enabled: true
+`)
+
+	const numGoroutines = 50
+	results := make(chan map[string]string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			yaml := NewYAML("")
+			result, err := yaml.LoadBytes(content)
+			if err != nil {
+				errors <- err
+				return
+			}
+			results <- result
+		}(i)
+	}
+
+	// Collect results
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			if result["array.0"] != "item1" {
+				t.Errorf("Concurrent bytes test %d: array.0 = %q, want %q", i, result["array.0"], "item1")
+			}
+			if result["nested.value"] != "test" {
+				t.Errorf("Concurrent bytes test %d: nested.value = %q, want %q", i, result["nested.value"], "test")
+			}
+		case err := <-errors:
+			t.Errorf("Concurrent bytes test error: %v", err)
+		}
+	}
+}
+
+// Panic Recovery Tests
+
+func TestYAML_LoadReader_PanicRecovery(t *testing.T) {
+	malformedContents := []string{
+		"",                                     // empty
+		"key: [unclosed",                       // unclosed array
+		"key:\n  - item\n - bad_indent",        // inconsistent indentation
+		string([]byte{0, 1, 2, 3, 255}),        // binary data
+		strings.Repeat("key: value\n", 100),    // moderately large
+		strings.Repeat("k", 100) + ": value",   // long key
+		"key: " + strings.Repeat("value", 100), // long value
+		"key: value\x00with\x00nulls",          // null bytes
+		"测试: 值",                                // unicode
+		"<<: *undefined",                       // undefined anchor
+	}
+
+	for i, content := range malformedContents {
+		t.Run(fmt.Sprintf("malformed_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("LoadReader panicked with input %d: %v", i, r)
+				}
+			}()
+
+			yaml := NewYAML("")
+			reader := strings.NewReader(content)
+			_, _ = yaml.LoadReader(reader)
+		})
+	}
+}
+
+func TestYAML_LoadBytes_PanicRecovery(t *testing.T) {
+	panicInputs := [][]byte{
+		nil,                 // nil slice
+		{},                  // empty slice
+		{0},                 // single null byte
+		make([]byte, 10000), // large empty content
+		bytes.Repeat([]byte("key: value\n"), 100), // moderately large
+		[]byte("key: [unclosed"),                  // unclosed array
+		[]byte("key:\n  - item\n - bad"),          // bad indentation
+		[]byte(strings.Repeat(":", 100)),          // many colons
+	}
+
+	for i, content := range panicInputs {
+		t.Run(fmt.Sprintf("panic_input_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("LoadBytes panicked with input %d: %v", i, r)
+				}
+			}()
+
+			yaml := NewYAML("")
+			_, _ = yaml.LoadBytes(content)
+		})
+	}
+}
+
+// Multi-threaded Benchmarks
+
+func BenchmarkYAML_LoadReader_Concurrent(b *testing.B) {
+	content := `
+database:
+  host: localhost
+  port: 5432
+server:
+  host: 0.0.0.0
+  port: 8080
+`
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			yaml := NewYAML("")
+			reader := strings.NewReader(content)
+			_, _ = yaml.LoadReader(reader)
+		}
+	})
+}
+
+func BenchmarkYAML_LoadBytes_Concurrent(b *testing.B) {
+	content := []byte(`
+key1: value1
+key2: 42
+nested:
+  key3: true
+  key4: test
+`)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			yaml := NewYAML("")
+			_, _ = yaml.LoadBytes(content)
+		}
+	})
 }

@@ -1,6 +1,7 @@
 package kerror
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
@@ -261,6 +262,215 @@ func TestDefaultConfigValues(t *testing.T) {
 	if defaultConfig.EnableMetrics {
 		t.Errorf("defaultConfig.EnableMetrics = true, want false")
 	}
+}
+
+// Additional tests for better coverage
+
+func TestConfigurePanicRecovery(t *testing.T) {
+	// Test that Configure doesn't panic with extreme values
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Configure panicked: %v", r)
+		}
+	}()
+
+	// Test with very large values
+	Configure(GlobalConfig{
+		MaxInstancePool: 1000000,
+		MaxTags:         10000,
+		MaxDetails:      10000,
+		MaxTagKeyLen:    100000,
+		MaxTagValueLen:  1000000,
+		StackTraceDepth: 1000,
+	})
+
+	// Test with zero/negative values (should be replaced with defaults)
+	Configure(GlobalConfig{
+		MaxInstancePool: -100,
+		MaxTags:         -50,
+		MaxDetails:      -25,
+		MaxTagKeyLen:    -10,
+		MaxTagValueLen:  -1000,
+		StackTraceDepth: -32,
+	})
+
+	// Verify configuration is still valid
+	cfg := GetConfig()
+	if cfg.MaxInstancePool <= 0 {
+		t.Error("MaxInstancePool should be positive after negative input")
+	}
+}
+
+func TestConfigureConcurrentAccess(t *testing.T) {
+	// Test massive concurrent access to Configure and GetConfig
+	var wg sync.WaitGroup
+	const numGoroutines = 100
+	const operationsPerGoroutine = 100
+
+	// Start concurrent configurers
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(2)
+
+		// Configuration updaters
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < operationsPerGoroutine; j++ {
+				Configure(GlobalConfig{
+					EnableStackTrace: id%2 == 0,
+					EnableMetrics:    id%3 == 0,
+					MaxInstancePool:  100 + id,
+					DefaultPackage:   fmt.Sprintf("concurrent%d", id),
+					MaxTags:          50 + id,
+					MaxDetails:       100 + id,
+				})
+			}
+		}(i)
+
+		// Configuration readers
+		go func() {
+			defer wg.Done()
+			for j := 0; j < operationsPerGoroutine; j++ {
+				cfg := GetConfig()
+				// Basic validity checks
+				if cfg.MaxInstancePool <= 0 {
+					t.Errorf("Invalid MaxInstancePool: %d", cfg.MaxInstancePool)
+				}
+				if cfg.DefaultPackage == "" {
+					t.Error("DefaultPackage should not be empty")
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Verify final configuration is valid
+	finalConfig := GetConfig()
+	if finalConfig.MaxInstancePool <= 0 {
+		t.Error("Final configuration invalid")
+	}
+}
+
+func TestConfigureRapidUpdates(t *testing.T) {
+	// Test rapid successive updates don't cause issues
+	for i := 0; i < 1000; i++ {
+		Configure(GlobalConfig{
+			MaxInstancePool: 1000 + i,
+			DefaultPackage:  fmt.Sprintf("rapid%d", i),
+			MaxTags:         50 + (i % 100),
+		})
+
+		// Immediately read back
+		cfg := GetConfig()
+		if cfg.MaxInstancePool != 1000+i {
+			t.Errorf("Configuration not updated correctly at iteration %d", i)
+		}
+	}
+}
+
+func TestConfigureMemoryStress(t *testing.T) {
+	// Test configuration with many rapid updates to stress memory
+	originalConfig := GetConfig()
+	defer Configure(originalConfig) // Restore original
+
+	for i := 0; i < 10000; i++ {
+		Configure(GlobalConfig{
+			DefaultPackage:  fmt.Sprintf("stress_test_package_with_very_long_name_%d", i),
+			MaxInstancePool: 1000 + (i % 1000),
+			MaxTags:         10 + (i % 90),
+			MaxDetails:      20 + (i % 180),
+		})
+
+		if i%1000 == 0 {
+			// Periodic verification
+			cfg := GetConfig()
+			if cfg.DefaultPackage == "" {
+				t.Errorf("Configuration corrupted at iteration %d", i)
+			}
+		}
+	}
+}
+
+// Benchmarks
+
+func BenchmarkConfigureBasic(b *testing.B) {
+	cfg := GlobalConfig{
+		EnableStackTrace: true,
+		EnableMetrics:    true,
+		MaxInstancePool:  1000,
+		DefaultPackage:   "benchmark",
+		MaxTags:          50,
+		MaxDetails:       100,
+		MaxTagKeyLen:     100,
+		MaxTagValueLen:   1000,
+		StackTraceDepth:  32,
+		EnableValidation: true,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Configure(cfg)
+	}
+}
+
+func BenchmarkGetConfig(b *testing.B) {
+	Configure(GlobalConfig{
+		EnableStackTrace: true,
+		MaxInstancePool:  1000,
+		DefaultPackage:   "benchmark",
+	})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = GetConfig()
+	}
+}
+
+func BenchmarkConfigureConcurrent(b *testing.B) {
+	cfg := GlobalConfig{
+		MaxInstancePool: 1000,
+		DefaultPackage:  "concurrent",
+		MaxTags:         50,
+		MaxDetails:      100,
+	}
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			Configure(cfg)
+		}
+	})
+}
+
+func BenchmarkGetConfigConcurrent(b *testing.B) {
+	Configure(GlobalConfig{
+		MaxInstancePool: 1000,
+		DefaultPackage:  "benchmark",
+	})
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = GetConfig()
+		}
+	})
+}
+
+func BenchmarkConfigureMixed(b *testing.B) {
+	configs := []GlobalConfig{
+		{EnableStackTrace: true, MaxInstancePool: 1000, DefaultPackage: "config1"},
+		{EnableMetrics: true, MaxInstancePool: 2000, DefaultPackage: "config2"},
+		{EnableValidation: false, MaxInstancePool: 500, DefaultPackage: "config3"},
+	}
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			Configure(configs[i%len(configs)])
+			i++
+		}
+	})
 }
 
 func TestInit(t *testing.T) {

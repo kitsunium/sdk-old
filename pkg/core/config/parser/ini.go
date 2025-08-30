@@ -109,10 +109,14 @@ func (i *INI) LoadBytes(data []byte) (map[string]string, error) {
 	lineStart := 0
 
 	for idx := 0; idx < len(data); idx++ {
-		if data[idx] == '\n' || idx == len(data)-1 {
+		if data[idx] == '\n' || data[idx] == '\r' || idx == len(data)-1 {
 			lineEnd := i.findLineEnd(idx, data)
 			if lineEnd > lineStart {
 				i.processLine(data[lineStart:lineEnd], &currentSection, config)
+			}
+			// Handle CRLF by skipping the next character if it's the complementary line ending
+			if idx < len(data)-1 && ((data[idx] == '\r' && data[idx+1] == '\n') || (data[idx] == '\n' && idx > 0 && data[idx-1] == '\r')) {
+				idx++
 			}
 			lineStart = idx + 1
 		}
@@ -136,7 +140,8 @@ func (i *INI) processLine(line []byte, currentSection *string, config map[string
 	}
 
 	if line[0] == '[' && line[len(line)-1] == ']' {
-		*currentSection = normalize.Key(iniBytesToString(line[1 : len(line)-1]))
+		sectionName := i.trimBytes(line[1 : len(line)-1])
+		*currentSection = normalize.Key(iniBytesToString(sectionName))
 	} else {
 		i.parseKeyValue(line, *currentSection, config)
 	}
