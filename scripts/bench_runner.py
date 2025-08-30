@@ -528,9 +528,9 @@ class BenchmarkComparator:
             return
         
         print(f"\n{Colors.BOLD}Benchmark Comparison{Colors.NC}")
-        print(f"{Colors.CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.NC}")
-        print(f"Base:    {info1['commit_hash']} - {info1['message'][:50]}")
-        print(f"Compare: {info2['commit_hash']} - {info2['message'][:50]}")
+        print(f"{Colors.CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.NC}")
+        print(f"Before: {info1['commit_hash'][:8]} - {info1['message'][:50]}")
+        print(f"After:  {info2['commit_hash'][:8]} - {info2['message'][:50]}")
         print()
         
         # Get all benchmarks
@@ -565,11 +565,12 @@ class BenchmarkComparator:
         for pkg in sorted(packages.keys()):
             pkg_name = pkg.split('/')[-1] if pkg else "root"
             print(f"\n{Colors.BOLD}📦 {pkg_name}{Colors.NC}")
-            print("─" * 85)
             
-            # Print header with better formatting
-            print(f"{'Benchmark':<35} {'Single-Core':<20} {'Multi-Core':<20} {'Scaling':<10}")
-            print("─" * 85)
+            # Table header with proper alignment
+            print("┌" + "─" * 40 + "┬" + "─" * 20 + "┬" + "─" * 20 + "┬" + "─" * 15 + "┬" + "─" * 20 + "┬" + "─" * 20 + "┬" + "─" * 15 + "┐")
+            print(f"│ {'Benchmark':<38} │ {'SINGLE-THREAD':^56} │ {'MULTI-THREAD':^56} │")
+            print(f"│ {'':<38} │ {'Before':<18} │ {'After':<18} │ {'Change':<13} │ {'Before':<18} │ {'After':<18} │ {'Change':<13} │")
+            print("├" + "─" * 40 + "┼" + "─" * 20 + "┼" + "─" * 20 + "┼" + "─" * 15 + "┼" + "─" * 20 + "┼" + "─" * 20 + "┼" + "─" * 15 + "┤")
             
             for bench_name in sorted(packages[pkg].keys()):
                 modes = packages[pkg][bench_name]
@@ -584,45 +585,60 @@ class BenchmarkComparator:
                 multi_r2 = bench_map2.get(multi_key) if multi_key else None
                 
                 # Format single-core results
-                single_str = ""
+                single_before = f"{single_r1['ns_per_op']:.1f} ns" if single_r1 else "-"
+                single_after = f"{single_r2['ns_per_op']:.1f} ns" if single_r2 else "-"
+                single_change = "-"
+                single_change_raw = "-"  # For alignment calculation
                 if single_r1 and single_r2:
-                    change = self._format_change(single_r1['ns_per_op'], single_r2['ns_per_op'])
-                    single_str = f"{single_r2['ns_per_op']:.1f}ns {change}"
-                elif single_r2:
-                    single_str = f"{single_r2['ns_per_op']:.1f}ns NEW"
-                elif single_r1:
-                    single_str = "REMOVED"
-                else:
-                    single_str = "-"
+                    change_pct = ((single_r2['ns_per_op'] - single_r1['ns_per_op']) / single_r1['ns_per_op']) * 100
+                    if abs(change_pct) < 1:
+                        single_change_raw = f"→ {abs(change_pct):.1f}%"
+                        single_change = f"{Colors.NC}{single_change_raw}{Colors.NC}"
+                    elif change_pct < 0:
+                        single_change_raw = f"↓ {abs(change_pct):.1f}%"
+                        single_change = f"{Colors.GREEN}{single_change_raw}{Colors.NC}"
+                    else:
+                        single_change_raw = f"↑ {abs(change_pct):.1f}%"
+                        single_change = f"{Colors.RED}{single_change_raw}{Colors.NC}"
+                elif single_r2 and not single_r1:
+                    single_change_raw = "NEW"
+                    single_change = f"{Colors.CYAN}{single_change_raw}{Colors.NC}"
+                elif single_r1 and not single_r2:
+                    single_change_raw = "REMOVED"
+                    single_change = f"{Colors.YELLOW}{single_change_raw}{Colors.NC}"
                 
                 # Format multi-core results
-                multi_str = ""
+                multi_before = f"{multi_r1['ns_per_op']:.1f} ns" if multi_r1 else "-"
+                multi_after = f"{multi_r2['ns_per_op']:.1f} ns" if multi_r2 else "-"
+                multi_change = "-"
+                multi_change_raw = "-"  # For alignment calculation
                 if multi_r1 and multi_r2:
-                    change = self._format_change(multi_r1['ns_per_op'], multi_r2['ns_per_op'])
-                    multi_str = f"{multi_r2['ns_per_op']:.1f}ns {change}"
-                elif multi_r2:
-                    multi_str = f"{multi_r2['ns_per_op']:.1f}ns NEW"
-                elif multi_r1:
-                    multi_str = "REMOVED"
-                else:
-                    multi_str = "-"
-                
-                # Calculate scaling efficiency if both modes exist
-                scaling_str = ""
-                if single_r2 and multi_r2 and multi_r2['cores'] > 1:
-                    speedup = single_r2['ns_per_op'] / multi_r2['ns_per_op']
-                    efficiency = (speedup / multi_r2['cores']) * 100
-                    if efficiency > 80:
-                        scaling_str = f"{Colors.GREEN}{efficiency:.0f}%{Colors.NC}"
-                    elif efficiency > 50:
-                        scaling_str = f"{Colors.YELLOW}{efficiency:.0f}%{Colors.NC}"
+                    change_pct = ((multi_r2['ns_per_op'] - multi_r1['ns_per_op']) / multi_r1['ns_per_op']) * 100
+                    if abs(change_pct) < 1:
+                        multi_change_raw = f"→ {abs(change_pct):.1f}%"
+                        multi_change = f"{Colors.NC}{multi_change_raw}{Colors.NC}"
+                    elif change_pct < 0:
+                        multi_change_raw = f"↓ {abs(change_pct):.1f}%"
+                        multi_change = f"{Colors.GREEN}{multi_change_raw}{Colors.NC}"
                     else:
-                        scaling_str = f"{Colors.RED}{efficiency:.0f}%{Colors.NC}"
+                        multi_change_raw = f"↑ {abs(change_pct):.1f}%"
+                        multi_change = f"{Colors.RED}{multi_change_raw}{Colors.NC}"
+                elif multi_r2 and not multi_r1:
+                    multi_change_raw = "NEW"
+                    multi_change = f"{Colors.CYAN}{multi_change_raw}{Colors.NC}"
+                elif multi_r1 and not multi_r2:
+                    multi_change_raw = "REMOVED"
+                    multi_change = f"{Colors.YELLOW}{multi_change_raw}{Colors.NC}"
                 
                 # Only print if there's something to show
-                if single_str != "-" or multi_str != "-":
-                    bench_display = bench_name[:34]
-                    print(f"{bench_display:<35} {single_str:<20} {multi_str:<20} {scaling_str:<10}")
+                if any([single_r1, single_r2, multi_r1, multi_r2]):
+                    bench_display = bench_name[:38] if len(bench_name) > 38 else bench_name
+                    # Use padding that accounts for ANSI color codes
+                    single_padding = max(0, 13 - len(single_change_raw))
+                    multi_padding = max(0, 13 - len(multi_change_raw))
+                    print(f"│ {bench_display:<38} │ {single_before:<18} │ {single_after:<18} │ {single_change}{' ' * single_padding} │ {multi_before:<18} │ {multi_after:<18} │ {multi_change}{' ' * multi_padding} │")
+            
+            print("└" + "─" * 40 + "┴" + "─" * 20 + "┴" + "─" * 20 + "┴" + "─" * 15 + "┴" + "─" * 20 + "┴" + "─" * 20 + "┴" + "─" * 15 + "┘")
     
     def compare_parallel_scaling(self, commit: str):
         """Compare single vs multi-core performance for a commit."""
