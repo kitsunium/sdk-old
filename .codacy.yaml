@@ -1,9 +1,34 @@
----
+version: "2"
+
+# Runtime pour Go
+runtimes:
+  - go@1.22.0
+
+# Outils d'analyse statique pour Go et Shell
+tools:
+  # Security scanning pour Go et patterns généraux
+  - name: semgrep
+    enabled: true
+    version: 1.45.0
+
+# Chemins à exclure de l'analyse
 exclude_paths:
   - "**/*_test.go"
   - "**/testdata/**"
   - "bazel-*/**"
   - ".git/**"
   - "vendor/**"
-  - "**/*.md"
-  - "scripts/bench_manager.py"
+  - "**/*.pb.go"
+  - "**/*.gen.go"
+  - "**/mock_*.go"
+  - ".build/**"
+  - "scripts/__pycache__/**"
+  - "benchmarks.sqlite"
+  - "*.test"
+  - "**/BUILD.bazel"
+  - "**/*.bzl"
+
+# Options spécifiques par outil
+engines:
+  semgrep:
+    config: .codacy/tools-configs/semgrep.yaml

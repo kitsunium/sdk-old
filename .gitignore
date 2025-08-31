@@ -54,6 +54,9 @@ coverage.html
 # Test binaries
 *.test
 
+# Codacy reports
+.codacy/out/
+
 # Profiling
 *.prof
 *.testpr-review-issues/

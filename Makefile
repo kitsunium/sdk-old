@@ -62,6 +62,8 @@ help:
 	@printf "  $(BLUE)%-20s$(NC) %s\n" "quality/security" "run security analysis"
 	@printf "  $(BLUE)%-20s$(NC) %s\n" "quality/fix" "automatically fix all fixable issues"
 	@printf "  $(BLUE)%-20s$(NC) %s\n" "quality/validate" "validate all quality gates pass"
+	@printf "  $(BLUE)%-20s$(NC) %s\n" "codacy" "run Codacy analysis locally"
+	@printf "  $(BLUE)%-20s$(NC) %s\n" "codacy/install" "install Codacy CLI tools"
 	@echo ''
 	@echo 'Git Hooks:'
 	@printf "  $(GREEN)%-20s$(NC) %s\n" "hooks/install" "install Git hooks for automatic checks"
@@ -267,6 +269,52 @@ quality/fix: quality/format
 .PHONY: quality/validate
 quality/validate: quality/lint test
 	@echo "$(GREEN)✓ All quality gates passed$(NC)"
+
+# ==================================================================================== #
+# CODACY
+# ==================================================================================== #
+
+## codacy: run Codacy analysis locally
+.PHONY: codacy
+codacy:
+	@echo "$(YELLOW)▶ Running Codacy analysis...$(NC)"
+	@if [ -x scripts/codacy-analyze.sh ]; then \
+		./scripts/codacy-analyze.sh; \
+	else \
+		echo "$(RED)❌ scripts/codacy-analyze.sh not found or not executable$(NC)"; \
+		exit 1; \
+	fi
+
+## codacy/install: install Codacy CLI and tools
+.PHONY: codacy/install
+codacy/install:
+	@echo "$(YELLOW)▶ Installing Codacy CLI...$(NC)"
+	@if command -v brew >/dev/null 2>&1; then \
+		brew tap codacy/tap && brew install codacy-cli; \
+		echo "$(GREEN)✓ Codacy CLI installed via Homebrew$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ Homebrew not found, downloading binary...$(NC)"; \
+		curl -L https://github.com/codacy/codacy-cli/releases/latest/download/codacy-cli-$(shell uname -s) -o /usr/local/bin/codacy-cli; \
+		chmod +x /usr/local/bin/codacy-cli; \
+		echo "$(GREEN)✓ Codacy CLI installed to /usr/local/bin$(NC)"; \
+	fi
+	@echo "$(YELLOW)▶ Installing golangci-lint...$(NC)"
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1; \
+		echo "$(GREEN)✓ golangci-lint installed$(NC)"; \
+	else \
+		echo "$(GREEN)✓ golangci-lint already installed$(NC)"; \
+	fi
+	@echo "$(YELLOW)▶ Installing shellcheck...$(NC)"
+	@if ! command -v shellcheck >/dev/null 2>&1; then \
+		if command -v brew >/dev/null 2>&1; then \
+			brew install shellcheck; \
+		else \
+			echo "$(YELLOW)Please install shellcheck manually: https://github.com/koalaman/shellcheck$(NC)"; \
+		fi \
+	else \
+		echo "$(GREEN)✓ shellcheck already installed$(NC)"; \
+	fi
 
 # ==================================================================================== #
 # GIT HOOKS

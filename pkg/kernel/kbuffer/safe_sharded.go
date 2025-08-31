@@ -135,11 +135,11 @@ func (b *safeShardedBuffer) selectShard() *safeBufferShard {
 // ✅ SAFE: Thread-safe through per-shard locking.
 //
 // Distribution algorithm:
-//   1. Select shard using atomic round-robin counter
-//   2. Attempt write to selected shard
-//   3. If shard full, try other shards (work-stealing)
-//   4. Return success on first successful write
-//   5. Return errBufferFull only if all shards are full
+//  1. Select shard using atomic round-robin counter
+//  2. Attempt write to selected shard
+//  3. If shard full, try other shards (work-stealing)
+//  4. Return success on first successful write
+//  5. Return errBufferFull only if all shards are full
 //
 // This approach minimizes contention by distributing writers across
 // shards while maintaining write availability through work-stealing.
@@ -514,10 +514,10 @@ func (b *safeShardedBuffer) ShardCount() int {
 // ✅ SAFE: Thread-safe, but blocks all shards during rebalancing.
 //
 // Rebalancing process:
-//   1. Collects all data from all shards (snapshot)
-//   2. Resets all shards to empty state
-//   3. Redistributes data evenly across shards
-//   4. Optimizes future access patterns
+//  1. Collects all data from all shards (snapshot)
+//  2. Resets all shards to empty state
+//  3. Redistributes data evenly across shards
+//  4. Optimizes future access patterns
 //
 // When to use Balance():
 //   - After period of skewed writes (e.g., goroutine affinity)

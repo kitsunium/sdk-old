@@ -479,10 +479,10 @@ func (b *unsafeShardedBuffer) ShardCount() int {
 // ⚠️ NOT THREAD-SAFE! Will panic if used concurrently.
 //
 // Rebalancing process:
-//   1. Collects all data from all shards
-//   2. Resets all shards to empty
-//   3. Redistributes data evenly across shards
-//   4. Optimizes for sequential access patterns
+//  1. Collects all data from all shards
+//  2. Resets all shards to empty
+//  3. Redistributes data evenly across shards
+//  4. Optimizes for sequential access patterns
 //
 // Use Balance() when:
 //   - Write patterns have created uneven distribution

@@ -1,6 +1,7 @@
 # kbuffer - High-Performance Kernel Buffer Package
 
-Ultra-optimized byte buffer implementations with explicit thread-safety selection for kernel-level operations.
+Ultra-optimized byte buffer implementations with explicit thread-safety
+selection for kernel-level operations.
 
 ## Table of Contents
 
@@ -17,14 +18,15 @@ Ultra-optimized byte buffer implementations with explicit thread-safety selectio
 
 ## Overview
 
-The kbuffer package provides four distinct buffer implementations, each optimized for specific concurrency and performance requirements:
+The kbuffer package provides four distinct buffer implementations, each
+optimized for specific concurrency and performance requirements:
 
-| Buffer Type | Thread-Safe | Performance | Use Case |
-|------------|-------------|-------------|----------|
-| **UnsafeBuffer** | ❌ No | 2-3 ns/op | Single-threaded, maximum performance |
-| **SafeBuffer** | ✅ Yes | 15-25 ns/op | Low-moderate concurrency |
-| **UnsafeShardedBuffer** | ❌ No | ~3 ns/op | Single-threaded with sharding needs |
-| **SafeShardedBuffer** | ✅ Yes | 70-85 ns/op | High concurrency (10+ writers) |
+| Buffer Type             | Thread-Safe | Performance | Use Case                             |
+| ----------------------- | ----------- | ----------- | ------------------------------------ |
+| **UnsafeBuffer**        | ❌ No       | 2-3 ns/op   | Single-threaded, maximum performance |
+| **SafeBuffer**          | ✅ Yes      | 15-25 ns/op | Low-moderate concurrency             |
+| **UnsafeShardedBuffer** | ❌ No       | ~3 ns/op    | Single-threaded with sharding needs  |
+| **SafeShardedBuffer**   | ✅ Yes      | 70-85 ns/op | High concurrency (10+ writers)       |
 
 ### Key Features
 
@@ -39,8 +41,10 @@ The kbuffer package provides four distinct buffer implementations, each optimize
 
 ### Design Principles
 
-1. **Explicit Safety**: Every buffer creation requires choosing between `Unsafe` (no synchronization) or `Safe` (thread-safe) variants
-2. **Performance First**: Extensive use of `unsafe` package for zero-copy operations
+1. **Explicit Safety**: Every buffer creation requires choosing between `Unsafe`
+   (no synchronization) or `Safe` (thread-safe) variants
+2. **Performance First**: Extensive use of `unsafe` package for zero-copy
+   operations
 3. **Cache Optimization**: Careful memory layout to prevent false sharing
 4. **Scalability**: Sharded variants for high-contention scenarios
 
@@ -72,8 +76,8 @@ buf.WriteString("blazing fast")
 data := buf.Bytes() // Zero-copy access
 ```
 
-**Performance**: 2-3 ns/op for writes
-**Use Cases**:
+**Performance**: 2-3 ns/op for writes **Use Cases**:
+
 - Request-scoped buffers
 - Protocol parsing
 - Serialization/deserialization
@@ -90,8 +94,8 @@ go buf.Write([]byte("goroutine 1"))
 go buf.Write([]byte("goroutine 2"))
 ```
 
-**Performance**: 15-25 ns/op for writes
-**Use Cases**:
+**Performance**: 15-25 ns/op for writes **Use Cases**:
+
 - Shared logging buffers
 - Concurrent data collection
 - Low to moderate contention (≤10 writers)
@@ -108,8 +112,8 @@ buf.WriteToShard(1, []byte("shard 1 data"))
 buf.Balance() // Redistribute data evenly
 ```
 
-**Performance**: ~3 ns/op for writes
-**Use Cases**:
+**Performance**: ~3 ns/op for writes **Use Cases**:
+
 - Cache-optimized algorithms
 - Data partitioning for future parallelization
 - MapReduce-style single-threaded processing
@@ -134,8 +138,8 @@ for i := 0; i < 100; i++ {
 wg.Wait()
 ```
 
-**Performance**: 70-85 ns/op even with 100 goroutines
-**Use Cases**:
+**Performance**: 70-85 ns/op even with 100 goroutines **Use Cases**:
+
 - High-throughput logging
 - Multi-producer queues
 - Concurrent metrics collection
@@ -153,21 +157,21 @@ import "github.com/your-org/kbuffer"
 func main() {
     // Choose your buffer based on needs
     buf := kbuffer.NewSafeBuffer(1024)
-    
+
     // Write operations
     buf.Write([]byte("hello"))
     buf.WriteString(" world")
     buf.WriteByte('!')
-    
+
     // Read operations
     data := buf.Bytes()     // Get as []byte
     str := buf.String()     // Get as string
-    
+
     // Buffer management
     length := buf.Len()           // Current data length
     capacity := buf.Cap()         // Total capacity
     available := buf.Available()  // Remaining space
-    
+
     buf.Reset()  // Clear data, keep capacity
     buf.Clear()  // Zero memory and reset
 }
@@ -196,12 +200,12 @@ defer pool.PutBuffer(buffer)
 
 ### Write Performance Comparison
 
-| Scenario | UnsafeBuffer | SafeBuffer | SafeShardedBuffer |
-|----------|--------------|------------|-------------------|
-| Single-threaded | 2-3 ns/op | 15-25 ns/op | 70-85 ns/op |
-| 2 goroutines | ❌ PANIC | 20-30 ns/op | 75-90 ns/op |
-| 10 goroutines | ❌ PANIC | 100-150 ns/op | 80-95 ns/op |
-| 100 goroutines | ❌ PANIC | 500-800 ns/op | 85-100 ns/op |
+| Scenario        | UnsafeBuffer | SafeBuffer    | SafeShardedBuffer |
+| --------------- | ------------ | ------------- | ----------------- |
+| Single-threaded | 2-3 ns/op    | 15-25 ns/op   | 70-85 ns/op       |
+| 2 goroutines    | ❌ PANIC     | 20-30 ns/op   | 75-90 ns/op       |
+| 10 goroutines   | ❌ PANIC     | 100-150 ns/op | 80-95 ns/op       |
+| 100 goroutines  | ❌ PANIC     | 500-800 ns/op | 85-100 ns/op      |
 
 ### Memory Characteristics
 
@@ -228,6 +232,7 @@ graph TD
 ### Shard Count Recommendations
 
 For SafeShardedBuffer:
+
 - **Light contention** (2-10 goroutines): 4-8 shards
 - **Moderate contention** (10-50 goroutines): 16 shards
 - **Heavy contention** (50+ goroutines): 32-64 shards
@@ -236,6 +241,7 @@ For SafeShardedBuffer:
 ### When to Use Sharding
 
 Sharding is beneficial when:
+
 - You have >10 concurrent writers
 - Write contention exceeds 10% in profiles
 - You need predictable latency under load
@@ -382,10 +388,10 @@ go build -tags=unsafe_no_check -gcflags="-m" 2>&1 | grep inline
 
 ### Build Tags
 
-| Tag | Effect |
-|-----|--------|
-| `unsafe_no_check` | Disables goroutine safety checks |
-| `race` | Enables race detector (development) |
+| Tag               | Effect                              |
+| ----------------- | ----------------------------------- |
+| `unsafe_no_check` | Disables goroutine safety checks    |
+| `race`            | Enables race detector (development) |
 
 ## Examples
 
@@ -424,15 +430,15 @@ func ParseProtocol(data []byte) (*Message, error) {
     // Use unsafe buffer for maximum performance
     // Safe because it's single-threaded parsing
     buf := kbuffer.NewUnsafeBuffer(len(data))
-    
+
     // Parse header
     buf.Write(data[:headerSize])
     header := buf.Bytes()
-    
+
     // Parse body based on header
     buf.Reset()
     buf.Write(data[headerSize:])
-    
+
     return &Message{
         Header: header,
         Body:   buf.Bytes(),
@@ -469,10 +475,12 @@ func (m *MetricsCollector) Export() []byte {
 ## Performance Tips
 
 1. **Profile First**: Use `go test -bench` and `pprof` to identify bottlenecks
-2. **Right-Size Buffers**: Avoid frequent grows by setting appropriate initial capacity
+2. **Right-Size Buffers**: Avoid frequent grows by setting appropriate initial
+   capacity
 3. **Reuse Buffers**: Use pools and Reset() instead of creating new buffers
 4. **Batch Operations**: Write larger chunks instead of many small writes
-5. **Consider Sharding Early**: It's easier to add sharding early than retrofit later
+5. **Consider Sharding Early**: It's easier to add sharding early than retrofit
+   later
 6. **Monitor Contention**: Use `runtime.NumGoroutine()` and lock profiling
 7. **Tune Shard Count**: Benchmark with different shard counts for your workload
 
@@ -483,6 +491,7 @@ See LICENSE file in the repository root.
 ## Contributing
 
 Contributions are welcome! Please ensure:
+
 - All tests pass with `-race` flag
 - Benchmarks show no performance regression
 - Code coverage remains above 95%
