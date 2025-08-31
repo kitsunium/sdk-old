@@ -1,6 +1,8 @@
 // Package kbuffer provides ultra-optimized, lock-free byte buffers for kernel operations.
+//
 // This file contains the unsafe sharded buffer implementation for maximum performance
-// in single-threaded contexts where sharding is needed for algorithmic reasons.
+// in single-threaded contexts where sharding is needed for algorithmic reasons,
+// such as cache optimization or data partitioning.
 package kbuffer
 
 import (
@@ -11,9 +13,25 @@ import (
 var _ Sharded = (*unsafeShardedBuffer)(nil)
 
 // unsafeShardedBuffer provides NON-THREAD-SAFE sharded buffer for maximum performance.
-// WARNING: Only use in single-threaded context or with external synchronization!
-// This implementation provides sharding benefits without synchronization overhead,
-// making it ideal for algorithms that need data distribution but run single-threaded.
+//
+// ⚠️ WARNING: Only use in single-threaded context or with external synchronization!
+//
+// This implementation provides sharding benefits without synchronization overhead:
+//   - Improved cache locality through data distribution
+//   - Foundation for scatter-gather algorithms
+//   - Preparation for parallel processing pipelines
+//   - Zero synchronization overhead
+//
+// Use cases:
+//   - Single-threaded MapReduce-style algorithms
+//   - Cache-optimized sequential processing
+//   - Data partitioning for future parallelization
+//   - Custom lock-free data structures (with external sync)
+//
+// Sharding improves performance even in single-threaded contexts by:
+//   - Reducing cache misses on large data sets
+//   - Enabling better memory prefetching patterns
+//   - Allowing incremental processing of partitions
 type unsafeShardedBuffer struct {
 	// Cache line 1 (64 bytes) - Core configuration
 	shards     []*unsafeBufferShard // Array of buffer shards (8 bytes)
@@ -110,9 +128,17 @@ func (b *unsafeShardedBuffer) selectShard() *unsafeBufferShard {
 }
 
 // Write distributes writes across shards.
-// NOT THREAD-SAFE - no synchronization! Will panic if used concurrently.
-// Attempts to write to shards in sequence until one accepts the data.
-// Returns the number of bytes written and any error.
+//
+// ⚠️ NOT THREAD-SAFE - no synchronization! Will panic if used concurrently.
+//
+// Write strategy:
+//   - Attempts shards in sequence (not round-robin)
+//   - First shard with space accepts the write
+//   - Returns errBufferFull only if all shards are full
+//   - Maintains data locality within shards
+//
+// This sequential strategy is optimal for single-threaded use as it
+// maximizes cache locality and minimizes shard switching overhead.
 func (b *unsafeShardedBuffer) Write(p []byte) (n int, err error) {
 	// Check for concurrent access
 	b.checker.checkSafety()
@@ -449,9 +475,23 @@ func (b *unsafeShardedBuffer) ShardCount() int {
 }
 
 // Balance redistributes data across shards for better distribution.
-// NOT THREAD-SAFE! Will panic if used concurrently.
-// Collects all data and redistributes it evenly across shards.
-// Useful after uneven write patterns to optimize future access.
+//
+// ⚠️ NOT THREAD-SAFE! Will panic if used concurrently.
+//
+// Rebalancing process:
+//   1. Collects all data from all shards
+//   2. Resets all shards to empty
+//   3. Redistributes data evenly across shards
+//   4. Optimizes for sequential access patterns
+//
+// Use Balance() when:
+//   - Write patterns have created uneven distribution
+//   - Preparing for parallel processing of shards
+//   - Optimizing for sequential read patterns
+//   - Before passing shards to different processing stages
+//
+// Performance note: This operation is O(n) where n is total data size.
+// Avoid calling frequently in hot paths.
 func (b *unsafeShardedBuffer) Balance() {
 	// Check for concurrent access
 	b.checker.checkSafety()

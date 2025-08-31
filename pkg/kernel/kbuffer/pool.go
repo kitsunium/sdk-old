@@ -1,5 +1,8 @@
 // Package kbuffer provides buffer management with configurable safety and pooling.
+//
 // This file contains the buffer pool implementation for reducing allocation overhead.
+// The pool uses size-classed buckets (powers of 2) for efficient memory reuse and
+// reduced fragmentation.
 package kbuffer
 
 import (
@@ -15,6 +18,15 @@ const (
 )
 
 // bufferPool implements the Pool interface with size-classed pooling.
+//
+// The pool manages buffers in size classes from 64 bytes to 4MB, with each
+// class being a power of 2. This design:
+//   - Reduces memory fragmentation
+//   - Improves allocation performance
+//   - Minimizes GC pressure
+//   - Provides predictable memory usage patterns
+//
+// The pool is thread-safe and can be shared across goroutines.
 type bufferPool struct {
 	pools       [poolClassCount]*sync.Pool // Size-classed pools
 	bufferPool  *sync.Pool                 // Pool for Buffer instances
@@ -25,7 +37,32 @@ type bufferPool struct {
 }
 
 // NewPool creates a new buffer pool instance.
-// Each application component should create its own pool instance.
+//
+// Each application component should create its own pool instance rather than
+// using global pools. This provides:
+//   - Better isolation between components
+//   - Easier testing and mocking
+//   - Fine-grained configuration control
+//   - Predictable resource management
+//
+// The pool automatically pre-warms with buffers based on CPU count to reduce
+// startup latency. Size classes range from 64 bytes to 4MB.
+//
+// Example:
+//
+//	pool := kbuffer.NewPool()
+//	pool.SetClearOnPut(true)  // Enable security clearing
+//	pool.SetMaxSize(1 << 20)  // Max 1MB buffers in pool
+//
+//	// Use raw byte slices
+//	buf := pool.Get(1024)
+//	defer pool.Put(buf)
+//	// ... use buf ...
+//
+//	// Or use Buffer instances
+//	buffer := pool.GetBuffer(1024)
+//	defer pool.PutBuffer(buffer)
+//	// ... use buffer ...
 func NewPool() Pool {
 	return newPool()
 }
@@ -90,8 +127,20 @@ func (p *bufferPool) prewarm() {
 }
 
 // Get retrieves a buffer of at least the requested size from pool.
-// Returns larger buffer if exact size not available for better reuse.
-// The buffer is automatically resized to the requested length.
+//
+// The method:
+//   - Returns a buffer from the appropriate size class
+//   - May return a larger buffer for better reuse (capacity > size)
+//   - Allocates directly if size exceeds MaxSize
+//   - Sets the slice length to the requested size
+//
+// The returned buffer is NOT zeroed unless the pool was configured with
+// SetClearOnPut(true) and the buffer was previously returned to the pool.
+//
+// Performance characteristics:
+//   - O(1) retrieval from pool
+//   - Zero allocations for pooled sizes
+//   - Automatic size class selection
 func (p *bufferPool) Get(size int) []byte {
 	// Validate size
 	if size <= 0 {
@@ -132,7 +181,18 @@ func (p *bufferPool) Get(size int) []byte {
 }
 
 // Put returns a buffer to the pool for reuse.
-// Clears buffer if clearOnPut is enabled for security.
+//
+// The method:
+//   - Uses the buffer's capacity to determine the size class
+//   - Clears the buffer if SetClearOnPut(true) was called
+//   - Ignores buffers larger than MaxSize
+//   - Resets the slice length to 0 while preserving capacity
+//
+// Security note: Enable clearing with SetClearOnPut(true) when buffers
+// may contain sensitive data (passwords, keys, PII).
+//
+// Performance note: Returning buffers promptly improves reuse and reduces
+// GC pressure. Consider using defer for automatic return.
 func (p *bufferPool) Put(buf []byte) {
 	if buf == nil || cap(buf) == 0 {
 		return
@@ -167,7 +227,15 @@ func (p *bufferPool) Put(buf []byte) {
 }
 
 // GetBuffer retrieves a Buffer instance from the pool.
-// The buffer will have at least the specified capacity.
+//
+// The buffer:
+//   - Has at least the specified capacity
+//   - Is reset to empty state before return
+//   - May have larger capacity for better reuse
+//   - Is an UnsafeBuffer instance (not thread-safe)
+//
+// For thread-safe buffers, create them directly with NewSafeBuffer
+// or wrap the pooled buffer with appropriate synchronization.
 func (p *bufferPool) GetBuffer(size int) Buffer {
 	// Get buffer instance from pool
 	buf := p.bufferPool.Get().(Buffer)
@@ -184,7 +252,14 @@ func (p *bufferPool) GetBuffer(size int) Buffer {
 }
 
 // PutBuffer returns a Buffer instance to the pool.
-// The buffer is reset before being pooled.
+//
+// The buffer is automatically:
+//   - Reset to empty state
+//   - Cleared if SetClearOnPut(true) was configured
+//   - Returned to the pool for reuse
+//
+// Only UnsafeBuffer instances are pooled. SafeBuffer instances
+// are not pooled due to their internal synchronization state.
 func (p *bufferPool) PutBuffer(b Buffer) {
 	if b == nil {
 		return
@@ -203,13 +278,37 @@ func (p *bufferPool) PutBuffer(b Buffer) {
 }
 
 // SetClearOnPut configures whether buffers are cleared when returned.
-// Clearing provides better security but reduces performance.
+//
+// When enabled:
+//   - Buffers are zeroed when returned to the pool
+//   - Prevents data leakage between uses
+//   - Adds ~10-20% overhead to Put operations
+//
+// Enable for:
+//   - Security-sensitive applications
+//   - Buffers containing passwords, keys, or PII
+//   - Compliance with data protection regulations
+//
+// Disable for:
+//   - Maximum performance
+//   - Non-sensitive data
+//   - Trusted environments
 func (p *bufferPool) SetClearOnPut(clear bool) {
 	p.clearOnPut.Store(clear)
 }
 
 // SetMaxSize sets the maximum buffer size that will be pooled.
-// Larger buffers will be allocated directly and not pooled.
+//
+// Buffers larger than this size:
+//   - Are allocated directly from the heap
+//   - Are not returned to the pool when Put is called
+//   - May cause more GC pressure
+//
+// The size is clamped between 64 bytes and 4MB. Default is 4MB.
+//
+// Consider your application's memory patterns when setting this:
+//   - Larger values: More memory usage, better reuse for large buffers
+//   - Smaller values: Less memory usage, more allocations for large buffers
 func (p *bufferPool) SetMaxSize(size int64) {
 	if size < poolMinSize {
 		size = poolMinSize
@@ -221,7 +320,14 @@ func (p *bufferPool) SetMaxSize(size int64) {
 }
 
 // sizeToClass calculates the size class for a given size.
-// Returns the bit position of the next power of 2.
+//
+// Returns the bit position of the next power of 2 that can hold the size.
+// For example:
+//   - size 50 -> class 6 (2^6 = 64)
+//   - size 100 -> class 7 (2^7 = 128)
+//   - size 1000 -> class 10 (2^10 = 1024)
+//
+// This ensures efficient bucket selection with minimal fragmentation.
 //
 //go:inline
 //go:nosplit

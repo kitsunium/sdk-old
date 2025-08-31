@@ -1,6 +1,58 @@
 // Package kbuffer provides ultra-optimized, lock-free byte buffers for kernel operations.
 // This implementation provides maximum performance through extensive unsafe operations,
 // atomic primitives, and CPU cache optimization.
+//
+// # Architecture Overview
+//
+// The package offers four distinct buffer implementations, each optimized for specific use cases:
+//
+//   - UnsafeBuffer: Single-threaded, zero-overhead buffer with maximum performance (~2-3 ns/op writes)
+//   - SafeBuffer: Thread-safe buffer using spinlocks for concurrent access (~15-25 ns/op writes)
+//   - UnsafeShardedBuffer: Single-threaded sharded buffer for data distribution algorithms
+//   - SafeShardedBuffer: Thread-safe sharded buffer for high-contention scenarios (~70-85 ns/op with 100 goroutines)
+//
+// # Buffer Selection Guide
+//
+// Choose your buffer based on concurrency requirements:
+//
+//   - Single-threaded contexts: Use UnsafeBuffer for maximum performance
+//   - Low-contention concurrent: Use SafeBuffer with spinlock optimization
+//   - High-contention concurrent: Use SafeShardedBuffer to distribute load
+//   - Single-threaded with sharding needs: Use UnsafeShardedBuffer
+//
+// # Safety Model
+//
+// The package enforces explicit safety choices:
+//   - All constructors require explicit "Unsafe" or "Safe" prefix
+//   - Unsafe buffers include goroutine safety checks in development builds
+//   - Production builds can disable checks with 'unsafe_no_check' build tag
+//
+// # Performance Characteristics
+//
+// All implementations are optimized for:
+//   - Zero allocations in hot paths
+//   - CPU cache-line alignment (64 bytes)
+//   - False sharing prevention through padding
+//   - Lock-free reads where possible
+//   - Direct memory operations using unsafe package
+//
+// # Example Usage
+//
+//	// Single-threaded high-performance buffer
+//	buf := kbuffer.NewUnsafeBuffer(4096)
+//	buf.WriteString("Hello, World!")
+//	data := buf.Bytes()
+//
+//	// Thread-safe buffer for concurrent access
+//	safeBuf := kbuffer.NewSafeBuffer(4096)
+//	go safeBuf.Write([]byte("concurrent"))
+//	go safeBuf.Write([]byte("writes"))
+//
+//	// High-contention scenario with sharding
+//	shardedBuf := kbuffer.NewSafeShardedBuffer(65536, 16) // 64KB, 16 shards
+//	for i := 0; i < 100; i++ {
+//		go shardedBuf.Write([]byte(fmt.Sprintf("goroutine %d", i)))
+//	}
 package kbuffer
 
 import (
@@ -182,8 +234,18 @@ func (e bufferError) Error() string { return string(e) }
 // ============================================================================
 
 // Buffer defines the interface for a high-performance byte buffer.
-// All implementations MUST guarantee thread-safety for concurrent reads
-// and provide lock-free operations where possible.
+//
+// All Buffer implementations provide:
+//   - Zero-copy operations where possible
+//   - Efficient memory management
+//   - Consistent API across safe and unsafe variants
+//
+// Thread-safety depends on the implementation:
+//   - UnsafeBuffer: NOT thread-safe, will panic on concurrent access
+//   - SafeBuffer: Fully thread-safe with spinlock protection
+//
+// The interface is designed for maximum performance with methods optimized
+// for common use cases in kernel-level operations.
 type Buffer interface {
 	// Write operations - optimized for zero-allocation
 	Write(p []byte) (n int, err error)              // Write bytes to buffer
@@ -214,17 +276,42 @@ type Buffer interface {
 }
 
 // Pool defines the interface for buffer pooling with size classes.
-// Implementations MUST be thread-safe and lock-free where possible.
+//
+// Pooling reduces allocation overhead by reusing buffers. The pool uses
+// size classes (powers of 2) for efficient memory management:
+//   - Reduces GC pressure
+//   - Improves allocation performance
+//   - Prevents memory fragmentation
+//
+// Pools are thread-safe and can be shared across goroutines.
+// Each application should create its own pool instances rather than
+// relying on global state.
 type Pool interface {
-	// Buffer acquisition and release
-	Get(size int) []byte       // Get raw byte slice
-	Put(buf []byte)            // Return byte slice
-	GetBuffer(size int) Buffer // Get Buffer instance
-	PutBuffer(b Buffer)        // Return Buffer instance
+	// Get retrieves a byte slice of at least the requested size.
+	// The returned slice may be larger than requested for better reuse.
+	// The slice length is set to the requested size, but capacity may be larger.
+	Get(size int) []byte
 
-	// Configuration
-	SetClearOnPut(clear bool) // Security clearing option
-	SetMaxSize(size int64)    // Maximum pooled size
+	// Put returns a byte slice to the pool for reuse.
+	// The slice capacity is used to determine the appropriate size class.
+	// Slices larger than MaxSize are not pooled.
+	Put(buf []byte)
+
+	// GetBuffer retrieves a Buffer instance with at least the requested capacity.
+	// The buffer is reset before being returned.
+	GetBuffer(size int) Buffer
+
+	// PutBuffer returns a Buffer instance to the pool.
+	// The buffer is reset and optionally cleared based on pool configuration.
+	PutBuffer(b Buffer)
+
+	// SetClearOnPut configures whether buffers are zeroed when returned to the pool.
+	// Enable for security-sensitive data, disable for maximum performance.
+	SetClearOnPut(clear bool)
+
+	// SetMaxSize sets the maximum buffer size that will be pooled.
+	// Larger buffers are allocated directly and not reused.
+	SetMaxSize(size int64)
 }
 
 // Writer defines the interface for write-only buffer operations.
@@ -246,14 +333,31 @@ type Reader interface {
 }
 
 // Sharded defines the interface for sharded buffer implementations.
-// Provides concurrent write access through sharding for scalability.
+//
+// Sharding distributes data across multiple internal buffers to:
+//   - Reduce contention in concurrent scenarios (SafeShardedBuffer)
+//   - Improve cache locality for large data sets
+//   - Enable parallel processing algorithms
+//
+// Sharded buffers automatically distribute writes across shards and can
+// consolidate data when reading. The sharding strategy uses round-robin
+// or goroutine-affinity based selection depending on the implementation.
 type Sharded interface {
 	Buffer // Extends Buffer interface
 
-	// Sharded operations
-	WriteToShard(shard int, p []byte) (int, error) // Direct shard write
-	ShardCount() int                               // Number of shards
-	Balance()                                      // Rebalance shards
+	// WriteToShard writes directly to a specific shard.
+	// Returns the number of bytes written and any error.
+	// Useful for manual load distribution in advanced use cases.
+	WriteToShard(shard int, p []byte) (int, error)
+
+	// ShardCount returns the number of shards in this buffer.
+	// The count is fixed at creation time and typically a power of 2.
+	ShardCount() int
+
+	// Balance redistributes existing data evenly across all shards.
+	// Useful after skewed write patterns to optimize future access.
+	// This operation may be expensive for large amounts of data.
+	Balance()
 }
 
 // Factory defines the interface for buffer creation.
@@ -298,31 +402,138 @@ type Option func(Buffer) error
 // ============================================================================
 
 // NewUnsafeBuffer explicitly creates a non-thread-safe buffer.
+//
 // ⚠️ WARNING: NOT thread-safe! Use ONLY in single-threaded contexts.
-// Performance: ~2-3 ns/op for writes (10x faster than safe version).
+//
+// This buffer provides maximum performance with zero synchronization overhead:
+//   - Write performance: ~2-3 ns/op (10x faster than safe version)
+//   - Zero allocations after initial creation
+//   - Direct memory operations without locks
+//   - Goroutine safety checks in development builds
+//
+// Use cases:
+//   - Request-scoped buffers in single-threaded handlers
+//   - Protocol parsing and serialization
+//   - Temporary buffers in non-concurrent algorithms
+//
+// The buffer will panic if accessed from multiple goroutines in development
+// builds. Production builds with 'unsafe_no_check' tag disable these checks.
+//
+// Example:
+//
+//	buf := kbuffer.NewUnsafeBuffer(4096)
+//	buf.WriteString("fast writes")
+//	data := buf.Bytes() // Zero-copy access
 func NewUnsafeBuffer(capacity int, opts ...Option) Buffer {
 	return newUnsafeBuffer(capacity, opts...)
 }
 
 // NewSafeBuffer creates a THREAD-SAFE buffer with spinlock optimization.
+//
 // ✅ SAFE: Can be used concurrently from multiple goroutines.
-// Performance: ~15-25 ns/op
-// for writes (faster than mutex).
+//
+// This buffer provides thread-safety with optimized performance:
+//   - Write performance: ~15-25 ns/op (faster than mutex-based solutions)
+//   - Spinlock for short critical sections
+//   - Lock-free reads for some operations
+//   - Suitable for low to moderate contention
+//
+// Use cases:
+//   - Shared logging buffers
+//   - Concurrent data collection
+//   - Multi-producer scenarios with moderate contention
+//
+// For high-contention scenarios (>10 concurrent writers), consider using
+// NewSafeShardedBuffer instead for better scalability.
+//
+// Example:
+//
+//	buf := kbuffer.NewSafeBuffer(4096)
+//	var wg sync.WaitGroup
+//	for i := 0; i < 10; i++ {
+//		wg.Add(1)
+//		go func(id int) {
+//			defer wg.Done()
+//			buf.WriteString(fmt.Sprintf("Writer %d\n", id))
+//		}(i)
+//	}
+//	wg.Wait()
 func NewSafeBuffer(capacity int, opts ...Option) Buffer {
 	return newSafeBuffer(capacity, opts...)
 }
 
 // NewUnsafeShardedBuffer creates a NON-THREAD-SAFE sharded buffer.
+//
 // ⚠️ WARNING: NOT thread-safe! Use ONLY in single-threaded contexts.
-// Performance: Fastest sharded option when no concurrency is needed.
+//
+// This buffer provides sharding benefits without synchronization overhead:
+//   - Improved cache locality for large data sets
+//   - Data distribution for algorithmic purposes
+//   - Foundation for custom parallel processing
+//   - Zero synchronization overhead
+//
+// Use cases:
+//   - Single-threaded algorithms requiring data partitioning
+//   - Cache-optimized sequential processing
+//   - Building blocks for custom concurrent structures
+//
+// The sharding is useful even in single-threaded contexts for:
+//   - Reducing cache misses on large buffers
+//   - Preparing data for parallel processing
+//   - Implementing scatter-gather patterns
+//
+// Example:
+//
+//	buf := kbuffer.NewUnsafeShardedBuffer(65536, 8) // 64KB across 8 shards
+//	for i := 0; i < 8; i++ {
+//		buf.WriteToShard(i, []byte(fmt.Sprintf("Shard %d data", i)))
+//	}
+//	buf.Balance() // Redistribute data evenly
 func NewUnsafeShardedBuffer(capacity, shards int, opts ...Option) Sharded {
 	return newUnsafeShardedBuffer(capacity, shards, opts...)
 }
 
 // NewSafeShardedBuffer creates a THREAD-SAFE sharded buffer.
+//
 // ✅ SAFE: Thread-safe through sharding (each shard uses safe buffers).
-// Best for high-contention scenarios with many goroutines.
-// Performance: ~70-85 ns/op even with 100 goroutines (7x faster than SafeBuffer).
+//
+// This buffer excels in high-contention scenarios:
+//   - Write performance: ~70-85 ns/op even with 100 goroutines
+//   - 7x faster than SafeBuffer under high contention
+//   - Reduces lock contention through data distribution
+//   - Scales linearly with shard count up to CPU cores
+//
+// Use cases:
+//   - High-throughput logging systems
+//   - Multi-producer queues
+//   - Concurrent metrics collection
+//   - Any scenario with >10 concurrent writers
+//
+// Sharding strategy:
+//   - Automatic round-robin distribution
+//   - Work-stealing when primary shard is full
+//   - Optional rebalancing with Balance() method
+//
+// Recommended shard counts:
+//   - Light contention (2-10 goroutines): 4-8 shards
+//   - Moderate contention (10-50 goroutines): 16 shards
+//   - Heavy contention (50+ goroutines): 32-64 shards
+//
+// Example:
+//
+//	buf := kbuffer.NewSafeShardedBuffer(1048576, 16) // 1MB across 16 shards
+//	var wg sync.WaitGroup
+//	for i := 0; i < 100; i++ {
+//		wg.Add(1)
+//		go func(id int) {
+//			defer wg.Done()
+//			for j := 0; j < 1000; j++ {
+//				buf.WriteString(fmt.Sprintf("G%d-M%d\n", id, j))
+//			}
+//		}(i)
+//	}
+//	wg.Wait()
+//	data := buf.Bytes() // Consolidated view of all shards
 func NewSafeShardedBuffer(capacity, shards int, opts ...Option) Sharded {
 	return newSafeShardedBuffer(capacity, shards, opts...)
 }

@@ -51,6 +51,9 @@ coverage-html/
 *.coverage
 coverage.html
 
+# Test binaries
+*.test
+
 # Profiling
 *.prof
 *.testpr-review-issues/
