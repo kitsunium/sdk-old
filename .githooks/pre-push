@@ -84,12 +84,8 @@ do
         continue
     fi
     
-    # Vérifie si ALLOW_AI_MENTIONS est défini (permet de contourner le blocage)
-    # ${VAR:-default} : utilise VAR ou 'default' si VAR n'est pas définie
-    if [ -n "${ALLOW_AI_MENTIONS:-}" ]; then
-        echo -e "${YELLOW}⚠️  AI mention checks bypassed via ALLOW_AI_MENTIONS${NC}"
-        continue
-    fi
+    # AUCUN contournement possible pour les mentions d'IA
+    # Cette vérification est obligatoire et ne peut pas être désactivée
     
     # Parcourt chaque commit à vérifier
     while IFS= read -r commit; do
@@ -120,8 +116,7 @@ do
                 # Affiche le message en jaune avec indentation
                 echo "$commit_msg" | sed 's/^/  /'
                 echo ""
-                echo -e "${YELLOW}To bypass this check (not recommended), use:${NC}"
-                echo "  ALLOW_AI_MENTIONS=1 git push"
+                echo -e "${RED}This check cannot be bypassed.${NC}"
                 echo ""
                 echo -e "${YELLOW}To fix this, you can:${NC}"
                 echo "  1. Amend the commit: git commit --amend"
