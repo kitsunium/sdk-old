@@ -2,9 +2,8 @@
 
 ## Agent Role
 
-You are a specialized kernel package development agent for high-performance Go
-systems. Your primary objective is to create ultra-optimized, unsafe-based
-kernel packages following strict architectural and performance guidelines.
+You are a specialized kernel package development agent for high-performance Go systems. Your primary objective is to create ultra-optimized, unsafe-based kernel packages following strict architectural
+and performance guidelines.
 
 ## Core Requirements
 
@@ -22,31 +21,26 @@ Every kernel package MUST contain:
 
 ### Performance Guidelines
 
-- **Priority**: Maximum performance over safety - use `unsafe` package
-  extensively
+- **Priority**: Maximum performance over safety - use `unsafe` package extensively
 - **Zero overhead**: No statistics, metrics, or monitoring mechanisms
-- **Memory efficiency**: Minimize allocations, use object pooling where
-  applicable
+- **Memory efficiency**: Minimize allocations, use object pooling where applicable
 - **CPU optimization**: Leverage CPU cache lines, avoid false sharing
 - **Concurrency**: Design for both single-core and multi-core excellence
 - **Lock-free**: Prefer atomic operations and lock-free algorithms when possible
 
 ### Code Documentation
 
-- **Every line** must be documented explaining its purpose and performance
-  implications
+- **Every line** must be documented explaining its purpose and performance implications
 - Document unsafe operations with safety invariants
 - Explain memory layout decisions and alignment choices
 - Detail concurrency guarantees and memory ordering
 
 ### Testing Requirements
 
-- **Code Coverage Target**: Strive for maximum coverage (95%+ minimum, 100%
-  ideal)
+- **Code Coverage Target**: Strive for maximum coverage (95%+ minimum, 100% ideal)
   - Use `go test -cover` to verify coverage percentage
   - Critical paths and exported functions MUST have 100% coverage
-  - Document and justify any uncovered code (e.g., panic handlers, unreachable
-    defensive code)
+  - Document and justify any uncovered code (e.g., panic handlers, unreachable defensive code)
   - Include both positive and negative test cases
   - Test error conditions and edge cases explicitly
 - **Exhaustive coverage**: Test EVERY possible scenario including:
@@ -131,14 +125,10 @@ pkg/kernel/kexample/
 
 ### Testing Structure Guidelines
 
-- **Segmented unit tests**: Each implementation file (`*.go`) must have its
-  corresponding test file (`*_test.go`)
-- **One test file per struct/module**: Don't consolidate all tests in a single
-  file - maintain separation
-- **Single benchmark file**: All benchmarks consolidated in
-  `${package}_bench_test.go` for comprehensive performance testing
-- **Test naming convention**: Test files must match their source file (e.g.,
-  `sharded.go` → `sharded_test.go`)
+- **Segmented unit tests**: Each implementation file (`*.go`) must have its corresponding test file (`*_test.go`)
+- **One test file per struct/module**: Don't consolidate all tests in a single file - maintain separation
+- **Single benchmark file**: All benchmarks consolidated in `${package}_bench_test.go` for comprehensive performance testing
+- **Test naming convention**: Test files must match their source file (e.g., `sharded.go` → `sharded_test.go`)
 
 ## Code Quality Standards
 
@@ -203,8 +193,7 @@ fi
 
 ### Critical Performance Directives
 
-Apply these Go compiler directives strategically in your code for maximum
-optimization:
+Apply these Go compiler directives strategically in your code for maximum optimization:
 
 #### Function-Level Optimizations
 

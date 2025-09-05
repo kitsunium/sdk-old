@@ -19,11 +19,11 @@ mkdir -p .codacy/out
 # Analyse Go avec golangci-lint (incluant gosec)
 echo -e "\n${YELLOW}🔧 Analyse Go avec golangci-lint...${NC}"
 if command -v golangci-lint &> /dev/null; then
-    if golangci-lint run --out-format json > .codacy/out/golangci.json 2>&1; then
+    if golangci-lint run --output.json.path=.codacy/out/golangci.json 2>&1 | grep -q "no issues found"; then
         echo -e "${GREEN}✅ Analyse Go terminée sans erreurs${NC}"
     else
         echo -e "${YELLOW}⚠️  Problèmes détectés dans le code Go${NC}"
-        golangci-lint run --out-format colored-line-number || true
+        golangci-lint run --output.text.colors=true || true
     fi
 else
     echo -e "${RED}❌ golangci-lint n'est pas installé${NC}"

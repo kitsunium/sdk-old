@@ -6,8 +6,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/kitsunium/sdk/workflows/CI/badge.svg)](https://github.com/kitsunium/sdk/actions)
 
-A high-performance Go SDK providing essential building blocks for modern
-applications with a focus on efficiency, reliability, and developer experience.
+A high-performance Go SDK providing essential building blocks for modern applications with a focus on efficiency, reliability, and developer experience.
 
 ## 🚀 Features
 
@@ -16,15 +15,13 @@ applications with a focus on efficiency, reliability, and developer experience.
 #### 🔧 **Kernel Components**
 
 - **kbuffer**: Buffer pool management with zero-allocation operations
-- **kcache**: Advanced caching with LRU, sharded, and atomic cache
-  implementations
+- **kcache**: Advanced caching with LRU, sharded, and atomic cache implementations
 - **kerror**: Comprehensive error handling with stack traces and error registry
 - **kfs**: File system utilities with optimized file operations
 
 #### 📦 **Core Utilities**
 
-- **Config Management**: Multi-format configuration parser (YAML, JSON, TOML,
-  XML, INI)
+- **Config Management**: Multi-format configuration parser (YAML, JSON, TOML, XML, INI)
 - **Config Normalization**: Automatic configuration key normalization
 - **Performance Optimized**: Extensive benchmarking and performance tuning
 
@@ -178,8 +175,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📈 Benchmarks
 
-The SDK includes comprehensive benchmarks for all performance-critical
-components:
+The SDK includes comprehensive benchmarks for all performance-critical components:
 
 - **Buffer Operations**: Optimized for minimal allocations
 - **Cache Operations**: Sub-microsecond access times
@@ -197,8 +193,7 @@ make bench/compare     # Compare performance
 
 ### Git Hooks
 
-This project uses Git hooks to maintain code quality and enforce standards.
-Install them with:
+This project uses Git hooks to maintain code quality and enforce standards. Install them with:
 
 ```bash
 # Install git hooks (required for contributors)
@@ -220,8 +215,7 @@ ALLOW_AI_MENTIONS=1 git push  # Skip AI content check
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the
-[LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 

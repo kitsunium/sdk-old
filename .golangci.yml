@@ -1,12 +1,54 @@
+# Version de configuration golangci-lint
+version: "2"
+
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
-    - gosec
     - bodyclose
-    - prealloc
+    - revive
+    - gocyclo
+    - gosec
     - misspell
+    - prealloc
+  enable-formatters:
+    - gofmt
+    - goimports
+
+linters-settings:
+  gocyclo:
+    complexity: 10
+  revive:
+    severity: warning
+    rules:
+      - name: line-length-limit
+        severity: warning
+        arguments:
+          - 150
+  gofmt:
+    # Simplify code: gofmt with `-s` option
+    simplify: true
+  goimports:
+    # Put imports beginning with prefix after 3rd-party packages
+    local-prefixes: github.com/kitsunium/sdk
+  gosec:
+    # Security analysis settings
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104 # Audit errors not checked (nous gérons avec errcheck)
+  misspell:
+    # Correct commonly misspelled English words
+    locale: US
+  prealloc:
+    # Suggest preallocating slices
+    simple: true
+    range-loops: true
+    for-loops: true
+
+# Configuration pour la ligne de commande
+rules:
+  max-line-length: 150

@@ -2,21 +2,15 @@
 
 ## Overview
 
-The `normalize` package provides high-performance utilities for normalizing
-configuration keys and values in Go applications. It's designed to handle
-various configuration formats and ensure consistent key naming and value
-formatting across different configuration sources.
+The `normalize` package provides high-performance utilities for normalizing configuration keys and values in Go applications. It's designed to handle various configuration formats and ensure
+consistent key naming and value formatting across different configuration sources.
 
 ## Features
 
-- **Key Normalization**: Convert configuration keys to a consistent lowercase
-  dot-notation format
-- **Value Normalization**: Clean configuration values by trimming whitespace and
-  quotes
-- **Map Flattening**: Transform nested configuration structures into flat
-  key-value pairs
-- **Zero-Allocation Design**: Uses lookup tables and unsafe operations for
-  optimal performance
+- **Key Normalization**: Convert configuration keys to a consistent lowercase dot-notation format
+- **Value Normalization**: Clean configuration values by trimming whitespace and quotes
+- **Map Flattening**: Transform nested configuration structures into flat key-value pairs
+- **Zero-Allocation Design**: Uses lookup tables and unsafe operations for optimal performance
 - **Array Support**: Handle arrays in configuration with indexed notation
 
 ## Installation
@@ -59,8 +53,7 @@ clean := normalize.Value("  \n\t  ")         // Returns: ""
 
 #### `Map(input map[string]any) map[string]string`
 
-Flattens nested configuration maps into a single-level map with dot-notation
-keys:
+Flattens nested configuration maps into a single-level map with dot-notation keys:
 
 ```go
 input := map[string]any{
@@ -107,8 +100,7 @@ str := normalize.BytesToStringSafe([]byte("hello"))
 
 ### Configuration File Processing
 
-Perfect for processing configuration from various sources (environment
-variables, YAML, JSON, etc.):
+Perfect for processing configuration from various sources (environment variables, YAML, JSON, etc.):
 
 ```go
 // Environment variables often use UPPER_SNAKE_CASE
@@ -122,8 +114,7 @@ normalizedValue := normalize.Value(envValue)  // "10"
 
 ### Multi-Source Configuration Merging
 
-When merging configurations from different sources with different naming
-conventions:
+When merging configurations from different sources with different naming conventions:
 
 ```go
 // From environment
@@ -154,19 +145,14 @@ for k, v := range flatJson {
 
 ## Performance Considerations
 
-- **Lookup Tables**: Uses pre-computed 256-byte lookup tables for O(1) character
-  transformations
-- **Unsafe Operations**: Employs unsafe pointer arithmetic for zero-allocation
-  string processing
-- **Capacity Pre-allocation**: Estimates required capacity for output maps to
-  minimize reallocations
-- **String Builder Reuse**: Reuses string builders during recursive flattening
-  operations
+- **Lookup Tables**: Uses pre-computed 256-byte lookup tables for O(1) character transformations
+- **Unsafe Operations**: Employs unsafe pointer arithmetic for zero-allocation string processing
+- **Capacity Pre-allocation**: Estimates required capacity for output maps to minimize reallocations
+- **String Builder Reuse**: Reuses string builders during recursive flattening operations
 
 ## Thread Safety
 
-All functions in this package are thread-safe and can be called concurrently.
-The lookup tables are initialized once at startup and are read-only thereafter.
+All functions in this package are thread-safe and can be called concurrently. The lookup tables are initialized once at startup and are read-only thereafter.
 
 ## Dependencies
 

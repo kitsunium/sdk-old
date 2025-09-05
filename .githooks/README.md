@@ -1,7 +1,6 @@
 # Git Hooks for Kitsunium SDK
 
-This directory contains Git hooks to ensure code quality and prevent common
-issues.
+This directory contains Git hooks to ensure code quality and prevent common issues.
 
 ## Setup
 
@@ -20,8 +19,7 @@ The pre-commit hook runs before each commit and performs the following checks:
 #### 1. **t.Skip() Detection** 🚫
 
 - **Purpose**: Prevents commits containing `t.Skip()` in test files
-- **Why**: Skipping tests is a bad practice that hides problems and reduces
-  confidence in the codebase
+- **Why**: Skipping tests is a bad practice that hides problems and reduces confidence in the codebase
 - **Philosophy**: Tests should either:
   - ✅ Pass - indicating the code works correctly
   - ❌ Fail - indicating a real issue that needs fixing
@@ -59,8 +57,7 @@ If you absolutely need to bypass the hooks (not recommended):
 git commit --no-verify
 ```
 
-⚠️ **Warning**: Bypassing hooks should only be done in emergency situations. The
-hooks are there to maintain code quality.
+⚠️ **Warning**: Bypassing hooks should only be done in emergency situations. The hooks are there to maintain code quality.
 
 ## Disable Hooks
 
@@ -82,14 +79,10 @@ To re-enable:
 
 `t.Skip()` is considered harmful because:
 
-1. **Hidden Problems**: Skipped tests don't run, so problems they would catch
-   remain hidden
-2. **False Confidence**: A test suite with skipped tests gives a false sense of
-   security
-3. **Technical Debt**: Skipped tests tend to stay skipped forever, accumulating
-   technical debt
-4. **Unclear Intent**: It's not clear why a test is skipped - is it broken? Is
-   the feature removed?
+1. **Hidden Problems**: Skipped tests don't run, so problems they would catch remain hidden
+2. **False Confidence**: A test suite with skipped tests gives a false sense of security
+3. **Technical Debt**: Skipped tests tend to stay skipped forever, accumulating technical debt
+4. **Unclear Intent**: It's not clear why a test is skipped - is it broken? Is the feature removed?
 
 ### Proper Test Management
 

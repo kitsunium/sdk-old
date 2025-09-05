@@ -1,20 +1,15 @@
 # File System (fs)
 
-Package fs provides high-performance file system operations and utilities for
-the Kitsunium kernel.
+Package fs provides high-performance file system operations and utilities for the Kitsunium kernel.
 
 ## Overview
 
-The fs package offers low-level file system operations using direct Unix system
-calls for optimal performance in kernel-level applications. It provides
-abstractions for files, directories, archives, and system statistics while
-maintaining high performance through minimal allocations and direct system call
-usage.
+The fs package offers low-level file system operations using direct Unix system calls for optimal performance in kernel-level applications. It provides abstractions for files, directories, archives,
+and system statistics while maintaining high performance through minimal allocations and direct system call usage.
 
 ## Key Features
 
-- **High-performance file I/O** using Unix system calls (`unix.Open`,
-  `unix.Read`, `unix.Write`)
+- **High-performance file I/O** using Unix system calls (`unix.Open`, `unix.Read`, `unix.Write`)
 - **Zero-copy operations** where possible using unsafe pointers
 - **Parallel I/O pipelines** for large file copy operations
 - **Comprehensive file system statistics** and monitoring
@@ -406,5 +401,4 @@ if err := file.Copy(dst); err != nil {
 
 ## License
 
-This package is part of the Kitsunium SDK and is subject to the project's
-license terms.
+This package is part of the Kitsunium SDK and is subject to the project's license terms.

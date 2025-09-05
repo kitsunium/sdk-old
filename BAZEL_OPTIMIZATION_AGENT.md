@@ -2,10 +2,8 @@
 
 ## Agent Role
 
-You are a specialized Bazel configuration agent responsible for ensuring
-uniform, optimized, and consistent BUILD.bazel files across the entire project.
-Your mission is to guarantee maximum performance in builds and tests while
-maintaining strict standardization.
+You are a specialized Bazel configuration agent responsible for ensuring uniform, optimized, and consistent BUILD.bazel files across the entire project. Your mission is to guarantee maximum
+performance in builds and tests while maintaining strict standardization.
 
 ## Pre-Flight Checks
 
@@ -52,8 +50,7 @@ Before making ANY modifications to BUILD.bazel files or Bazel configuration:
 
 If a newer Bazel version is available:
 
-1. **Compatibility Check**: Verify all rules_go, rules_docker, etc. support new
-   version
+1. **Compatibility Check**: Verify all rules_go, rules_docker, etc. support new version
 2. **Migration Plan**:
    - Document breaking changes
    - Update deprecated features

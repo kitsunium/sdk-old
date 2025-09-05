@@ -1,15 +1,11 @@
 # Parser Package
 
-Package parser provides configuration parsing utilities for various file formats
-and sources.
+Package parser provides configuration parsing utilities for various file formats and sources.
 
 ## Overview
 
-The parser package offers a unified interface for parsing configuration from
-multiple sources including JSON, YAML, TOML, INI, XML files, environment
-variables, and command-line arguments. All parsers normalize keys and values
-using the normalize package and return a flattened map[string]string
-representation.
+The parser package offers a unified interface for parsing configuration from multiple sources including JSON, YAML, TOML, INI, XML files, environment variables, and command-line arguments. All parsers
+normalize keys and values using the normalize package and return a flattened map[string]string representation.
 
 ## Supported Formats
 
@@ -97,16 +93,13 @@ config, err := parser.Load()
 All parsers implement these methods:
 
 - `Type() string` - Returns the parser type identifier
-- `Load() (map[string]string, error)` - Loads and parses from the configured
-  source
-- `LoadReader(r io.Reader) (map[string]string, error)` - Parses from an
-  io.Reader
+- `Load() (map[string]string, error)` - Loads and parses from the configured source
+- `LoadReader(r io.Reader) (map[string]string, error)` - Parses from an io.Reader
 - `LoadBytes(data []byte) (map[string]string, error)` - Parses from byte slice
 
 ## Error Handling
 
-The package uses the kerror package for structured error handling. Common errors
-include:
+The package uses the kerror package for structured error handling. Common errors include:
 
 - `ErrInvalidExtension` - File has wrong extension
 - `ErrFileNotFound` - File doesn't exist

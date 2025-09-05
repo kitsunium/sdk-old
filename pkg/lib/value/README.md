@@ -2,17 +2,13 @@
 
 ## Overview
 
-The `value` package provides utility functions for safely dereferencing pointers
-in Go. It complements the `pointer` package by offering safe extraction of
-values from pointers, returning appropriate zero values for nil pointers. This
-is particularly useful when working with APIs that return pointer types or
-handling optional struct fields.
+The `value` package provides utility functions for safely dereferencing pointers in Go. It complements the `pointer` package by offering safe extraction of values from pointers, returning appropriate
+zero values for nil pointers. This is particularly useful when working with APIs that return pointer types or handling optional struct fields.
 
 ## Features
 
 - **Safe Dereferencing**: Never panics on nil pointers
-- **Generic Functions**: Modern generic `Convert[T]` and `ConvertOr[T]`
-  functions
+- **Generic Functions**: Modern generic `Convert[T]` and `ConvertOr[T]` functions
 - **Custom Defaults**: Specify custom default values with `ConvertOr`
 - **Type-Specific Functions**: Legacy functions for backward compatibility
 - **Zero Overhead**: All functions are inlined by the compiler
@@ -63,8 +59,7 @@ config := value.ConvertOr(configPtr, DefaultConfig()) // Returns DefaultConfig()
 
 ### Type-Specific Functions (Deprecated)
 
-While maintained for backward compatibility, using generic functions is
-recommended:
+While maintained for backward compatibility, using generic functions is recommended:
 
 ```go
 value.String(ptr *string) string           // Returns "" if nil
@@ -434,8 +429,7 @@ func getIntWithDefault(ptr *int, def int) int {
 
 ## Thread Safety
 
-All functions in this package are thread-safe and can be called concurrently.
-They only read from the provided pointer and don't modify any shared state.
+All functions in this package are thread-safe and can be called concurrently. They only read from the provided pointer and don't modify any shared state.
 
 ## Zero Values Reference
 
@@ -461,8 +455,7 @@ Default zero values returned for nil pointers:
 
 ## Dependencies
 
-This package has no external dependencies and uses only Go standard library
-features.
+This package has no external dependencies and uses only Go standard library features.
 
 ## License
 

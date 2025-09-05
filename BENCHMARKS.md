@@ -1,20 +1,14 @@
 # Benchmark System
 
-This project includes a comprehensive benchmarking system with SQLite storage
-and commit comparison capabilities.
+This project includes a comprehensive benchmarking system with SQLite storage and commit comparison capabilities.
 
 ## Features
 
-- **Dual-mode benchmarks**: Separate single-core and multi-core benchmarks for
-  accurate performance comparison
-- **SQLite storage**: All benchmark results are stored in a local SQLite
-  database
-- **Git isolation**: Option to clone the repository for benchmarking specific
-  commits
-- **Performance comparison**: Compare benchmark results between different
-  commits
-- **Parallel scaling analysis**: Analyze how well your code scales across
-  multiple cores
+- **Dual-mode benchmarks**: Separate single-core and multi-core benchmarks for accurate performance comparison
+- **SQLite storage**: All benchmark results are stored in a local SQLite database
+- **Git isolation**: Option to clone the repository for benchmarking specific commits
+- **Performance comparison**: Compare benchmark results between different commits
+- **Parallel scaling analysis**: Analyze how well your code scales across multiple cores
 
 ## Quick Start
 
@@ -50,19 +44,15 @@ make bench/list
 
 ## Benchmark Structure
 
-The benchmarks are organized to clearly distinguish between single-core and
-multi-core performance:
+The benchmarks are organized to clearly distinguish between single-core and multi-core performance:
 
-- **Single-core benchmarks** (`Benchmark*_SingleCore`): Run with GOMAXPROCS=1
-  for consistent baseline measurements
-- **Multi-core benchmarks** (`Benchmark*_MultiCore`): Run with GOMAXPROCS set to
-  system CPU count for parallel performance testing
+- **Single-core benchmarks** (`Benchmark*_SingleCore`): Run with GOMAXPROCS=1 for consistent baseline measurements
+- **Multi-core benchmarks** (`Benchmark*_MultiCore`): Run with GOMAXPROCS set to system CPU count for parallel performance testing
 
 Example benchmark naming:
 
 - `BenchmarkSet_SingleCore` - Single-threaded set operations
-- `BenchmarkSet_MultiCore` - Multi-threaded set operations with parallel
-  execution
+- `BenchmarkSet_MultiCore` - Multi-threaded set operations with parallel execution
 
 ## Database Schema
 
@@ -117,14 +107,10 @@ Set_MultiCore        multi    45.6 ns        ↓ 22.1%     0 allocs
 
 ## Best Practices
 
-1. **Consistent environment**: Run benchmarks on the same machine for accurate
-   comparisons
-2. **Multiple runs**: Consider running benchmarks multiple times for statistical
-   significance
-3. **Isolate commits**: Use the `--clone` option when benchmarking specific
-   commits to avoid workspace interference
-4. **Monitor scaling**: Regularly check parallel scaling to identify concurrency
-   bottlenecks
+1. **Consistent environment**: Run benchmarks on the same machine for accurate comparisons
+2. **Multiple runs**: Consider running benchmarks multiple times for statistical significance
+3. **Isolate commits**: Use the `--clone` option when benchmarking specific commits to avoid workspace interference
+4. **Monitor scaling**: Regularly check parallel scaling to identify concurrency bottlenecks
 
 ## Troubleshooting
 

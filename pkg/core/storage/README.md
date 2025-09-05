@@ -1,18 +1,13 @@
 # Storage
 
-Package storage provides core storage abstractions and interfaces for the
-Kitsunium SDK.
+Package storage provides core storage abstractions and interfaces for the Kitsunium SDK.
 
 ## Overview
 
-The storage package defines foundational interfaces that can be implemented by
-various storage backends including databases, file systems, and in-memory
-stores. It serves as the contract between the application layer and concrete
-storage implementations.
+The storage package defines foundational interfaces that can be implemented by various storage backends including databases, file systems, and in-memory stores. It serves as the contract between the
+application layer and concrete storage implementations.
 
-This package is designed to support multiple storage backends through a unified
-interface, enabling applications to switch between different storage solutions
-without changing application code.
+This package is designed to support multiple storage backends through a unified interface, enabling applications to switch between different storage solutions without changing application code.
 
 ## Installation
 
@@ -28,14 +23,11 @@ import "github.com/kitsunium/sdk/pkg/core/storage"
 
 ## Architecture
 
-The storage package provides a pluggable architecture where different storage
-backends can be implemented behind common interfaces. This allows for:
+The storage package provides a pluggable architecture where different storage backends can be implemented behind common interfaces. This allows for:
 
-- **Backend Agnostic Code**: Write application logic once, run with any storage
-  backend
+- **Backend Agnostic Code**: Write application logic once, run with any storage backend
 - **Easy Testing**: Mock storage implementations for unit tests
-- **Flexible Deployment**: Switch between storage solutions based on environment
-  needs
+- **Flexible Deployment**: Switch between storage solutions based on environment needs
 - **Scalability**: Migrate between storage solutions as requirements evolve
 
 ## Interfaces
@@ -162,13 +154,11 @@ func transferData(store storage.TransactionalStorage) error {
 
 When implementing a storage backend:
 
-1. **Context Support**: All operations should respect context cancellation and
-   timeouts
+1. **Context Support**: All operations should respect context cancellation and timeouts
 2. **Error Handling**: Return descriptive errors with context about what failed
 3. **Resource Management**: Implement proper cleanup in Close() method
 4. **Health Checks**: Provide meaningful health status in Health() method
-5. **Concurrency Safety**: Ensure thread-safe operations if supporting
-   concurrent access
+5. **Concurrency Safety**: Ensure thread-safe operations if supporting concurrent access
 
 ### Example Implementation Skeleton
 
@@ -237,5 +227,4 @@ go test -bench=. ./pkg/core/storage/...
 
 ## License
 
-This package is part of the Kitsunium SDK and is subject to the project's
-license terms.
+This package is part of the Kitsunium SDK and is subject to the project's license terms.

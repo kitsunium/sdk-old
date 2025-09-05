@@ -1,27 +1,22 @@
 # kcache
 
-Cache implementations with explicit thread safety selection for kernel-level
-operations.
+Cache implementations with explicit thread safety selection for kernel-level operations.
 
 ## Package Design
 
-The kcache package provides cache implementations requiring explicit safety
-choice:
+The kcache package provides cache implementations requiring explicit safety choice:
 
 - **Unsafe caches**: Single-threaded access only, no synchronization overhead
 - **Safe caches**: Thread-safe with mutex protection for concurrent access
-- **Sharded variants**: Distribute keys across multiple buckets to reduce
-  contention
+- **Sharded variants**: Distribute keys across multiple buckets to reduce contention
 
-All caches must be explicitly instantiated. No global instances are provided -
-the application or framework decides on instance management.
+All caches must be explicitly instantiated. No global instances are provided - the application or framework decides on instance management.
 
 ## Thread Safety Selection
 
 ### Explicit Safety Requirement
 
-Every cache creation requires an explicit choice between safe and unsafe
-variants:
+Every cache creation requires an explicit choice between safe and unsafe variants:
 
 ```go
 // Single-threaded context: use unsafe cache
@@ -68,8 +63,7 @@ capacity := cache.Cap()
 
 - **Usage**: Single-threaded contexts only
 - **Synchronization**: None
-- **Access**: Will panic if accessed from multiple goroutines (development
-  builds)
+- **Access**: Will panic if accessed from multiple goroutines (development builds)
 - **Typical latency**: 20-30 ns/operation
 
 ### Safe Cache (`NewSafeCache`)
@@ -83,8 +77,7 @@ capacity := cache.Cap()
 
 - **Usage**: Single-threaded contexts with large datasets
 - **Synchronization**: None (sharding for cache locality only)
-- **Access**: Will panic if accessed from multiple goroutines (development
-  builds)
+- **Access**: Will panic if accessed from multiple goroutines (development builds)
 - **Typical latency**: 25-35 ns/operation
 
 ### Safe Sharded Cache (`NewSafeShardedCache`)

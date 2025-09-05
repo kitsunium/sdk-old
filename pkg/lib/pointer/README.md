@@ -2,9 +2,8 @@
 
 ## Overview
 
-The `pointer` package provides utility functions for creating pointers to
-literal values in Go. This package simplifies working with APIs that require
-pointer parameters and handling optional struct fields.
+The `pointer` package provides utility functions for creating pointers to literal values in Go. This package simplifies working with APIs that require pointer parameters and handling optional struct
+fields.
 
 ## Features
 
@@ -36,8 +35,7 @@ structPtr := pointer.Convert(MyStruct{})   // *MyStruct
 
 ### Type-Specific Functions (Deprecated)
 
-While these functions are maintained for backward compatibility, using
-`Convert[T]` is recommended:
+While these functions are maintained for backward compatibility, using `Convert[T]` is recommended:
 
 ```go
 pointer.String(v string) *string
@@ -359,13 +357,11 @@ func (b *QueryBuilder) Limit(n int) *QueryBuilder {
 
 ## Thread Safety
 
-All functions in this package are thread-safe and can be called concurrently.
-Each function creates a new pointer to a new value.
+All functions in this package are thread-safe and can be called concurrently. Each function creates a new pointer to a new value.
 
 ## Dependencies
 
-This package has no external dependencies and uses only Go standard library
-features.
+This package has no external dependencies and uses only Go standard library features.
 
 ## License
 
