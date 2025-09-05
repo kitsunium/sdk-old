@@ -198,7 +198,7 @@ go test -cover $PACKAGE | grep -E "coverage:"
 # Critical paths check (must be 100%)
 echo -e "\n=== Critical Path Coverage ==="
 CRITICAL_FUNCS=(
-    "NewBuffer"
+    "NewWidget"
     "Read"
     "Write"
     "Close"

@@ -15,17 +15,17 @@ Ensure comprehensive testing with 95% coverage minimum for kernel packages.
 ### Given-When-Then Pattern
 
 ```go
-func TestBuffer_Read_Success(t *testing.T) {
+func TestWidget_Read_Success(t *testing.T) {
     t.Parallel() // Always use parallel for independent tests
 
     // Given - Setup
-    buffer := NewBuffer(1024)
+    widget := NewWidget(1024)
     data := []byte("test data")
-    buffer.Write(data)
+    widget.Write(data)
     output := make([]byte, len(data))
 
     // When - Action
-    n, err := buffer.Read(output)
+    n, err := widget.Read(output)
 
     // Then - Assert
     require.NoError(t, err)
@@ -37,7 +37,7 @@ func TestBuffer_Read_Success(t *testing.T) {
 ### Table-Driven Tests
 
 ```go
-func TestBuffer_Validation(t *testing.T) {
+func TestWidget_Validation(t *testing.T) {
     t.Parallel()
 
     tests := []struct {
@@ -63,8 +63,8 @@ func TestBuffer_Validation(t *testing.T) {
         },
         {
             name:    "too_large",
-            size:    MaxBufferSize + 1,
-            wantErr: ErrBufferTooLarge,
+            size:    MaxWidgetSize + 1,
+            wantErr: ErrWidgetTooLarge,
         },
     }
 
@@ -75,12 +75,12 @@ func TestBuffer_Validation(t *testing.T) {
 
             if tt.wantPanic {
                 assert.Panics(t, func() {
-                    NewBuffer(tt.size)
+                    NewWidget(tt.size)
                 })
                 return
             }
 
-            buf, err := NewBufferWithError(tt.size)
+            buf, err := NewWidgetWithError(tt.size)
             if tt.wantErr != nil {
                 assert.ErrorIs(t, err, tt.wantErr)
                 assert.Nil(t, buf)
@@ -99,42 +99,42 @@ func TestBuffer_Validation(t *testing.T) {
 
 ```go
 // Define test interface
-type BufferTester interface {
+type WidgetTester interface {
     Read([]byte) (int, error)
     Write([]byte) (int, error)
 }
 
 // Shared test function
-func testBufferOperations(t *testing.T, newFunc func() BufferTester) {
+func testWidgetOperations(t *testing.T, newFunc func() WidgetTester) {
     t.Helper()
 
-    buffer := newFunc()
+    widget := newFunc()
 
     // Test operations
     data := []byte("test")
-    n, err := buffer.Write(data)
+    n, err := widget.Write(data)
     require.NoError(t, err)
     assert.Equal(t, len(data), n)
 
     output := make([]byte, len(data))
-    n, err = buffer.Read(output)
+    n, err = widget.Read(output)
     require.NoError(t, err)
     assert.Equal(t, data, output[:n])
 }
 
 // Test safe version
-func TestSafeBuffer(t *testing.T) {
+func TestSafeWidget(t *testing.T) {
     t.Parallel()
-    testBufferOperations(t, func() BufferTester {
-        return NewBuffer(1024)
+    testWidgetOperations(t, func() WidgetTester {
+        return NewWidget(1024)
     })
 }
 
 // Test unsafe version
-func TestUnsafeBuffer(t *testing.T) {
+func TestUnsafeWidget(t *testing.T) {
     t.Parallel()
-    testBufferOperations(t, func() BufferTester {
-        return NewUnsafeBuffer(1024)
+    testWidgetOperations(t, func() WidgetTester {
+        return NewUnsafeWidget(1024)
     })
 }
 ```
@@ -143,10 +143,10 @@ func TestUnsafeBuffer(t *testing.T) {
 
 ```go
 // Test safe version is thread-safe
-func TestBuffer_Concurrent_Safe(t *testing.T) {
+func TestWidget_Concurrent_Safe(t *testing.T) {
     t.Parallel()
 
-    buffer := NewBuffer(1024)
+    widget := NewWidget(1024)
     iterations := 1000
     workers := 10
 
@@ -161,12 +161,12 @@ func TestBuffer_Concurrent_Safe(t *testing.T) {
 
             data := []byte(fmt.Sprintf("worker-%d", id))
             for i := 0; i < iterations; i++ {
-                if _, err := buffer.Write(data); err != nil {
+                if _, err := widget.Write(data); err != nil {
                     errors <- err
                 }
 
                 output := make([]byte, len(data))
-                if _, err := buffer.Read(output); err != nil {
+                if _, err := widget.Read(output); err != nil {
                     errors <- err
                 }
             }
@@ -183,12 +183,12 @@ func TestBuffer_Concurrent_Safe(t *testing.T) {
 }
 
 // Test unsafe version panics on concurrent access
-func TestUnsafeBuffer_Concurrent_Panics(t *testing.T) {
+func TestUnsafeWidget_Concurrent_Panics(t *testing.T) {
     if testing.Short() {
         t.Skip("Skipping concurrency panic test in short mode")
     }
 
-    buffer := NewUnsafeBuffer(1024)
+    widget := NewUnsafeWidget(1024)
 
     // Should panic when accessed concurrently
     assert.Panics(t, func() {
@@ -198,7 +198,7 @@ func TestUnsafeBuffer_Concurrent_Panics(t *testing.T) {
         for i := 0; i < 2; i++ {
             go func() {
                 defer wg.Done()
-                buffer.Write([]byte("data"))
+                widget.Write([]byte("data"))
             }()
         }
 
@@ -213,28 +213,28 @@ func TestUnsafeBuffer_Concurrent_Panics(t *testing.T) {
 
 ```go
 // Test all paths including errors
-func TestBuffer_EdgeCases(t *testing.T) {
+func TestWidget_EdgeCases(t *testing.T) {
     t.Parallel()
 
     t.Run("nil_input", func(t *testing.T) {
-        buffer := NewBuffer(10)
-        n, err := buffer.Write(nil)
+        widget := NewWidget(10)
+        n, err := widget.Write(nil)
         assert.NoError(t, err)
         assert.Equal(t, 0, n)
     })
 
     t.Run("empty_slice", func(t *testing.T) {
-        buffer := NewBuffer(10)
-        n, err := buffer.Write([]byte{})
+        widget := NewWidget(10)
+        n, err := widget.Write([]byte{})
         assert.NoError(t, err)
         assert.Equal(t, 0, n)
     })
 
-    t.Run("buffer_overflow", func(t *testing.T) {
-        buffer := NewBuffer(10)
+    t.Run("widget_overflow", func(t *testing.T) {
+        widget := NewWidget(10)
         large := make([]byte, 20)
-        _, err := buffer.Write(large)
-        assert.ErrorIs(t, err, ErrBufferOverflow)
+        _, err := widget.Write(large)
+        assert.ErrorIs(t, err, ErrWidgetOverflow)
     })
 }
 ```
@@ -258,11 +258,11 @@ func (c *concurrencyChecker) check() {
 ```go
 // test_helpers.go
 
-// makeTestBuffer creates a buffer with test data
-func makeTestBuffer(t *testing.T, size int, pattern byte) *Buffer {
+// makeTestWidget creates a widget with test data
+func makeTestWidget(t *testing.T, size int, pattern byte) *Widget {
     t.Helper()
 
-    buf := NewBuffer(size)
+    buf := NewWidget(size)
     data := bytes.Repeat([]byte{pattern}, size)
     _, err := buf.Write(data)
     require.NoError(t, err)
@@ -270,12 +270,12 @@ func makeTestBuffer(t *testing.T, size int, pattern byte) *Buffer {
     return buf
 }
 
-// assertBufferEqual checks buffer contents
-func assertBufferEqual(t *testing.T, expected, actual []byte) {
+// assertWidgetEqual checks widget contents
+func assertWidgetEqual(t *testing.T, expected, actual []byte) {
     t.Helper()
 
     if !bytes.Equal(expected, actual) {
-        t.Errorf("Buffer mismatch\nExpected: %x\nActual:   %x", expected, actual)
+        t.Errorf("Widget mismatch\nExpected: %x\nActual:   %x", expected, actual)
     }
 }
 ```

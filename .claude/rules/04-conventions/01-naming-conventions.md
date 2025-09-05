@@ -9,18 +9,18 @@ Establish consistent naming conventions that promote code clarity, maintainabili
 ### Kernel Package Names
 
 - **Pattern**: `k{function}` (lowercase, no underscores)
-- **Examples**: `kbuffer`, `kcache`, `kpool`, `kqueue`
+- **Examples**: `foo`, `bar`, `baz`, `kqueue`
 - **Rationale**: `k` prefix identifies kernel-level optimized packages
 
 ```go
 // Good
-package kbuffer
-package kcache
+package foo
+package bar
 
 // Bad
-package buffer      // Missing k prefix
-package k_buffer    // No underscores
-package KBuffer     // Not lowercase
+package widget      // Missing k prefix
+package k_widget    // No underscores
+package KWidget     // Not lowercase
 ```
 
 ## File Naming
@@ -32,10 +32,10 @@ interface.go         # Interfaces (always first)
 constants.go         # Constants and enums
 errors.go           # Error definitions
 options.go          # Configuration options
-buffer.go           # Main type implementation
-safe_buffer.go      # Safe implementation variant
-unsafe_buffer.go    # Unsafe implementation variant
-pool.go             # Pooling implementation
+widget.go           # Main type implementation
+safe_widget.go      # Safe implementation variant
+unsafe_widget.go    # Unsafe implementation variant
+manager.go             # Managering implementation
 sharded.go          # Sharded/concurrent variant
 global.go           # Global instance management
 ```
@@ -43,10 +43,10 @@ global.go           # Global instance management
 ### Test Files
 
 ```
-buffer_test.go              # Unit tests for buffer.go
-safe_buffer_test.go         # Tests for safe implementation
-kbuffer_bench_test.go       # Consolidated benchmarks
-kbuffer_integration_test.go # Integration tests
+widget_test.go              # Unit tests for widget.go
+safe_widget_test.go         # Tests for safe implementation
+foo_bench_test.go       # Consolidated benchmarks
+foo_integration_test.go # Integration tests
 ```
 
 ## Type Naming
@@ -60,20 +60,20 @@ type Writer interface { }
 type Closer interface { }
 
 // Use descriptive names when -er doesn't fit
-type Buffer interface { }
-type Pool interface { }
+type Widget interface { }
+type Manager interface { }
 ```
 
 ### Structs
 
 ```go
 // Public structs: PascalCase
-type SafeBuffer struct { }
-type UnsafeBuffer struct { }
+type SafeWidget struct { }
+type UnsafeWidget struct { }
 
 // Private structs: camelCase
-type bufferShard struct { }
-type poolEntry struct { }
+type widgetShard struct { }
+type managerEntry struct { }
 ```
 
 ### Type Aliases
@@ -81,7 +81,7 @@ type poolEntry struct { }
 ```go
 // Meaningful names that indicate purpose
 type ErrorCode int32
-type BufferState uint32
+type WidgetState uint32
 type ShardIndex uint64
 ```
 
@@ -91,37 +91,37 @@ type ShardIndex uint64
 
 ```go
 // New{Type} pattern
-func NewBuffer(size int) Buffer { }
-func NewSafeBuffer(size int) *SafeBuffer { }
-func NewUnsafeBuffer(size int) *UnsafeBuffer { }
+func NewWidget(size int) Widget { }
+func NewSafeWidget(size int) *SafeWidget { }
+func NewUnsafeWidget(size int) *UnsafeWidget { }
 
 // Private constructors: lowercase
-func newBufferShard() *bufferShard { }
+func newWidgetShard() *widgetShard { }
 ```
 
 ### Methods
 
 ```go
 // PascalCase for exported methods
-func (b *Buffer) Write([]byte) (int, error) { }
-func (b *Buffer) Read([]byte) (int, error) { }
-func (b *Buffer) Reset() { }
+func (b *Widget) Write([]byte) (int, error) { }
+func (b *Widget) Read([]byte) (int, error) { }
+func (b *Widget) Reset() { }
 
 // camelCase for private methods
-func (b *Buffer) ensureCapacity(int) { }
-func (b *Buffer) growIfNeeded() { }
+func (b *Widget) ensureCapacity(int) { }
+func (b *Widget) growIfNeeded() { }
 ```
 
 ### Getters and Setters
 
 ```go
 // No Get prefix for getters
-func (b *Buffer) Len() int { }      // Not GetLen()
-func (b *Buffer) Cap() int { }      // Not GetCap()
+func (b *Widget) Len() int { }      // Not GetLen()
+func (b *Widget) Cap() int { }      // Not GetCap()
 
 // Set prefix for setters
-func (b *Buffer) SetSize(int) { }
-func (b *Buffer) SetTimeout(time.Duration) { }
+func (b *Widget) SetSize(int) { }
+func (b *Widget) SetTimeout(time.Duration) { }
 ```
 
 ## Variable Naming
@@ -158,11 +158,11 @@ const (
 for i := 0; i < len(data); i++ { }
 
 // Descriptive names in larger scopes
-var bufferPool *sync.Pool
-var globalInstance *Buffer
+var widgetManager *sync.Manager
+var globalInstance *Widget
 
 // Common abbreviations
-buf  // buffer
+buf  // widget
 err  // error
 ctx  // context
 req  // request
@@ -174,9 +174,9 @@ msg  // message
 
 ```go
 // Single letter or short abbreviation
-func (b *Buffer) Write() { }       // b for Buffer
-func (p *Pool) Get() { }            // p for Pool
-func (sb *SafeBuffer) Lock() { }   // sb for SafeBuffer
+func (b *Widget) Write() { }       // b for Widget
+func (p *Manager) Get() { }            // p for Manager
+func (sw *SafeWidget) Lock() { }    // sw for SafeWidget
 ```
 
 ## Error Naming
@@ -186,7 +186,7 @@ func (sb *SafeBuffer) Lock() { }   // sb for SafeBuffer
 ```go
 // Err prefix for sentinel errors
 var (
-    ErrBufferFull = errors.New("buffer full")
+    ErrWidgetFull = errors.New("widget full")
     ErrClosed = errors.New("closed")
     ErrTimeout = errors.New("timeout")
 )
@@ -209,7 +209,7 @@ type ConfigError struct { }
 // With prefix for option functions
 func WithSize(size int) Option { }
 func WithTimeout(d time.Duration) Option { }
-func WithPooling(enabled bool) Option { }
+func WithManagering(enabled bool) Option { }
 ```
 
 ## Special Naming Patterns
@@ -236,8 +236,8 @@ func WithPooling(enabled bool) Option { }
 ### Internal Packages
 
 ```
-pkg/kernel/kbuffer/internal/cache/   # Internal caching
-pkg/kernel/kbuffer/internal/unsafe/  # Unsafe utilities
+pkg/kernel/foo/internal/cache/   # Internal caching
+pkg/kernel/foo/internal/unsafe/  # Unsafe utilities
 ```
 
 ## Acronym Handling
@@ -285,12 +285,12 @@ HTTPClient  // not HttpClient
 
 ```go
 // Test{Type}_{Method}_{Scenario}
-func TestBuffer_Write_Success(t *testing.T) { }
-func TestBuffer_Write_BufferFull(t *testing.T) { }
-func TestBuffer_Write_ConcurrentAccess(t *testing.T) { }
+func TestWidget_Write_Success(t *testing.T) { }
+func TestWidget_Write_WidgetFull(t *testing.T) { }
+func TestWidget_Write_ConcurrentAccess(t *testing.T) { }
 
 // Benchmark naming
-func BenchmarkBuffer_Write(b *testing.B) { }
+func BenchmarkWidget_Write(b *testing.B) { }
 func BenchmarkSafeVsUnsafe(b *testing.B) { }
 ```
 

@@ -17,12 +17,12 @@ Define mandatory documentation standards for kernel packages to ensure code is s
 ### Package Comment Format
 
 ```go
-// Package kbuffer provides high-performance, thread-safe and unsafe buffer
+// Package foo provides high-performance, thread-safe and unsafe widget
 // implementations optimized for kernel operations.
 //
 // The package offers two implementations:
-//   - Safe: Thread-safe buffer with mutex protection
-//   - Unsafe: Lock-free buffer for single-threaded use
+//   - Safe: Thread-safe widget with mutex protection
+//   - Unsafe: Lock-free widget for single-threaded use
 //
 // Performance characteristics:
 //   - Zero-allocation in hot paths
@@ -32,7 +32,7 @@ Define mandatory documentation standards for kernel packages to ensure code is s
 // Usage:
 //
 //	// Safe version for concurrent use
-//	buf := kbuffer.NewBuffer(1024)
+//	buf := foo.NewWidget(1024)
 //	defer buf.Close()
 //
 //	n, err := buf.Write(data)
@@ -41,7 +41,7 @@ Define mandatory documentation standards for kernel packages to ensure code is s
 //	}
 //
 // See README.md for detailed benchmarks and examples.
-package kbuffer
+package foo
 ```
 
 ### Documentation File (doc.go)
@@ -50,28 +50,28 @@ package kbuffer
 // doc.go
 
 /*
-Package kbuffer implements high-performance buffer operations for kernel use.
+Package foo implements high-performance widget operations for kernel use.
 
 Architecture Overview
 
 The package is structured around two core implementations:
 
-1. Safe Buffer (buffer.go)
+1. Safe Widget (widget.go)
    - Thread-safe with minimal lock contention
    - Suitable for concurrent producers/consumers
    - ~1000 ns/op for typical operations
 
-2. Unsafe Buffer (buffer_unsafe.go)
+2. Unsafe Widget (widget_unsafe.go)
    - Zero-overhead, lock-free implementation
    - Single-threaded use only
    - ~400 ns/op for typical operations (60% faster)
 
 Memory Management
 
-All buffers use pre-allocated memory pools to minimize GC pressure:
-   - Small buffers: 1KB-4KB (pooled)
-   - Medium buffers: 4KB-64KB (pooled)
-   - Large buffers: >64KB (direct allocation)
+All widgets use pre-allocated memory managers to minimize GC pressure:
+   - Small widgets: 1KB-4KB (managered)
+   - Medium widgets: 4KB-64KB (managered)
+   - Large widgets: >64KB (direct allocation)
 
 Thread Safety
 
@@ -85,7 +85,7 @@ Unsafe version requirements:
    - Panics on concurrent access (debug mode)
    - No checks in production (unsafe_no_check tag)
 */
-package kbuffer
+package foo
 ```
 
 ## Type Documentation
@@ -93,9 +93,9 @@ package kbuffer
 ### Struct Documentation
 
 ```go
-// Buffer represents a high-performance byte buffer optimized for kernel operations.
+// Widget represents a high-performance byte widget optimized for kernel operations.
 //
-// The buffer automatically grows as needed and provides zero-copy operations
+// The widget automatically grows as needed and provides zero-copy operations
 // where possible. It is designed to minimize allocations and maximize CPU
 // cache efficiency.
 //
@@ -103,11 +103,11 @@ package kbuffer
 //   [header|64 bytes padding|data...]
 //   - header: 16 bytes for metadata
 //   - padding: ensures data starts on cache line
-//   - data: actual buffer content
+//   - data: actual widget content
 //
 // Concurrency: This type is thread-safe.
-type Buffer struct {
-    // data holds the buffer content, cache-line aligned
+type Widget struct {
+    // data holds the widget content, cache-line aligned
     data []byte
 
     // read position for streaming operations
@@ -155,14 +155,14 @@ type Reader interface {
 ### Public Method Documentation
 
 ```go
-// Write appends the contents of p to the buffer, growing it as needed.
+// Write appends the contents of p to the widget, growing it as needed.
 //
 // The return value n is the length of p; err is always nil.
-// If the buffer becomes too large, Write will panic with ErrTooLarge.
+// If the widget becomes too large, Write will panic with ErrTooLarge.
 //
 // Performance characteristics:
 //   - O(1) amortized time complexity
-//   - Zero allocations if buffer has capacity
+//   - Zero allocations if widget has capacity
 //   - Automatically grows by 2x when needed
 //
 // Concurrency: Safe for concurrent calls.
@@ -170,7 +170,7 @@ type Reader interface {
 // Example:
 //   n, err := buf.Write([]byte("hello"))
 //   // n == 5, err == nil
-func (b *Buffer) Write(p []byte) (n int, err error) {
+func (b *Widget) Write(p []byte) (n int, err error) {
     // ... implementation
 }
 ```
@@ -178,7 +178,7 @@ func (b *Buffer) Write(p []byte) (n int, err error) {
 ### Private Method Documentation
 
 ```go
-// grow increases the buffer capacity to at least n bytes.
+// grow increases the widget capacity to at least n bytes.
 //
 // Preconditions:
 //   - b.mu must be held for writing
@@ -190,7 +190,7 @@ func (b *Buffer) Write(p []byte) (n int, err error) {
 //
 // This method uses a growth factor of 2x up to 1MB, then 1.25x for larger sizes
 // to balance memory usage and allocation frequency.
-func (b *Buffer) grow(n int) {
+func (b *Widget) grow(n int) {
     // ... implementation
 }
 ```
@@ -224,7 +224,7 @@ func unsafeStringToBytes(s string) []byte {
 ### Memory Layout Documentation
 
 ```go
-// node represents a buffer pool node with optimized memory layout.
+// node represents a widget manager node with optimized memory layout.
 //
 // Memory layout (64 bytes total):
 //   Offset  Size  Field
@@ -241,8 +241,8 @@ func unsafeStringToBytes(s string) []byte {
 //go:notinheap
 type node struct {
     next *node      // Next node in free list
-    data *byte      // Pointer to buffer data
-    size int        // Buffer size
+    data *byte      // Pointer to widget data
+    size int        // Widget size
     used int32      // Atomic usage flag
     _    [32]byte   // Padding to 64 bytes (cache line)
 }
@@ -253,7 +253,7 @@ type node struct {
 ### Benchmark Documentation
 
 ```go
-// BenchmarkBuffer_Write measures buffer write performance.
+// BenchmarkWidget_Write measures widget write performance.
 //
 // Expected performance:
 //   - Safe version: ~1000 ns/op, 0 allocs/op
@@ -264,9 +264,9 @@ type node struct {
 // throughput under typical workload conditions.
 //
 // Results on reference hardware (Intel i7-9700K @ 3.6GHz):
-//   BenchmarkBuffer_Write_Safe-8     1000000    1050 ns/op    0 B/op    0 allocs/op
-//   BenchmarkBuffer_Write_Unsafe-8   3000000     420 ns/op    0 B/op    0 allocs/op
-func BenchmarkBuffer_Write(b *testing.B) {
+//   BenchmarkWidget_Write_Safe-8     1000000    1050 ns/op    0 B/op    0 allocs/op
+//   BenchmarkWidget_Write_Unsafe-8   3000000     420 ns/op    0 B/op    0 allocs/op
+func BenchmarkWidget_Write(b *testing.B) {
     // ... benchmark code
 }
 ```
@@ -276,24 +276,24 @@ func BenchmarkBuffer_Write(b *testing.B) {
 ### Error Variable Documentation
 
 ```go
-// ErrBufferFull is returned when attempting to write to a full buffer
+// ErrWidgetFull is returned when attempting to write to a full widget
 // that cannot be grown due to size limits.
 //
 // This error typically occurs when:
-//   - Buffer reaches MaxBufferSize (default: 1GB)
+//   - Widget reaches MaxWidgetSize (default: 1GB)
 //   - System is out of memory
 //   - Write would cause integer overflow
 //
-// Recovery: Create a new buffer or drain existing buffer before writing.
-var ErrBufferFull = errors.New("buffer: full")
+// Recovery: Create a new widget or drain existing widget before writing.
+var ErrWidgetFull = errors.New("widget: full")
 
 // ErrInvalidOffset is returned when seeking to an invalid position.
 //
 // Common causes:
 //   - Negative offset
-//   - Offset beyond buffer length
+//   - Offset beyond widget length
 //   - Integer overflow in offset calculation
-var ErrInvalidOffset = errors.New("buffer: invalid offset")
+var ErrInvalidOffset = errors.New("widget: invalid offset")
 ```
 
 ## Constant Documentation
@@ -301,26 +301,26 @@ var ErrInvalidOffset = errors.New("buffer: invalid offset")
 ### Constant Group Documentation
 
 ```go
-// Buffer size constants define standard buffer capacities.
+// Widget size constants define standard widget capacities.
 //
 // These sizes are chosen to align with common system parameters:
-//   - SmallBufferSize: Typical network packet
-//   - DefaultBufferSize: OS page size
-//   - LargeBufferSize: L2 cache size
-//   - MaxBufferSize: Prevent excessive memory use
+//   - SmallWidgetSize: Typical network packet
+//   - DefaultWidgetSize: OS page size
+//   - LargeWidgetSize: L2 cache size
+//   - MaxWidgetSize: Prevent excessive memory use
 const (
-    // SmallBufferSize is used for small temporary buffers.
-    SmallBufferSize = 1024 // 1KB
+    // SmallWidgetSize is used for small temporary widgets.
+    SmallWidgetSize = 1024 // 1KB
 
-    // DefaultBufferSize is the standard buffer size for most operations.
-    DefaultBufferSize = 4096 // 4KB
+    // DefaultWidgetSize is the standard widget size for most operations.
+    DefaultWidgetSize = 4096 // 4KB
 
-    // LargeBufferSize is used for bulk operations.
-    LargeBufferSize = 65536 // 64KB
+    // LargeWidgetSize is used for bulk operations.
+    LargeWidgetSize = 65536 // 64KB
 
-    // MaxBufferSize is the maximum allowed buffer size.
-    // Attempting to grow beyond this size will return ErrBufferFull.
-    MaxBufferSize = 1 << 30 // 1GB
+    // MaxWidgetSize is the maximum allowed widget size.
+    // Attempting to grow beyond this size will return ErrWidgetFull.
+    MaxWidgetSize = 1 << 30 // 1GB
 )
 ```
 
@@ -335,7 +335,7 @@ func process(data []byte) error {
         return ErrEmptyInput
     }
 
-    // Pre-allocate result buffer based on input size
+    // Pre-allocate result widget based on input size
     // We use 2x size to handle worst-case expansion
     result := make([]byte, 0, len(data)*2)
 
@@ -363,7 +363,7 @@ func process(data []byte) error {
 // Consider processing in 64-byte chunks to match cache line size.
 
 // FIXME(username): This causes excessive allocations under load
-// Need to implement a pool for these temporary buffers.
+// Need to implement a manager for these temporary widgets.
 
 // NOTE: This intentionally doesn't check for overflow
 // because the input is validated to be within safe bounds.

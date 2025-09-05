@@ -67,8 +67,8 @@ import (
     "go.uber.org/zap"
 
     // Internal imports (alphabetically)
-    "pkg/kernel/kbuffer"
-    "pkg/kernel/kpool"
+    "pkg/kernel/foo"
+    "pkg/kernel/baz"
     "pkg/util/validation"
 )
 ```
@@ -102,7 +102,7 @@ type TypeName struct {
 
     // Unexported fields next (logically grouped)
     mu        sync.RWMutex  // Guards all fields below
-    data      []byte        // Internal buffer
+    data      []byte        // Internal widget
     position  int           // Current position
     closed    bool          // Closed flag
 
@@ -172,8 +172,8 @@ type allocator interface {
     free([]byte)
 }
 
-// pool defines internal pooling behavior.
-type pool interface {
+// manager defines internal managering behavior.
+type manager interface {
     get() interface{}
     put(interface{})
 }
@@ -190,13 +190,13 @@ package kpackage
 
 // Size constants
 const (
-    // MinSize is the minimum buffer size
+    // MinSize is the minimum widget size
     MinSize = 512
 
-    // DefaultSize is the default buffer size
+    // DefaultSize is the default widget size
     DefaultSize = 4096
 
-    // MaxSize is the maximum buffer size
+    // MaxSize is the maximum widget size
     MaxSize = 1 << 20 // 1MB
 )
 
@@ -467,8 +467,8 @@ var (
     defaultTimeout = 30 * time.Second
     maxRetries    = 3
 
-    // Pools
-    bufferPool = &sync.Pool{
+    // Managers
+    widgetManager = &sync.Manager{
         New: func() interface{} {
             return make([]byte, 1024)
         },
@@ -482,7 +482,7 @@ var (
 // Avoid scattered declarations
 var timeout = 30 * time.Second
 var retries = 3
-var pool = &sync.Pool{}
+var manager = &sync.Manager{}
 ```
 
 ## Do's

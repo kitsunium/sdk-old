@@ -21,10 +21,10 @@ Define and enforce comprehensive test coverage requirements to ensure kernel pac
 
 ```bash
 # Package coverage
-go test -cover ./pkg/kernel/kbuffer
+go test -cover ./pkg/kernel/foo
 
 # Detailed coverage with profile
-go test -coverprofile=coverage.out ./pkg/kernel/kbuffer
+go test -coverprofile=coverage.out ./pkg/kernel/foo
 go tool cover -html=coverage.out
 
 # Coverage by function
@@ -156,7 +156,7 @@ func validateInvariant(x int) {
 
 ```go
 // coverage_exclusions.go
-package kbuffer
+package foo
 
 // CoverageExclusions documents justified coverage gaps
 var CoverageExclusions = []struct {
@@ -166,13 +166,13 @@ var CoverageExclusions = []struct {
     Reason   string
 }{
     {
-        File:     "unsafe_buffer.go",
+        File:     "unsafe_widget.go",
         Line:     142,
         Function: "recoverPanic",
         Reason:   "Defensive panic recovery, should never execute in normal operation",
     },
     {
-        File:     "buffer_windows.go",
+        File:     "widget_windows.go",
         Line:     0,
         Function: "all",
         Reason:   "Windows-specific implementation tested on Windows CI",
@@ -231,7 +231,7 @@ func TestProcess_ErrorCases(t *testing.T) {
 ```go
 // Ensure concurrent paths are covered
 func TestConcurrentPaths(t *testing.T) {
-    buf := NewBuffer(1024)
+    buf := NewWidget(1024)
 
     // Force both lock acquisition paths
     var wg sync.WaitGroup
@@ -252,19 +252,19 @@ func TestConcurrentPaths(t *testing.T) {
 
 ```go
 // Group tests by coverage area
-func TestBuffer_CoreOperations(t *testing.T) {
+func TestWidget_CoreOperations(t *testing.T) {
     // Tests that cover main functionality
 }
 
-func TestBuffer_ErrorHandling(t *testing.T) {
+func TestWidget_ErrorHandling(t *testing.T) {
     // Tests that cover all error paths
 }
 
-func TestBuffer_EdgeCases(t *testing.T) {
+func TestWidget_EdgeCases(t *testing.T) {
     // Tests that cover boundary conditions
 }
 
-func TestBuffer_Concurrency(t *testing.T) {
+func TestWidget_Concurrency(t *testing.T) {
     // Tests that cover concurrent access
 }
 ```
@@ -289,8 +289,8 @@ func NewFeature(input string) string {
 
 ```go
 // Verify tests actually test behavior
-func TestBufferWrite_DetectsErrors(t *testing.T) {
-    buf := NewBuffer(10)
+func TestWidgetWrite_DetectsErrors(t *testing.T) {
+    buf := NewWidget(10)
 
     // This test should fail if we remove bounds check
     _, err := buf.Write(make([]byte, 20))

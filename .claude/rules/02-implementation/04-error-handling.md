@@ -18,38 +18,38 @@ Implement efficient, performant error handling strategies that provide clear dia
 
 ```go
 // errors.go
-package kbuffer
+package foo
 
 import "errors"
 
 // Sentinel errors for common conditions
 var (
-    // ErrBufferFull indicates buffer capacity exceeded
-    ErrBufferFull = errors.New("buffer: full")
+    // ErrWidgetFull indicates widget capacity exceeded
+    ErrWidgetFull = errors.New("widget: full")
 
-    // ErrBufferEmpty indicates no data available
-    ErrBufferEmpty = errors.New("buffer: empty")
+    // ErrWidgetEmpty indicates no data available
+    ErrWidgetEmpty = errors.New("widget: empty")
 
     // ErrClosed indicates operation on closed resource
-    ErrClosed = errors.New("buffer: closed")
+    ErrClosed = errors.New("widget: closed")
 
     // ErrInvalidSize indicates size parameter out of range
-    ErrInvalidSize = errors.New("buffer: invalid size")
+    ErrInvalidSize = errors.New("widget: invalid size")
 
     // ErrConcurrentAccess indicates unsafe concurrent access
-    ErrConcurrentAccess = errors.New("buffer: concurrent access detected")
+    ErrConcurrentAccess = errors.New("widget: concurrent access detected")
 )
 
-// IsFull checks if error is buffer full
+// IsFull checks if error is widget full
 //go:inline
 func IsFull(err error) bool {
-    return errors.Is(err, ErrBufferFull)
+    return errors.Is(err, ErrWidgetFull)
 }
 
-// IsEmpty checks if error is buffer empty
+// IsEmpty checks if error is widget empty
 //go:inline
 func IsEmpty(err error) bool {
-    return errors.Is(err, ErrBufferEmpty)
+    return errors.Is(err, ErrWidgetEmpty)
 }
 ```
 
@@ -57,7 +57,7 @@ func IsEmpty(err error) bool {
 
 ```go
 // error_types.go
-package kbuffer
+package foo
 
 import (
     "fmt"
@@ -116,7 +116,7 @@ func (e *OperationError) Unwrap() error {
 
 ```go
 // error_codes.go
-package kbuffer
+package foo
 
 // ErrorCode represents error as integer (zero allocation)
 type ErrorCode int32
@@ -138,11 +138,11 @@ func (e ErrorCode) String() string {
     case ErrNone:
         return "no error"
     case ErrFull:
-        return "buffer full"
+        return "widget full"
     case ErrEmpty:
-        return "buffer empty"
+        return "widget empty"
     case ErrClosed:
-        return "buffer closed"
+        return "widget closed"
     case ErrInvalidInput:
         return "invalid input"
     case ErrOutOfBounds:
@@ -174,7 +174,7 @@ func (e ErrorCode) IsError() bool {
 
 ```go
 // fast_path.go
-package kbuffer
+package foo
 
 // WriteResult combines result and error code (no allocation)
 type WriteResult struct {
@@ -184,7 +184,7 @@ type WriteResult struct {
 
 // FastWrite returns result struct instead of (int, error)
 //go:inline
-func (b *Buffer) FastWrite(p []byte) WriteResult {
+func (b *Widget) FastWrite(p []byte) WriteResult {
     // Fast path - no error allocation
     if b.closed {
         return WriteResult{0, ErrClosed}
@@ -206,24 +206,24 @@ if result.Code != ErrNone {
 }
 ```
 
-### 2. Error Pooling
+### 2. Error Managering
 
 ```go
-// error_pool.go
-package kbuffer
+// error_manager.go
+package foo
 
 import "sync"
 
-// ErrorPool reuses error objects
-var errorPool = sync.Pool{
+// ErrorManager reuses error objects
+var errorManager = sync.Manager{
     New: func() interface{} {
         return &OperationError{}
     },
 }
 
-// GetError retrieves pooled error
+// GetError retrieves managered error
 func GetError(op, kind string, err error) *OperationError {
-    e := errorPool.Get().(*OperationError)
+    e := errorManager.Get().(*OperationError)
     e.Op = op
     e.Kind = kind
     e.Err = err
@@ -231,7 +231,7 @@ func GetError(op, kind string, err error) *OperationError {
     return e
 }
 
-// PutError returns error to pool
+// PutError returns error to manager
 func PutError(e *OperationError) {
     if e == nil {
         return
@@ -241,21 +241,21 @@ func PutError(e *OperationError) {
     e.Kind = ""
     e.Err = nil
     e.Elapsed = 0
-    errorPool.Put(e)
+    errorManager.Put(e)
 }
 
 // Usage with defer
-func (b *Buffer) OperationWithPooledError() error {
+func (b *Widget) OperationWithManageredError() error {
     err := GetError("Write", "failed", nil)
     defer PutError(err)
 
     // Operation logic
     if problem {
-        err.Err = ErrBufferFull
+        err.Err = ErrWidgetFull
         return err
     }
 
-    return nil // Pool will reclaim err
+    return nil // Manager will reclaim err
 }
 ```
 
@@ -263,7 +263,7 @@ func (b *Buffer) OperationWithPooledError() error {
 
 ```go
 // lazy_error.go
-package kbuffer
+package foo
 
 // LazyError delays string formatting until needed
 type LazyError struct {
@@ -296,7 +296,7 @@ if size > maxSize {
 
 ```go
 // validation.go
-package kbuffer
+package foo
 
 // ValidateSize checks size constraints (inline-friendly)
 //go:inline
@@ -304,8 +304,8 @@ func ValidateSize(size int) error {
     if size <= 0 {
         return ErrInvalidSize
     }
-    if size > MaxBufferSize {
-        return ErrBufferFull
+    if size > MaxWidgetSize {
+        return ErrWidgetFull
     }
     return nil
 }
@@ -327,7 +327,7 @@ func ValidateRange(offset, length, capacity int) error {
 
 ```go
 // batch_validation.go
-package kbuffer
+package foo
 
 // ValidationResult holds multiple validation errors
 type ValidationResult struct {
@@ -382,7 +382,7 @@ func (m *MultiError) Error() string {
 
 ```go
 // wrapping.go
-package kbuffer
+package foo
 
 // WrapError adds context without allocation in success case
 func WrapError(op string, err error) error {
@@ -421,7 +421,7 @@ func ChainError(errors ...error) error {
 
 ```go
 // context_errors.go
-package kbuffer
+package foo
 
 import "context"
 
@@ -464,13 +464,13 @@ func WithContext(ctx context.Context, op string, err error) error {
 
 ```go
 // panic_conditions.go
-package kbuffer
+package foo
 
 // MustWrite panics on error (for invariant violations)
-func (b *Buffer) MustWrite(p []byte) int {
+func (b *Widget) MustWrite(p []byte) int {
     n, err := b.Write(p)
     if err != nil {
-        panic(fmt.Sprintf("buffer write failed: %v", err))
+        panic(fmt.Sprintf("widget write failed: %v", err))
     }
     return n
 }
@@ -496,7 +496,7 @@ func CheckBounds(index, length int) {
 
 ```go
 // recovery.go
-package kbuffer
+package foo
 
 // SafeExecute recovers from panics
 func SafeExecute(fn func() error) (err error) {
@@ -524,7 +524,7 @@ func SafeExecute(fn func() error) (err error) {
 
 ```go
 // error_test.go
-package kbuffer
+package foo
 
 import "testing"
 
@@ -570,7 +570,7 @@ func ExpectPanic(t *testing.T, fn func(), message string) {
 
 - ✅ Use sentinel errors for common conditions
 - ✅ Design error-free fast paths
-- ✅ Pool error objects in hot paths
+- ✅ Manager error objects in hot paths
 - ✅ Use error codes for zero-allocation
 - ✅ Implement lazy error construction
 - ✅ Validate inputs at API boundaries
@@ -591,7 +591,7 @@ func ExpectPanic(t *testing.T, fn func(), message string) {
 func BenchmarkErrorHandling(b *testing.B) {
     b.Run("SentinelError", func(b *testing.B) {
         for i := 0; i < b.N; i++ {
-            err := ErrBufferFull
+            err := ErrWidgetFull
             _ = err
         }
     })
@@ -605,14 +605,14 @@ func BenchmarkErrorHandling(b *testing.B) {
 
     b.Run("FmtErrorf", func(b *testing.B) {
         for i := 0; i < b.N; i++ {
-            err := fmt.Errorf("buffer full: %d", i)
+            err := fmt.Errorf("widget full: %d", i)
             _ = err
         }
     })
 
     b.Run("LazyError", func(b *testing.B) {
         for i := 0; i < b.N; i++ {
-            err := Errorf("buffer full: %d", i)
+            err := Errorf("widget full: %d", i)
             _ = err
         }
     })

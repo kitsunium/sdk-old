@@ -274,7 +274,7 @@ go test -memprofile=mem.prof -bench=. -benchtime=10s
 # Check for leaks
 go tool pprof -inuse_space mem.prof << EOF
 top
-list Buffer.Write
+list Widget.Write
 EOF
 
 # Automated leak check
@@ -314,7 +314,7 @@ done
 golint ./... | grep -E "exported .* should have comment"
 
 # Ensure README exists
-if [ ! -f "pkg/kernel/kbuffer/README.md" ]; then
+if [ ! -f "pkg/kernel/foo/README.md" ]; then
     echo "Missing README.md"
     exit 1
 fi

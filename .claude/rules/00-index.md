@@ -94,23 +94,23 @@ Kernel Package? → Yes → 95% minimum
 
 ```bash
 # Run tests
-go test -v -race ./pkg/kernel/kbuffer
+go test -v -race ./pkg/kernel/foo
 
 # Run benchmarks
-go test -bench=. -benchmem ./pkg/kernel/kbuffer
+go test -bench=. -benchmem ./pkg/kernel/foo
 
 # Check coverage
-go test -cover ./pkg/kernel/kbuffer
+go test -cover ./pkg/kernel/foo
 
 # Compare safe vs unsafe
-go test -bench="(Safe|Unsafe)" -benchmem ./pkg/kernel/kbuffer
+go test -bench="(Safe|Unsafe)" -benchmem ./pkg/kernel/foo
 ```
 
 ### Full Validation
 
 ```bash
 # Complete validation suite
-make validate-kernel PKG=kbuffer
+make validate-kernel PKG=foo
 ```
 
 ## Navigation by Task

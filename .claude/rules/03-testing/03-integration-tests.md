@@ -21,43 +21,43 @@ Design integration tests that validate kernel packages work correctly with other
 //go:build integration
 // +build integration
 
-package kbuffer_test
+package foo_test
 
 import (
     "testing"
-    "github.com/org/project/pkg/kernel/kbuffer"
-    "github.com/org/project/pkg/kernel/kpool"
-    "github.com/org/project/pkg/kernel/kcache"
+    "github.com/org/project/pkg/kernel/foo"
+    "github.com/org/project/pkg/kernel/bar"
+    "github.com/org/project/pkg/kernel/baz"
 )
 
-func TestBufferPoolIntegration(t *testing.T) {
-    // Test buffer with pool integration
-    pool := kpool.New(kpool.WithFactory(func() interface{} {
-        return kbuffer.NewBuffer(1024)
+func TestFooBarIntegration(t *testing.T) {
+    // Test foo with bar integration
+    manager := bar.New(bar.WithFactory(func() interface{} {
+        return foo.NewWidget(1024)
     }))
 
     // Simulate workflow
     for i := 0; i < 1000; i++ {
-        buf := pool.Get().(kbuffer.Buffer)
+        widget := manager.Get().(foo.Widget)
         data := []byte(fmt.Sprintf("test-%d", i))
 
-        n, err := buf.Write(data)
+        n, err := widget.Process(data)
         require.NoError(t, err)
         assert.Equal(t, len(data), n)
 
-        buf.Reset()
-        pool.Put(buf)
+        widget.Reset()
+        manager.Put(widget)
     }
 }
 
-func TestBufferCacheIntegration(t *testing.T) {
-    cache := kcache.New(kcache.WithSize(100))
+func TestFooCacheIntegration(t *testing.T) {
+    cache := baz.New(baz.WithSize(100))
 
-    // Store buffers in cache
+    // Store widgets in cache
     for i := 0; i < 10; i++ {
-        buf := kbuffer.NewBuffer(1024)
-        buf.Write([]byte(fmt.Sprintf("cached-%d", i)))
-        cache.Set(fmt.Sprintf("key-%d", i), buf)
+        widget := foo.NewWidget(1024)
+        widget.Process([]byte(fmt.Sprintf("cached-%d", i)))
+        cache.Set(fmt.Sprintf("key-%d", i), widget)
     }
 
     // Retrieve and verify
@@ -65,8 +65,8 @@ func TestBufferCacheIntegration(t *testing.T) {
         val, ok := cache.Get(fmt.Sprintf("key-%d", i))
         require.True(t, ok)
 
-        buf := val.(kbuffer.Buffer)
-        assert.Equal(t, len(fmt.Sprintf("cached-%d", i)), buf.Len())
+        widget := val.(foo.Widget)
+        assert.Equal(t, len(fmt.Sprintf("cached-%d", i)), widget.Len())
     }
 }
 ```
@@ -74,7 +74,7 @@ func TestBufferCacheIntegration(t *testing.T) {
 ### Load Testing
 
 ```go
-func TestBufferUnderLoad(t *testing.T) {
+func TestSystemUnderLoad(t *testing.T) {
     if testing.Short() {
         t.Skip("skipping load test")
     }
@@ -82,10 +82,10 @@ func TestBufferUnderLoad(t *testing.T) {
     const (
         workers   = 100
         operations = 10000
-        bufferSize = 4096
+        dataSize = 4096
     )
 
-    buf := kbuffer.NewShardedBuffer(bufferSize * workers)
+    system := foo.NewShardedSystem(dataSize * workers)
 
     var wg sync.WaitGroup
     errors := make(chan error, workers)
@@ -156,7 +156,7 @@ func TestMemoryStress(t *testing.T) {
     // Stress test
     for time.Now().Before(deadline) {
         size := rand.Intn(65536) + 1024
-        buf := kbuffer.NewBuffer(size)
+        buf := foo.NewWidget(size)
 
         data := make([]byte, size/2)
         buf.Write(data)
@@ -191,8 +191,8 @@ func TestFileProcessingScenario(t *testing.T) {
     require.NoError(t, err)
     defer file.Close()
 
-    // Process using buffer
-    buf := kbuffer.NewBuffer(4096)
+    // Process using widget
+    buf := foo.NewWidget(4096)
     reader := bufio.NewReader(file)
 
     var totalBytes int64
@@ -207,16 +207,16 @@ func TestFileProcessingScenario(t *testing.T) {
         require.NoError(t, err)
         totalBytes += int64(n)
 
-        // Process buffer when full
+        // Process widget when full
         if buf.Len() > 3072 {
-            processBuffer(buf)
+            processWidget(buf)
             buf.Reset()
         }
     }
 
     // Process remaining
     if buf.Len() > 0 {
-        processBuffer(buf)
+        processWidget(buf)
     }
 
     assert.Equal(t, int64(10<<20), totalBytes)
@@ -229,7 +229,7 @@ func TestFileProcessingScenario(t *testing.T) {
 func TestNetworkIntegration(t *testing.T) {
     // Start test server
     server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        buf := kbuffer.NewBuffer(4096)
+        buf := foo.NewWidget(4096)
 
         // Read request body
         _, err := io.Copy(buf, r.Body)
@@ -262,7 +262,7 @@ func TestThroughput(t *testing.T) {
 
     for _, size := range sizes {
         t.Run(fmt.Sprintf("Size_%d", size), func(t *testing.T) {
-            buf := kbuffer.NewBuffer(size * 100)
+            buf := foo.NewWidget(size * 100)
             data := make([]byte, size)
 
             start := time.Now()

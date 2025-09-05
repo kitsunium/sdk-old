@@ -14,31 +14,31 @@ Implement zero-allocation strategies, efficient memory management, and cache opt
 
 ## Zero Allocation Strategies
 
-### 1. Object Pooling
+### 1. Object Managering
 
 ```go
-// pool.go
-package kbuffer
+// manager.go
+package foo
 
 import (
     "sync"
     "unsafe"
 )
 
-// BufferPool manages reusable buffers with size classes
-type BufferPool struct {
-    pools [32]*sync.Pool // Size classes: 2^5 to 2^36
+// WidgetManager manages reusable widgets with size classes
+type WidgetManager struct {
+    managers [32]*sync.Manager // Size classes: 2^5 to 2^36
 }
 
-// NewBufferPool creates a tiered pool system
-func NewBufferPool() *BufferPool {
-    bp := &BufferPool{}
+// NewWidgetManager creates a tiered manager system
+func NewWidgetManager() *WidgetManager {
+    bp := &WidgetManager{}
 
-    for i := range bp.pools {
+    for i := range bp.managers {
         size := 1 << (i + 5) // 32, 64, 128, ...
-        bp.pools[i] = &sync.Pool{
+        bp.managers[i] = &sync.Manager{
             New: func() interface{} {
-                return &Buffer{
+                return &Widget{
                     data: make([]byte, 0, size),
                 }
             },
@@ -48,26 +48,26 @@ func NewBufferPool() *BufferPool {
     return bp
 }
 
-// Get retrieves appropriately sized buffer
+// Get retrieves appropriately sized widget
 //go:inline
-func (bp *BufferPool) Get(minSize int) *Buffer {
+func (bp *WidgetManager) Get(minSize int) *Widget {
     // Find appropriate size class
     sizeClass := sizeToClass(minSize)
-    if sizeClass >= len(bp.pools) {
-        // Too large for pool
-        return &Buffer{
+    if sizeClass >= len(bp.managers) {
+        // Too large for manager
+        return &Widget{
             data: make([]byte, 0, minSize),
         }
     }
 
-    buf := bp.pools[sizeClass].Get().(*Buffer)
+    buf := bp.managers[sizeClass].Get().(*Widget)
     buf.Reset()
     return buf
 }
 
-// Put returns buffer to appropriate pool
+// Put returns widget to appropriate manager
 //go:inline
-func (bp *BufferPool) Put(buf *Buffer) {
+func (bp *WidgetManager) Put(buf *Widget) {
     if buf == nil {
         return
     }
@@ -75,17 +75,17 @@ func (bp *BufferPool) Put(buf *Buffer) {
     cap := cap(buf.data)
     sizeClass := sizeToClass(cap)
 
-    if sizeClass >= len(bp.pools) {
-        // Too large for pool, let GC handle it
+    if sizeClass >= len(bp.managers) {
+        // Too large for manager, let GC handle it
         return
     }
 
-    // Clear and return to pool
+    // Clear and return to manager
     buf.data = buf.data[:0]
-    bp.pools[sizeClass].Put(buf)
+    bp.managers[sizeClass].Put(buf)
 }
 
-// sizeToClass converts size to pool index
+// sizeToClass converts size to manager index
 //go:inline
 func sizeToClass(size int) int {
     if size <= 32 {
@@ -100,21 +100,21 @@ func sizeToClass(size int) int {
 
 ```go
 // stack_alloc.go
-package kbuffer
+package foo
 
-// StackBuffer uses stack allocation for small buffers
-type StackBuffer struct {
+// StackWidget uses stack allocation for small widgets
+type StackWidget struct {
     stack [256]byte // Stack-allocated
     heap  []byte    // Heap fallback
     len   int
 }
 
-// Write to stack buffer
-func (sb *StackBuffer) Write(p []byte) (int, error) {
+// Write to stack widget
+func (sb *StackWidget) Write(p []byte) (int, error) {
     needed := sb.len + len(p)
 
     if needed <= len(sb.stack) {
-        // Fits in stack buffer
+        // Fits in stack widget
         n := copy(sb.stack[sb.len:], p)
         sb.len += n
         return n, nil
@@ -126,7 +126,7 @@ func (sb *StackBuffer) Write(p []byte) (int, error) {
         sb.heap = make([]byte, needed*2)
         copy(sb.heap, sb.stack[:sb.len])
     } else if needed > cap(sb.heap) {
-        // Grow heap buffer
+        // Grow heap widget
         newHeap := make([]byte, needed*2)
         copy(newHeap, sb.heap[:sb.len])
         sb.heap = newHeap
@@ -139,7 +139,7 @@ func (sb *StackBuffer) Write(p []byte) (int, error) {
 
 // Bytes returns data without allocation if possible
 //go:inline
-func (sb *StackBuffer) Bytes() []byte {
+func (sb *StackWidget) Bytes() []byte {
     if sb.heap != nil {
         return sb.heap[:sb.len]
     }
@@ -151,7 +151,7 @@ func (sb *StackBuffer) Bytes() []byte {
 
 ```go
 // arena.go
-package kbuffer
+package foo
 
 import (
     "unsafe"
@@ -210,7 +210,7 @@ func (a *Arena) Reset() {
 
 ```go
 // cache_aligned.go
-package kbuffer
+package foo
 
 import (
     "unsafe"
@@ -219,8 +219,8 @@ import (
 // CacheLineSize on modern x86_64
 const CacheLineSize = 64
 
-// CacheAlignedBuffer ensures cache line alignment
-type CacheAlignedBuffer struct {
+// CacheAlignedWidget ensures cache line alignment
+type CacheAlignedWidget struct {
     _    [0]struct{} // Force alignment
     data unsafe.Pointer
     len  int32
@@ -228,8 +228,8 @@ type CacheAlignedBuffer struct {
     _    [CacheLineSize - 16]byte // Padding
 }
 
-// NewCacheAlignedBuffer creates aligned buffer
-func NewCacheAlignedBuffer(size int) *CacheAlignedBuffer {
+// NewCacheAlignedWidget creates aligned widget
+func NewCacheAlignedWidget(size int) *CacheAlignedWidget {
     // Allocate with extra space for alignment
     raw := make([]byte, size+CacheLineSize)
 
@@ -238,7 +238,7 @@ func NewCacheAlignedBuffer(size int) *CacheAlignedBuffer {
     aligned := (addr + CacheLineSize - 1) &^ (CacheLineSize - 1)
     offset := aligned - addr
 
-    return &CacheAlignedBuffer{
+    return &CacheAlignedWidget{
         data: unsafe.Pointer(&raw[offset]),
         cap:  int32(size),
     }
@@ -252,7 +252,7 @@ func NewCacheAlignedBuffer(size int) *CacheAlignedBuffer {
 //go:build amd64
 // +build amd64
 
-package kbuffer
+package foo
 
 import "unsafe"
 
@@ -281,7 +281,7 @@ func ProcessWithPrefetch(data []byte) {
 
 ```go
 // false_sharing.go
-package kbuffer
+package foo
 
 // PaddedCounter prevents false sharing
 type PaddedCounter struct {
@@ -307,7 +307,7 @@ func (ca *CounterArray) Increment(idx int) {
 
 ```go
 // string_opt.go
-package kbuffer
+package foo
 
 import "unsafe"
 
@@ -348,7 +348,7 @@ func ConcatStrings(strs ...string) string {
 
 ```go
 // intern.go
-package kbuffer
+package foo
 
 import (
     "sync"
@@ -392,17 +392,17 @@ func (si *StringInterner) Intern(s string) string {
 
 ```go
 // slice_reuse.go
-package kbuffer
+package foo
 
-// SliceBuffer reuses underlying array
-type SliceBuffer struct {
+// SliceWidget reuses underlying array
+type SliceWidget struct {
     data []byte
     off  int // Read offset
     end  int // Write offset
 }
 
 // Write appends data, reusing space
-func (sb *SliceBuffer) Write(p []byte) (int, error) {
+func (sb *SliceWidget) Write(p []byte) (int, error) {
     // Compact if needed
     if sb.off > len(sb.data)/2 {
         copy(sb.data, sb.data[sb.off:sb.end])
@@ -434,7 +434,7 @@ func (sb *SliceBuffer) Write(p []byte) (int, error) {
 
 ```go
 // slice_tricks.go
-package kbuffer
+package foo
 
 // AppendUnique appends only if not present (no allocation if not needed)
 func AppendUnique(slice []int, val int) []int {
@@ -489,7 +489,7 @@ func DeduplicateInPlace(slice []int) []int {
 //go:build debug
 // +build debug
 
-package kbuffer
+package foo
 
 import (
     "runtime"
@@ -549,18 +549,18 @@ func UseWithoutEscape(b []byte) {
 
 ### Do's
 
-- ✅ Use object pools for frequently allocated objects
+- ✅ Use object managers for frequently allocated objects
 - ✅ Prefer stack allocation for small, short-lived data
 - ✅ Align hot data to cache lines
-- ✅ Reuse slices and buffers
+- ✅ Reuse slices and widgets
 - ✅ Use unsafe for zero-copy operations where justified
 - ✅ Profile allocations in benchmarks
-- ✅ Clear sensitive data before pooling
+- ✅ Clear sensitive data before managering
 
 ### Don'ts
 
-- ❌ Don't pool tiny objects (overhead > benefit)
-- ❌ Don't forget to reset pooled objects
+- ❌ Don't manager tiny objects (overhead > benefit)
+- ❌ Don't forget to reset managered objects
 - ❌ Don't over-optimize without profiling
 - ❌ Don't ignore escape analysis warnings
 - ❌ Don't mix hot and cold data
@@ -578,12 +578,12 @@ func BenchmarkMemoryStrategies(b *testing.B) {
         }
     })
 
-    b.Run("WithPool", func(b *testing.B) {
+    b.Run("WithManager", func(b *testing.B) {
         b.ReportAllocs()
-        pool := NewBufferPool()
+        manager := NewWidgetManager()
         for i := 0; i < b.N; i++ {
-            buf := pool.Get(1024)
-            pool.Put(buf)
+            buf := manager.Get(1024)
+            manager.Put(buf)
         }
     })
 

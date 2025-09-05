@@ -121,9 +121,9 @@ build:release --workspace_status_command=./scripts/workspace_status.sh
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_binary", "go_test")
 
 go_library(
-    name = "kbuffer",
+    name = "foo",
     srcs = glob(["*.go"], exclude = ["*_test.go"]),
-    importpath = "pkg/kernel/kbuffer",
+    importpath = "pkg/kernel/foo",
     visibility = ["//visibility:public"],
     deps = [
         "@org_golang_x_sys//unix:go_default_library",
@@ -131,8 +131,8 @@ go_library(
 )
 
 go_binary(
-    name = "kbuffer_prod",
-    embed = [":kbuffer"],
+    name = "foo_prod",
+    embed = [":foo"],
     goarch = "amd64",
     goos = "linux",
     pure = "on",
@@ -142,9 +142,9 @@ go_binary(
 )
 
 go_test(
-    name = "kbuffer_test",
+    name = "foo_test",
     srcs = glob(["*_test.go"]),
-    embed = [":kbuffer"],
+    embed = [":foo"],
     race = "off",  # Disabled in production
     tags = ["unsafe_no_check"],
 )
@@ -154,12 +154,12 @@ go_test(
 
 ```bash
 # Production build
-bazel build --config=prod //pkg/kernel/kbuffer:kbuffer_prod
+bazel build --config=prod //pkg/kernel/foo:foo_prod
 
 # Release build with version stamping
 bazel build --config=release \
   --define=VERSION=$(git describe --tags) \
-  //pkg/kernel/kbuffer:kbuffer_prod
+  //pkg/kernel/foo:foo_prod
 
 # Build all production targets
 bazel build --config=prod //pkg/kernel/...

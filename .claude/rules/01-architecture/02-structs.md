@@ -23,7 +23,7 @@ Design and implement structs with optimal memory layout, cache alignment, and mi
 
 ```go
 // Optimized: 24 bytes (no padding)
-type Buffer struct {
+type Widget struct {
     data   []byte    // 24 bytes (slice header)
     size   int64     // 8 bytes
     offset int64     // 8 bytes
@@ -33,14 +33,14 @@ type Buffer struct {
 
 // Use structlayout tool to verify:
 // go get -u honnef.co/go/tools/cmd/structlayout
-// structlayout -json pkg/kernel/kbuffer Buffer
+// structlayout -json pkg/kernel/foo Widget
 ```
 
 **Bad Example**:
 
 ```go
 // Inefficient: 48 bytes (16 bytes of padding!)
-type Buffer struct {
+type Widget struct {
     state  uint32    // 4 bytes + 4 padding
     data   []byte    // 24 bytes
     flags  uint32    // 4 bytes + 4 padding
@@ -59,7 +59,7 @@ type Buffer struct {
 
 ```go
 // Cache-line aligned for hot path fields
-type ShardedBuffer struct {
+type ShardedProcessor struct {
     // Hot path fields (frequently accessed together)
     _        [0]struct{}        // Ensure alignment
     data     unsafe.Pointer     // 8 bytes
@@ -75,7 +75,7 @@ type ShardedBuffer struct {
 }
 
 // Ensure cache line alignment
-var _ = unsafe.Sizeof(ShardedBuffer{}) // Must be multiple of 64
+var _ = unsafe.Sizeof(ShardedProcessor{}) // Must be multiple of 64
 ```
 
 ### 3. Atomic Field Alignment
@@ -122,21 +122,21 @@ type Counter struct {
 
 ```go
 // Embed sync primitives
-type SafeBuffer struct {
+type SafeWidget struct {
     sync.RWMutex // Embedded, no allocation
     data []byte
     size int
 }
 
 // Embed common fields
-type baseBuffer struct {
+type baseWidget struct {
     data []byte
     size int
     cap  int
 }
 
-type UnsafeBuffer struct {
-    baseBuffer // Inherit fields
+type UnsafeWidget struct {
+    baseWidget // Inherit fields
     version uint64
 }
 ```
@@ -150,20 +150,20 @@ type UnsafeBuffer struct {
 **Good Example**:
 
 ```go
-type Buffer struct {
-    data []byte // nil slice is valid empty buffer
+type Container struct {
+    data []byte // nil slice is valid empty container
 }
 
 // Zero value is immediately usable
-var buf Buffer
-n, _ := buf.Write([]byte("hello")) // Works without initialization
+var c Container
+n, _ := c.Add([]byte("hello")) // Works without initialization
 
-func (b *Buffer) Write(p []byte) (int, error) {
+func (c *Container) Add(p []byte) (int, error) {
     // Lazy initialization
-    if b.data == nil {
-        b.data = make([]byte, 0, defaultSize)
+    if c.data == nil {
+        c.data = make([]byte, 0, defaultSize)
     }
-    b.data = append(b.data, p...)
+    c.data = append(c.data, p...)
     return len(p), nil
 }
 ```
@@ -178,12 +178,12 @@ func (b *Buffer) Write(p []byte) (int, error) {
 
 ```go
 // Large struct: use pointer receiver
-type LargeBuffer struct {
+type LargeData struct {
     data [8192]byte
     meta [256]byte
 }
 
-func (b *LargeBuffer) Reset() { // Pointer receiver
+func (d *LargeData) Reset() { // Pointer receiver
     // Modify in place, no copy
 }
 
@@ -209,7 +209,7 @@ type OptimizedStruct struct {
     hotPath uint64 `race:"disable"`
 
     // Mark as no-escape for GC optimization
-    buffer []byte `go:"noescape"`
+    widget []byte `go:"noescape"`
 
     // Cache line padding
     _ [56]byte `pad:"cacheline"`
@@ -225,10 +225,10 @@ type OptimizedStruct struct {
 go install honnef.co/go/tools/cmd/structlayout@latest
 
 # Analyze
-structlayout -json pkg/kernel/kbuffer Buffer
+structlayout -json pkg/kernel/foo Widget
 
 # Optimize
-structlayout-optimize -json pkg/kernel/kbuffer Buffer
+structlayout-optimize -json pkg/kernel/foo Widget
 ```
 
 ### 2. Memory Alignment Check
@@ -236,8 +236,8 @@ structlayout-optimize -json pkg/kernel/kbuffer Buffer
 ```go
 // Runtime alignment verification
 func init() {
-    var b Buffer
-    if unsafe.Offsetof(b.atomicField)%8 != 0 {
+    var w Widget
+    if unsafe.Offsetof(w.atomicField)%8 != 0 {
         panic("atomicField not 64-bit aligned")
     }
 }
@@ -247,7 +247,7 @@ func init() {
 
 ```go
 // Compile-time size check
-const _ = unsafe.Sizeof(Buffer{}) - 48 // Fails if size != 48
+const _ = unsafe.Sizeof(Widget{}) - 48 // Fails if size != 48
 ```
 
 ## Do's and Don'ts
@@ -279,11 +279,11 @@ const _ = unsafe.Sizeof(Buffer{}) - 48 // Fails if size != 48
 ```go
 func BenchmarkStructLayout(b *testing.B) {
     b.ReportAllocs()
-    b.SetBytes(int64(unsafe.Sizeof(Buffer{})))
+    b.SetBytes(int64(unsafe.Sizeof(Widget{})))
 
     for i := 0; i < b.N; i++ {
-        var buf Buffer
-        _ = buf
+        var w Widget
+        _ = w
     }
 }
 ```

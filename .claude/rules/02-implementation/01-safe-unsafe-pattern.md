@@ -24,31 +24,31 @@ go test -bench="(Safe|Unsafe)" -benchmem | benchstat -
 ### 1. Always Start with Safe Version
 
 ```go
-// buffer.go
+// widget.go
 
-type Buffer struct {
+type Widget struct {
     mu   sync.Mutex  // Thread safety
     data []byte
     size int
 }
 
-// NewBuffer creates a thread-safe buffer.
+// NewWidget creates a thread-safe widget.
 // Safe for concurrent use.
-func NewBuffer(size int) *Buffer {
-    return &Buffer{
+func NewWidget(size int) *Widget {
+    return &Widget{
         data: make([]byte, size),
         size: size,
     }
 }
 
-func (b *Buffer) Read(p []byte) (int, error) {
+func (b *Widget) Read(p []byte) (int, error) {
     b.mu.Lock()
     defer b.mu.Unlock()
     return b.readImpl(p)
 }
 
 // Shared implementation logic
-func (b *Buffer) readImpl(p []byte) (int, error) {
+func (b *Widget) readImpl(p []byte) (int, error) {
     n := copy(p, b.data[:b.size])
     return n, nil
 }
@@ -57,21 +57,21 @@ func (b *Buffer) readImpl(p []byte) (int, error) {
 ### 2. Add Unsafe Version Only if Justified
 
 ```go
-// unsafe_buffer.go
+// unsafe_widget.go
 
-type UnsafeBuffer struct {
+type UnsafeWidget struct {
     data []byte
     size int
     // Concurrency checker for development
     checker *concurrencyChecker
 }
 
-// NewUnsafeBuffer creates a high-performance non-thread-safe buffer.
+// NewUnsafeWidget creates a high-performance non-thread-safe widget.
 // WARNING: Not safe for concurrent use.
 // Panics on concurrent access in development builds.
 // Performance: ~40% faster than safe version.
-func NewUnsafeBuffer(size int) *UnsafeBuffer {
-    ub := &UnsafeBuffer{
+func NewUnsafeWidget(size int) *UnsafeWidget {
+    ub := &UnsafeWidget{
         data: make([]byte, size),
         size: size,
     }
@@ -84,7 +84,7 @@ func NewUnsafeBuffer(size int) *UnsafeBuffer {
     return ub
 }
 
-func (b *UnsafeBuffer) Read(p []byte) (int, error) {
+func (b *UnsafeWidget) Read(p []byte) (int, error) {
     if b.checker != nil {
         b.checker.check() // Panic on concurrent access
     }
@@ -122,8 +122,8 @@ func (c *concurrencyChecker) check() {
 ### Mandatory Comparison Benchmarks
 
 ```go
-func BenchmarkBuffer_Read_Safe(b *testing.B) {
-    buf := NewBuffer(1024)
+func BenchmarkWidget_Read_Safe(b *testing.B) {
+    buf := NewWidget(1024)
     p := make([]byte, 256)
 
     b.ResetTimer()
@@ -134,8 +134,8 @@ func BenchmarkBuffer_Read_Safe(b *testing.B) {
     }
 }
 
-func BenchmarkBuffer_Read_Unsafe(b *testing.B) {
-    buf := NewUnsafeBuffer(1024)
+func BenchmarkWidget_Read_Unsafe(b *testing.B) {
+    buf := NewUnsafeWidget(1024)
     p := make([]byte, 256)
 
     b.ResetTimer()
@@ -147,8 +147,8 @@ func BenchmarkBuffer_Read_Unsafe(b *testing.B) {
 }
 
 // Parallel benchmark for safe version
-func BenchmarkBuffer_Read_Safe_Parallel(b *testing.B) {
-    buf := NewBuffer(1024)
+func BenchmarkWidget_Read_Safe_Parallel(b *testing.B) {
+    buf := NewWidget(1024)
 
     b.RunParallel(func(pb *testing.PB) {
         p := make([]byte, 256)

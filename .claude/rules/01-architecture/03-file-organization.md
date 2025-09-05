@@ -16,43 +16,43 @@ Establish consistent file structure and naming conventions that promote maintain
 ### Standard Layout
 
 ```
-pkg/kernel/kpackage/
-├── interface.go            # Public API contracts (ALWAYS FIRST)
-├── constants.go            # Package constants and enums
-├── errors.go              # Error types and variables
-├── options.go             # Configuration options
-├── doc.go                 # Package documentation
+pkg/kernel/foo/
+├── interface.go                 # Public API contracts (ALWAYS FIRST)
+├── constants.go                 # Package constants and enums
+├── errors.go                    # Error types and variables
+├── options.go                   # Configuration options
+├── doc.go                       # Package documentation
 │
-├── buffer.go              # Main implementation (one type per file)
-├── buffer_test.go         # Unit tests for buffer.go
+├── bar.go                       # Main implementation (one type per file)
+├── bar_test.go                  # Unit tests for bar.go
 │
-├── pool.go                # Object pool implementation
-├── pool_test.go           # Unit tests for pool.go
+├── baz.go                       # Secondary implementation
+├── baz_test.go                  # Unit tests for baz.go
 │
-├── safe_buffer.go         # Safe implementation
-├── safe_buffer_test.go    # Tests for safe implementation
+├── safe_bar.go                  # Safe implementation
+├── safe_bar_test.go             # Tests for safe implementation
 │
-├── unsafe_buffer.go       # Unsafe optimized version
-├── unsafe_buffer_test.go  # Tests for unsafe implementation
+├── unsafe_bar.go                # Unsafe optimized version
+├── unsafe_bar_test.go           # Tests for unsafe implementation
 │
-├── sharded.go             # Sharded implementation for concurrency
-├── sharded_test.go        # Tests for sharded implementation
+├── sharded.go                   # Sharded implementation for concurrency
+├── sharded_test.go              # Tests for sharded implementation
 │
-├── global.go              # Global instance management
-├── global_test.go         # Tests for global instance
+├── global.go                    # Global instance management
+├── global_test.go               # Tests for global instance
 │
-├── kpackage_bench_test.go # Consolidated benchmarks
-├── kpackage_integration_test.go # Integration tests
+├── foo_bench_test.go            # Consolidated benchmarks
+├── foo_integration_test.go      # Integration tests
 │
-├── internal/              # Internal packages (not exported)
-│   ├── cache/            # Internal caching logic
-│   └── utils/            # Internal utilities
+├── internal/                    # Internal packages (not exported)
+│   ├── cache/                   # Internal caching logic
+│   └── utils/                   # Internal utilities
 │
-├── testdata/             # Test fixtures and data
-│   ├── golden/          # Golden files for tests
-│   └── fixtures/        # Test fixtures
+├── testdata/                    # Test fixtures and data
+│   ├── golden/                  # Golden files for tests
+│   └── fixtures/                # Test fixtures
 │
-└── BUILD.bazel          # Bazel build configuration
+└── BUILD.bazel                  # Bazel build configuration
 ```
 
 ## File Naming Rules
@@ -66,17 +66,17 @@ pkg/kernel/kpackage/
 **Good Example**:
 
 ```go
-// file: buffer.go
-package kbuffer
+// file: bar.go
+package foo
 
-type Buffer struct {
-    // Buffer implementation
+type Bar struct {
+    // Bar implementation
 }
 
-// All Buffer methods in same file
-func NewBuffer() *Buffer { }
-func (b *Buffer) Write([]byte) (int, error) { }
-func (b *Buffer) Read([]byte) (int, error) { }
+// All Bar methods in same file
+func NewBar() *Bar { }
+func (b *Bar) Process([]byte) error { }
+func (b *Bar) Execute() (Result, error) { }
 ```
 
 **Bad Example**:
@@ -84,8 +84,8 @@ func (b *Buffer) Read([]byte) (int, error) { }
 ```go
 // DON'T: Multiple types in one file
 // file: types.go
-type Buffer struct { }
-type Pool struct { }
+type Foo struct { }
+type Bar struct { }
 type Config struct { }
 ```
 
@@ -98,10 +98,10 @@ type Config struct { }
 **Structure**:
 
 ```
-buffer.go          → buffer_test.go
-safe_buffer.go     → safe_buffer_test.go
-unsafe_buffer.go   → unsafe_buffer_test.go
-pool.go           → pool_test.go
+bar.go          → bar_test.go
+safe_bar.go     → safe_bar_test.go
+unsafe_bar.go   → unsafe_bar_test.go
+baz.go          → baz_test.go
 ```
 
 ### 3. Special Files
@@ -111,17 +111,17 @@ pool.go           → pool_test.go
 **Purpose**: Define all public interfaces and type contracts.
 
 ```go
-package kbuffer
+package foo
 
-// Buffer defines the contract for buffer operations
-type Buffer interface {
-    Read([]byte) (int, error)
-    Write([]byte) (int, error)
+// Bar defines the contract for bar operations
+type Bar interface {
+    Process([]byte) error
+    Execute() (Result, error)
     Reset()
 }
 
-// Pool defines object pooling interface
-type Pool interface {
+// Baz defines the baz interface
+type Baz interface {
     Get() interface{}
     Put(interface{})
 }
@@ -132,23 +132,23 @@ type Pool interface {
 **Purpose**: Package-level constants, enums, and configuration values.
 
 ```go
-package kbuffer
+package foo
 
 const (
-    // DefaultSize is the default buffer size
+    // DefaultSize is the default size
     DefaultSize = 4096
 
-    // MaxSize is the maximum allowed buffer size
+    // MaxSize is the maximum allowed size
     MaxSize = 1 << 20 // 1MB
 )
 
-// State represents buffer state
+// State represents operational state
 type State uint32
 
 const (
     StateIdle State = iota
-    StateReading
-    StateWriting
+    StateActive
+    StateProcessing
     StateClosed
 )
 ```
@@ -158,16 +158,16 @@ const (
 **Purpose**: Custom error types and sentinel errors.
 
 ```go
-package kbuffer
+package foo
 
 import "errors"
 
 var (
-    // ErrBufferFull is returned when buffer capacity is exceeded
-    ErrBufferFull = errors.New("buffer: full")
+    // ErrCapacityExceeded is returned when capacity is exceeded
+    ErrCapacityExceeded = errors.New("foo: capacity exceeded")
 
     // ErrClosed is returned on operations after Close
-    ErrClosed = errors.New("buffer: closed")
+    ErrClosed = errors.New("foo: closed")
 )
 
 // ValidationError represents input validation failure
@@ -183,18 +183,18 @@ type ValidationError struct {
 **Purpose**: Configuration options using functional options pattern.
 
 ```go
-package kbuffer
+package foo
 
-// Option configures a Buffer
+// Option configures a Foo instance
 type Option func(*options)
 
 type options struct {
     size     int
-    pooled   bool
+    managered   bool
     sharded  bool
 }
 
-// WithSize sets buffer size
+// WithSize sets the size
 func WithSize(size int) Option {
     return func(o *options) {
         o.size = size
@@ -207,7 +207,7 @@ func WithSize(size int) Option {
 **Purpose**: Package-level documentation.
 
 ```go
-// Package kbuffer provides high-performance, zero-allocation buffer
+// Package foo provides high-performance, zero-allocation
 // implementations optimized for kernel-level operations.
 //
 // The package offers both safe and unsafe implementations, with the
@@ -216,14 +216,14 @@ func WithSize(size int) Option {
 //
 // Example:
 //
-//	buf := kbuffer.NewBuffer(kbuffer.WithSize(4096))
-//	defer buf.Close()
+// instance := foo.New(foo.WithSize(4096))
+// defer instance.Close()
 //
-//	n, err := buf.Write(data)
-//	if err != nil {
-//	    return err
-//	}
-package kbuffer
+// err := instance.Process(data)
+// if err != nil {
+//     return err
+// }
+package foo
 ```
 
 ### 4. Implementation Files
@@ -231,21 +231,21 @@ package kbuffer
 #### Safe Implementation Pattern
 
 ```go
-// safe_buffer.go
-package kbuffer
+// safe_bar.go
+package foo
 
 import "sync"
 
-// SafeBuffer provides thread-safe buffer operations
-type SafeBuffer struct {
+// SafeBar provides thread-safe operations
+type SafeBar struct {
     mu   sync.RWMutex
     data []byte
     size int
 }
 
-// NewSafeBuffer creates a new thread-safe buffer
-func NewSafeBuffer(size int) *SafeBuffer {
-    return &SafeBuffer{
+// NewSafeBar creates a new thread-safe instance
+func NewSafeBar(size int) *SafeBar {
+    return &SafeBar{
         data: make([]byte, 0, size),
         size: size,
     }
@@ -255,23 +255,23 @@ func NewSafeBuffer(size int) *SafeBuffer {
 #### Unsafe Implementation Pattern
 
 ```go
-// unsafe_buffer.go
+// unsafe_bar.go
 //go:build !race
 // +build !race
 
-package kbuffer
+package foo
 
 import "unsafe"
 
-// UnsafeBuffer provides maximum performance through unsafe operations
-type UnsafeBuffer struct {
+// UnsafeBar provides maximum performance through unsafe operations
+type UnsafeBar struct {
     data uintptr // Raw pointer for zero-copy operations
     len  int
     cap  int
 }
 
-// NewUnsafeBuffer creates a high-performance buffer
-func NewUnsafeBuffer(size int) *UnsafeBuffer {
+// NewUnsafeBar creates a high-performance instance
+func NewUnsafeBar(size int) *UnsafeBar {
     // Implementation with unsafe optimizations
 }
 ```
@@ -281,17 +281,17 @@ func NewUnsafeBuffer(size int) *UnsafeBuffer {
 #### Unit Tests
 
 ```go
-// buffer_test.go
-package kbuffer
+// bar_test.go
+package foo
 
 import "testing"
 
-func TestBuffer_Write(t *testing.T) {
+func TestBar_Process(t *testing.T) {
     t.Parallel()
     // Test implementation
 }
 
-func TestBuffer_Read(t *testing.T) {
+func TestBar_Execute(t *testing.T) {
     t.Parallel()
     // Test implementation
 }
@@ -300,16 +300,16 @@ func TestBuffer_Read(t *testing.T) {
 #### Benchmarks (Consolidated)
 
 ```go
-// kbuffer_bench_test.go
-package kbuffer
+// foo_bench_test.go
+package foo
 
 import "testing"
 
-func BenchmarkSafeBuffer_Write(b *testing.B) {
+func BenchmarkSafeBar_Process(b *testing.B) {
     // Benchmark safe implementation
 }
 
-func BenchmarkUnsafeBuffer_Write(b *testing.B) {
+func BenchmarkUnsafeBar_Process(b *testing.B) {
     // Benchmark unsafe implementation
 }
 
@@ -330,10 +330,10 @@ func BenchmarkComparison(b *testing.B) {
 **Rule**: Use `internal/` for unexported helper packages.
 
 ```
-kbuffer/
+foo/
 ├── internal/
 │   ├── cache/      # Internal caching logic
-│   ├── pool/       # Internal pooling
+│   ├── manager/       # Internal managering
 │   └── unsafe/     # Unsafe utilities
 ```
 
@@ -342,11 +342,11 @@ kbuffer/
 **Rule**: Use `testdata/` for test fixtures, following Go conventions.
 
 ```
-kbuffer/
+foo/
 ├── testdata/
 │   ├── golden/     # Golden test files
-│   │   ├── write_output.golden
-│   │   └── read_output.golden
+│   │   ├── process_output.golden
+│   │   └── execute_output.golden
 │   └── fixtures/   # Input test data
 │       ├── large_file.bin
 │       └── small_file.txt
@@ -359,16 +359,16 @@ kbuffer/
 **Good**:
 
 ```
-pkg/kernel/kbuffer/
-pkg/kernel/kcache/
-pkg/kernel/kpool/
+pkg/kernel/foo/
+pkg/kernel/bar/
+pkg/kernel/baz/
 ```
 
 **Bad**:
 
 ```
-pkg/kernel/kbuffer/cache/  # Don't nest public packages
-pkg/kernel/kbuffer/pool/   # Use separate kernel packages
+pkg/kernel/foo/cache/  # Don't nest public packages
+pkg/kernel/foo/manager/   # Use separate kernel packages
 ```
 
 ## Import Organization
@@ -376,7 +376,7 @@ pkg/kernel/kbuffer/pool/   # Use separate kernel packages
 ### Import Grouping
 
 ```go
-package kbuffer
+package foo
 
 import (
     // Standard library
@@ -392,7 +392,7 @@ import (
     "github.com/org/project/internal/utils"
 
     // Same-module packages
-    "github.com/org/project/pkg/kernel/kpool"
+    "github.com/org/project/pkg/kernel/bar"
 )
 ```
 
@@ -422,9 +422,9 @@ import (
 ### Platform-Specific Files
 
 ```
-buffer_linux.go      # Linux-specific implementation
-buffer_darwin.go     # macOS-specific implementation
-buffer_windows.go    # Windows-specific implementation
+bar_linux.go      # Linux-specific implementation
+bar_darwin.go     # macOS-specific implementation
+bar_windows.go    # Windows-specific implementation
 ```
 
 ### Build Tag Organization

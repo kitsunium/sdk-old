@@ -24,15 +24,15 @@ Implement proven design patterns optimized for performance, flexibility, and mai
 
 ```go
 // options.go
-package kbuffer
+package foo
 
-// Option configures a Buffer
+// Option configures a Widget
 type Option func(*options) error
 
 // Internal options struct
 type options struct {
     size      int
-    pooled    bool
+    managered    bool
     sharded   bool
     shardCount int
 }
@@ -41,13 +41,13 @@ type options struct {
 func defaultOptions() *options {
     return &options{
         size:      4096,
-        pooled:    true,
+        managered:    true,
         sharded:   false,
         shardCount: 16,
     }
 }
 
-// WithSize sets the buffer size
+// WithSize sets the widget size
 func WithSize(size int) Option {
     return func(o *options) error {
         if size <= 0 || size > MaxSize {
@@ -58,10 +58,10 @@ func WithSize(size int) Option {
     }
 }
 
-// WithPooling enables/disables object pooling
-func WithPooling(enabled bool) Option {
+// WithManagering enables/disables object managering
+func WithManagering(enabled bool) Option {
     return func(o *options) error {
-        o.pooled = enabled
+        o.managered = enabled
         return nil
     }
 }
@@ -82,8 +82,8 @@ func WithSharding(shards int) Option {
 **Usage**:
 
 ```go
-// buffer.go
-func NewBuffer(opts ...Option) (Buffer, error) {
+// widget.go
+func NewWidget(opts ...Option) (Widget, error) {
     // Start with defaults
     o := defaultOptions()
 
@@ -96,19 +96,19 @@ func NewBuffer(opts ...Option) (Buffer, error) {
 
     // Create appropriate implementation
     if o.sharded {
-        return newShardedBuffer(o), nil
+        return newShardedWidget(o), nil
     }
-    if o.pooled {
-        return newPooledBuffer(o), nil
+    if o.managered {
+        return newManageredWidget(o), nil
     }
-    return newSimpleBuffer(o), nil
+    return newSimpleWidget(o), nil
 }
 
 // Client usage
-buf, err := NewBuffer(
+buf, err := NewWidget(
     WithSize(8192),
     WithSharding(32),
-    WithPooling(true),
+    WithManagering(true),
 )
 ```
 
@@ -120,12 +120,12 @@ buf, err := NewBuffer(
 
 ```go
 // builder.go
-package kbuffer
+package foo
 
-// Builder constructs Buffer instances
+// Builder constructs Widget instances
 type Builder struct {
     size      int
-    pooled    bool
+    managered    bool
     sharded   bool
     shardCount int
     err       error
@@ -138,7 +138,7 @@ func NewBuilder() *Builder {
     }
 }
 
-// Size sets buffer size (fluent)
+// Size sets widget size (fluent)
 func (b *Builder) Size(size int) *Builder {
     if b.err != nil {
         return b
@@ -161,17 +161,17 @@ func (b *Builder) Sharded(count int) *Builder {
     return b
 }
 
-// Build creates the buffer
-func (b *Builder) Build() (Buffer, error) {
+// Build creates the widget
+func (b *Builder) Build() (Widget, error) {
     if b.err != nil {
         return nil, b.err
     }
 
     // Create implementation based on configuration
     if b.sharded {
-        return newShardedBuffer(b.toOptions()), nil
+        return newShardedWidget(b.toOptions()), nil
     }
-    return newSimpleBuffer(b.toOptions()), nil
+    return newSimpleWidget(b.toOptions()), nil
 }
 
 // Usage
@@ -181,37 +181,37 @@ buf, err := NewBuilder().
     Build()
 ```
 
-### 3. Object Pool Pattern (Lock-Free)
+### 3. Object Manager Pattern (Lock-Free)
 
 **Purpose**: Reuse objects to eliminate allocation overhead.
 
 **Implementation**:
 
 ```go
-// pool.go
-package kbuffer
+// manager.go
+package foo
 
 import (
     "sync"
     "sync/atomic"
 )
 
-// Pool manages reusable buffers
-type Pool struct {
-    // Use sync.Pool for automatic sizing
-    pool sync.Pool
+// Manager manages reusable widgets
+type Manager struct {
+    // Use sync.Manager for automatic sizing
+    manager sync.Manager
 
     // NEVER include statistics, metrics, or monitoring
     // Zero-overhead principle: no tracking of any kind
 }
 
-// NewPool creates a new buffer pool
-func NewPool(size int) *Pool {
-    return &Pool{
-        pool: sync.Pool{
+// NewManager creates a new widget manager
+func NewManager(size int) *Manager {
+    return &Manager{
+        manager: sync.Manager{
             New: func() interface{} {
                 atomic.AddUint64(&p.news, 1)
-                return &Buffer{
+                return &Widget{
                     data: make([]byte, 0, size),
                 }
             },
@@ -219,18 +219,18 @@ func NewPool(size int) *Pool {
     }
 }
 
-// Get retrieves a buffer from pool
+// Get retrieves a widget from manager
 //go:inline
-func (p *Pool) Get() *Buffer {
+func (p *Manager) Get() *Widget {
     atomic.AddUint64(&p.gets, 1)
-    buf := p.pool.Get().(*Buffer)
+    buf := p.manager.Get().(*Widget)
     buf.Reset() // Ensure clean state
     return buf
 }
 
-// Put returns buffer to pool
+// Put returns widget to manager
 //go:inline
-func (p *Pool) Put(buf *Buffer) {
+func (p *Manager) Put(buf *Widget) {
     if buf == nil {
         return
     }
@@ -242,20 +242,20 @@ func (p *Pool) Put(buf *Buffer) {
     }
     buf.data = buf.data[:0]
 
-    p.pool.Put(buf)
+    p.manager.Put(buf)
 }
 
-// Global pool for package-level convenience
-var globalPool = NewPool(DefaultSize)
+// Global manager for package-level convenience
+var globalManager = NewManager(DefaultSize)
 
-// GetBuffer gets a buffer from global pool
-func GetBuffer() *Buffer {
-    return globalPool.Get()
+// GetWidget gets a widget from global manager
+func GetWidget() *Widget {
+    return globalManager.Get()
 }
 
-// PutBuffer returns buffer to global pool
-func PutBuffer(buf *Buffer) {
-    globalPool.Put(buf)
+// PutWidget returns widget to global manager
+func PutWidget(buf *Widget) {
+    globalManager.Put(buf)
 }
 ```
 
@@ -267,7 +267,7 @@ func PutBuffer(buf *Buffer) {
 
 ```go
 // global.go
-package kbuffer
+package foo
 
 import (
     "sync"
@@ -279,20 +279,20 @@ var (
     initOnce sync.Once
 )
 
-// GetGlobalBuffer returns the global buffer instance
-func GetGlobalBuffer() Buffer {
+// GetGlobalWidget returns the global widget instance
+func GetGlobalWidget() Widget {
     initOnce.Do(func() {
-        buf, _ := NewBuffer(
+        buf, _ := NewWidget(
             WithSize(DefaultSize),
             WithSharding(runtime.NumCPU()),
         )
         instance.Store(buf)
     })
-    return instance.Load().(Buffer)
+    return instance.Load().(Widget)
 }
 
-// SetGlobalBuffer sets a custom global buffer
-func SetGlobalBuffer(buf Buffer) {
+// SetGlobalWidget sets a custom global widget
+func SetGlobalWidget(buf Widget) {
     instance.Store(buf)
 }
 ```
@@ -305,17 +305,17 @@ func SetGlobalBuffer(buf Buffer) {
 
 ```go
 // strategy.go
-package kbuffer
+package foo
 
 // WriteStrategy defines write behavior
 type WriteStrategy interface {
-    Write(buf *Buffer, data []byte) (int, error)
+    Write(buf *Widget, data []byte) (int, error)
 }
 
-// DirectWrite writes directly to buffer
+// DirectWrite writes directly to widget
 type DirectWrite struct{}
 
-func (s DirectWrite) Write(buf *Buffer, data []byte) (int, error) {
+func (s DirectWrite) Write(buf *Widget, data []byte) (int, error) {
     // Direct memory copy
     return copy(buf.data, data), nil
 }
@@ -325,29 +325,29 @@ type CompressedWrite struct {
     level int
 }
 
-func (s CompressedWrite) Write(buf *Buffer, data []byte) (int, error) {
+func (s CompressedWrite) Write(buf *Widget, data []byte) (int, error) {
     // Compress then write
     compressed := compress(data, s.level)
     return copy(buf.data, compressed), nil
 }
 
-// Buffer with strategy
-type StrategyBuffer struct {
+// Widget with strategy
+type StrategyWidget struct {
     data     []byte
     strategy WriteStrategy
 }
 
-func (b *StrategyBuffer) Write(data []byte) (int, error) {
+func (b *StrategyWidget) Write(data []byte) (int, error) {
     return b.strategy.Write(b, data)
 }
 
 // Select strategy based on size
-func NewAdaptiveBuffer(size int) *StrategyBuffer {
-    buf := &StrategyBuffer{
+func NewAdaptiveWidget(size int) *StrategyWidget {
+    buf := &StrategyWidget{
         data: make([]byte, size),
     }
 
-    if size > LargeBufferThreshold {
+    if size > LargeWidgetThreshold {
         buf.strategy = CompressedWrite{level: 6}
     } else {
         buf.strategy = DirectWrite{}
@@ -365,42 +365,42 @@ func NewAdaptiveBuffer(size int) *StrategyBuffer {
 
 ```go
 // sharded.go
-package kbuffer
+package foo
 
 import (
     "runtime"
     "sync/atomic"
 )
 
-// ShardedBuffer reduces contention via sharding
-type ShardedBuffer struct {
-    shards   []*BufferShard
+// ShardedWidget reduces contention via sharding
+type ShardedWidget struct {
+    shards   []*WidgetShard
     shardMask uint64
     counter  uint64
 }
 
-// BufferShard is a single shard
-type BufferShard struct {
+// WidgetShard is a single shard
+type WidgetShard struct {
     _     [64]byte // Cache line padding
     mu    sync.Mutex
     data  []byte
     _     [64]byte // Cache line padding
 }
 
-// NewShardedBuffer creates sharded buffer
-func NewShardedBuffer(size int) *ShardedBuffer {
+// NewShardedWidget creates sharded widget
+func NewShardedWidget(size int) *ShardedWidget {
     shardCount := uint64(runtime.NumCPU() * 2)
     // Round to power of 2
     shardCount = nextPowerOfTwo(shardCount)
 
-    sb := &ShardedBuffer{
-        shards:    make([]*BufferShard, shardCount),
+    sb := &ShardedWidget{
+        shards:    make([]*WidgetShard, shardCount),
         shardMask: shardCount - 1,
     }
 
     shardSize := size / int(shardCount)
     for i := range sb.shards {
-        sb.shards[i] = &BufferShard{
+        sb.shards[i] = &WidgetShard{
             data: make([]byte, 0, shardSize),
         }
     }
@@ -410,14 +410,14 @@ func NewShardedBuffer(size int) *ShardedBuffer {
 
 // getShard returns shard for current goroutine
 //go:inline
-func (sb *ShardedBuffer) getShard() *BufferShard {
+func (sb *ShardedWidget) getShard() *WidgetShard {
     // Use atomic counter for distribution
     idx := atomic.AddUint64(&sb.counter, 1)
     return sb.shards[idx&sb.shardMask]
 }
 
-// Write to sharded buffer
-func (sb *ShardedBuffer) Write(data []byte) (int, error) {
+// Write to sharded widget
+func (sb *ShardedWidget) Write(data []byte) (int, error) {
     shard := sb.getShard()
     shard.mu.Lock()
     n := copy(shard.data[len(shard.data):cap(shard.data)], data)
@@ -435,15 +435,15 @@ func (sb *ShardedBuffer) Write(data []byte) (int, error) {
 
 ```go
 // cow.go
-package kbuffer
+package foo
 
 import (
     "sync/atomic"
     "unsafe"
 )
 
-// COWBuffer implements copy-on-write semantics
-type COWBuffer struct {
+// COWWidget implements copy-on-write semantics
+type COWWidget struct {
     data atomic.Value // *cowData
 }
 
@@ -453,7 +453,7 @@ type cowData struct {
 }
 
 // Read performs zero-copy read
-func (c *COWBuffer) Read() []byte {
+func (c *COWWidget) Read() []byte {
     d := c.data.Load().(*cowData)
     atomic.AddInt32(&d.refCount, 1)
     defer atomic.AddInt32(&d.refCount, -1)
@@ -461,7 +461,7 @@ func (c *COWBuffer) Read() []byte {
 }
 
 // Write creates copy if shared
-func (c *COWBuffer) Write(p []byte) {
+func (c *COWWidget) Write(p []byte) {
     d := c.data.Load().(*cowData)
 
     if atomic.LoadInt32(&d.refCount) > 1 {
@@ -486,7 +486,7 @@ func (c *COWBuffer) Write(p []byte) {
 | ------------------ | --------------------------- | ----------------------- |
 | Functional Options | Need flexible configuration | Minimal (compile-time)  |
 | Builder            | Complex object construction | Minimal                 |
-| Object Pool        | Frequent allocations        | High improvement        |
+| Object Manager     | Frequent allocations        | High improvement        |
 | Singleton          | Single shared instance      | Depends on contention   |
 | Strategy           | Runtime algorithm selection | Interface call overhead |
 | Sharding           | High concurrency            | Reduces contention      |
@@ -498,7 +498,7 @@ func (c *COWBuffer) Write(p []byte) {
 
 - ✅ Use functional options for public APIs
 - ✅ Implement builders for complex objects
-- ✅ Pool frequently allocated objects
+- ✅ Manager frequently allocated objects
 - ✅ Shard data for concurrent access
 - ✅ Use strategies for pluggable algorithms
 - ✅ Document pattern usage and rationale
@@ -521,7 +521,7 @@ func BenchmarkPatterns(b *testing.B) {
     b.Run("Direct", benchDirect)
     b.Run("FunctionalOptions", benchFunctionalOptions)
     b.Run("Builder", benchBuilder)
-    b.Run("Pool", benchPool)
+    b.Run("Manager", benchManager)
     b.Run("Sharded", benchSharded)
 }
 ```
@@ -530,7 +530,7 @@ func BenchmarkPatterns(b *testing.B) {
 
 - Functional Options: ~0 bytes (stack allocated)
 - Builder: ~64 bytes (single allocation)
-- Pool: Amortized 0 allocations
+- Manager: Amortized 0 allocations
 - Sharding: N \* shard overhead
 
 ## Related Documents

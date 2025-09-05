@@ -18,16 +18,16 @@ Create comprehensive performance benchmarks that validate optimization claims, c
 ### Basic Benchmark Pattern
 
 ```go
-// kbuffer_bench_test.go
-package kbuffer
+// foo_bench_test.go
+package foo
 
 import (
     "testing"
 )
 
-func BenchmarkBuffer_Write(b *testing.B) {
+func BenchmarkWidget_Write(b *testing.B) {
     // Setup phase - not timed
-    buf := NewBuffer(1024 * 1024)
+    buf := NewWidget(1024 * 1024)
     data := make([]byte, 1024)
 
     // Reset timer after setup
@@ -61,7 +61,7 @@ func BenchmarkSafeVsUnsafe(b *testing.B) {
         data := make([]byte, size)
 
         b.Run(fmt.Sprintf("Safe_%d", size), func(b *testing.B) {
-            buf := NewSafeBuffer(size * 2)
+            buf := NewSafeWidget(size * 2)
             b.ResetTimer()
             b.ReportAllocs()
             b.SetBytes(int64(size))
@@ -73,7 +73,7 @@ func BenchmarkSafeVsUnsafe(b *testing.B) {
         })
 
         b.Run(fmt.Sprintf("Unsafe_%d", size), func(b *testing.B) {
-            buf := NewUnsafeBuffer(size * 2)
+            buf := NewUnsafeWidget(size * 2)
             b.ResetTimer()
             b.ReportAllocs()
             b.SetBytes(int64(size))
@@ -98,29 +98,29 @@ func calculateImprovement(safeBench, unsafeBench testing.BenchmarkResult) float6
 
 ```go
 func BenchmarkAllocations(b *testing.B) {
-    b.Run("WithPool", func(b *testing.B) {
-        pool := NewBufferPool()
+    b.Run("WithManager", func(b *testing.B) {
+        manager := NewWidgetManager()
         b.ResetTimer()
         b.ReportAllocs()
 
         for i := 0; i < b.N; i++ {
-            buf := pool.Get(1024)
+            buf := manager.Get(1024)
             buf.Write([]byte("test"))
-            pool.Put(buf)
+            manager.Put(buf)
         }
     })
 
-    b.Run("WithoutPool", func(b *testing.B) {
+    b.Run("WithoutManager", func(b *testing.B) {
         b.ReportAllocs()
 
         for i := 0; i < b.N; i++ {
-            buf := NewBuffer(1024)
+            buf := NewWidget(1024)
             buf.Write([]byte("test"))
         }
     })
 
     b.Run("ZeroAlloc", func(b *testing.B) {
-        buf := NewBuffer(1024)
+        buf := NewWidget(1024)
         data := []byte("test")
         b.ResetTimer()
         b.ReportAllocs()
@@ -146,7 +146,7 @@ func BenchmarkAllocations(b *testing.B) {
 func BenchmarkConcurrentScaling(b *testing.B) {
     for _, goroutines := range []int{1, 2, 4, 8, 16, 32} {
         b.Run(fmt.Sprintf("Goroutines_%d", goroutines), func(b *testing.B) {
-            buf := NewShardedBuffer(1024 * 1024)
+            buf := NewShardedWidget(1024 * 1024)
             data := make([]byte, 1024)
 
             b.SetParallelism(goroutines)
@@ -169,7 +169,7 @@ func BenchmarkConcurrentScaling(b *testing.B) {
 func BenchmarkContention(b *testing.B) {
     b.Run("HighContention", func(b *testing.B) {
         // Single shared resource
-        buf := NewSafeBuffer(1024)
+        buf := NewSafeWidget(1024)
 
         b.RunParallel(func(pb *testing.PB) {
             data := []byte("x")
@@ -181,9 +181,9 @@ func BenchmarkContention(b *testing.B) {
 
     b.Run("LowContention", func(b *testing.B) {
         // Sharded resources
-        bufs := make([]*SafeBuffer, runtime.NumCPU())
+        bufs := make([]*SafeWidget, runtime.NumCPU())
         for i := range bufs {
-            bufs[i] = NewSafeBuffer(1024)
+            bufs[i] = NewSafeWidget(1024)
         }
 
         var counter uint32
@@ -308,8 +308,8 @@ func BenchmarkStructLayout(b *testing.B) {
 func BenchmarkVsStdlib(b *testing.B) {
     data := make([]byte, 1024)
 
-    b.Run("KBuffer", func(b *testing.B) {
-        buf := NewUnsafeBuffer(4096)
+    b.Run("KWidget", func(b *testing.B) {
+        buf := NewUnsafeWidget(4096)
         b.ResetTimer()
         b.ReportAllocs()
 
@@ -319,8 +319,8 @@ func BenchmarkVsStdlib(b *testing.B) {
         }
     })
 
-    b.Run("bytes.Buffer", func(b *testing.B) {
-        buf := bytes.NewBuffer(make([]byte, 0, 4096))
+    b.Run("bytes.Widget", func(b *testing.B) {
+        buf := bytes.NewWidget(make([]byte, 0, 4096))
         b.ResetTimer()
         b.ReportAllocs()
 
@@ -352,7 +352,7 @@ func BenchmarkVsStdlib(b *testing.B) {
 func BenchmarkPerformanceRequirements(b *testing.B) {
     b.Run("MeetsLatencyTarget", func(b *testing.B) {
         targetNs := int64(100) // 100ns target
-        buf := NewUnsafeBuffer(1024)
+        buf := NewUnsafeWidget(1024)
         data := []byte("test")
 
         b.ResetTimer()
@@ -372,7 +372,7 @@ func BenchmarkPerformanceRequirements(b *testing.B) {
 
     b.Run("MeetsThroughputTarget", func(b *testing.B) {
         targetMBps := 1000.0 // 1GB/s target
-        buf := NewUnsafeBuffer(1<<20)
+        buf := NewUnsafeWidget(1<<20)
         data := make([]byte, 1024)
 
         b.ResetTimer()
@@ -403,7 +403,7 @@ func BenchmarkWithProfile(b *testing.B) {
     // Run with: go test -bench=BenchmarkWithProfile -cpuprofile=cpu.prof
     // Analyze: go tool pprof cpu.prof
 
-    buf := NewBuffer(1<<20)
+    buf := NewWidget(1<<20)
     data := make([]byte, 4096)
 
     b.ResetTimer()
@@ -421,7 +421,7 @@ func BenchmarkMemoryProfile(b *testing.B) {
     b.ReportAllocs()
 
     for i := 0; i < b.N; i++ {
-        buf := NewBuffer(1024)
+        buf := NewWidget(1024)
         buf.Write(make([]byte, 512))
         _ = buf
     }
@@ -434,7 +434,7 @@ func BenchmarkMemoryProfile(b *testing.B) {
 
 ```go
 func BenchmarkCustomMetrics(b *testing.B) {
-    buf := NewShardedBuffer(1<<20)
+    buf := NewShardedWidget(1<<20)
     data := make([]byte, 1024)
 
     var totalBytes int64
@@ -465,9 +465,9 @@ func BenchmarkCustomMetrics(b *testing.B) {
 ```go
 // baseline_test.go
 var baselineResults = map[string]float64{
-    "Buffer_Write": 50.0,  // ns/op
-    "Buffer_Read":  45.0,  // ns/op
-    "Pool_Get":     25.0,  // ns/op
+    "Widget_Write": 50.0,  // ns/op
+    "Widget_Read":  45.0,  // ns/op
+    "Manager_Get":     25.0,  // ns/op
 }
 
 func TestPerformanceRegression(t *testing.T) {
@@ -475,10 +475,10 @@ func TestPerformanceRegression(t *testing.T) {
         t.Skip("skipping regression test in short mode")
     }
 
-    results := testing.Benchmark(BenchmarkBuffer_Write)
+    results := testing.Benchmark(BenchmarkWidget_Write)
     nsPerOp := float64(results.NsPerOp())
 
-    baseline := baselineResults["Buffer_Write"]
+    baseline := baselineResults["Widget_Write"]
     threshold := baseline * 1.1 // Allow 10% regression
 
     if nsPerOp > threshold {
@@ -517,7 +517,7 @@ func TestPerformanceRegression(t *testing.T) {
 go test -bench=.
 
 # Run specific benchmark
-go test -bench=BenchmarkBuffer_Write
+go test -bench=BenchmarkWidget_Write
 
 # Run with memory stats
 go test -bench=. -benchmem

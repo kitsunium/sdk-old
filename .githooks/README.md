@@ -7,7 +7,7 @@ This directory contains Git hooks to ensure code quality and prevent common issu
 Run the setup script to configure Git to use these hooks:
 
 ```bash
-./scripts/setup-git-hooks.sh
+./.githooks/install.sh
 ```
 
 ## Available Hooks
@@ -70,7 +70,7 @@ git config --unset core.hooksPath
 To re-enable:
 
 ```bash
-./scripts/setup-git-hooks.sh
+./.githooks/install.sh
 ```
 
 ## Philosophy

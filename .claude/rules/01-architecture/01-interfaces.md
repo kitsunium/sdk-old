@@ -44,18 +44,18 @@ Document performance requirements directly in interfaces.
 **Good:**
 
 ```go
-// Buffer provides high-performance buffer operations.
+// Processor provides high-performance processing operations.
 //
 // Performance requirements:
 //   - Get: <100ns typical, O(1), zero allocations
 //   - Put: <150ns typical, O(1), zero allocations
 //   - Reset: <50ns typical, O(1)
-type Buffer interface {
-    // Get returns a buffer of size n.
+type Processor interface {
+    // Get returns a resource of size n.
     // Must complete in O(1) with zero allocations.
     Get(n int) []byte
 
-    // Put returns the buffer to the pool.
+    // Put returns the resource to the manager.
     // Must complete in O(1) with zero allocations.
     Put(b []byte)
 }
@@ -69,12 +69,12 @@ Define error variables at package level, not in interfaces.
 
 ```go
 var (
-    ErrBufferTooLarge = errors.New("kbuffer: requested buffer exceeds maximum size")
-    ErrPoolExhausted  = errors.New("kbuffer: pool exhausted")
+    ErrSizeTooLarge = errors.New("foo: requested size exceeds maximum")
+    ErrManagerExhausted = errors.New("foo: manager exhausted")
 )
 
-type Pool interface {
-    Get(size int) ([]byte, error) // Returns ErrBufferTooLarge or ErrPoolExhausted
+type Manager interface {
+    Get(size int) ([]byte, error) // Returns ErrSizeTooLarge or ErrManagerExhausted
 }
 ```
 

@@ -20,7 +20,7 @@ Detect and prevent concurrent access to non-thread-safe implementations, providi
 //go:build !production
 // +build !production
 
-package kbuffer
+package foo
 
 import (
     "fmt"
@@ -29,10 +29,10 @@ import (
     "unsafe"
 )
 
-// UnsafeBuffer with goroutine tracking
-type UnsafeBuffer struct {
+// UnsafeWidget with goroutine tracking
+type UnsafeWidget struct {
     // Goroutine tracking
-    ownerGID int64 // Goroutine ID that owns this buffer
+    ownerGID int64 // Goroutine ID that owns this widget
 
     // Regular fields
     data []byte
@@ -59,7 +59,7 @@ func getGoroutineID() int64 {
 }
 
 // checkOwnership verifies single goroutine access
-func (b *UnsafeBuffer) checkOwnership() {
+func (b *UnsafeWidget) checkOwnership() {
     gid := getGoroutineID()
 
     // First access - claim ownership
@@ -80,7 +80,7 @@ func (b *UnsafeBuffer) checkOwnership() {
 }
 
 // Write with ownership check
-func (b *UnsafeBuffer) Write(p []byte) (int, error) {
+func (b *UnsafeWidget) Write(p []byte) (int, error) {
     b.checkOwnership()
     // Actual write implementation
     n := copy(b.data[b.pos:], p)
@@ -96,17 +96,17 @@ func (b *UnsafeBuffer) Write(p []byte) (int, error) {
 //go:build production
 // +build production
 
-package kbuffer
+package foo
 
 // No-op in production for zero overhead
-func (b *UnsafeBuffer) checkOwnership() {}
+func (b *UnsafeWidget) checkOwnership() {}
 ```
 
 ### 3. Atomic Access Counter
 
 ```go
 // concurrent_detector.go
-package kbuffer
+package foo
 
 import (
     "fmt"
@@ -134,13 +134,13 @@ func (d *ConcurrentDetector) Exit() {
     }
 }
 
-// Usage in buffer
-type MonitoredBuffer struct {
+// Usage in widget
+type MonitoredWidget struct {
     ConcurrentDetector
     data []byte
 }
 
-func (b *MonitoredBuffer) Write(p []byte) (int, error) {
+func (b *MonitoredWidget) Write(p []byte) (int, error) {
     b.Enter()
     defer b.Exit()
 
@@ -153,7 +153,7 @@ func (b *MonitoredBuffer) Write(p []byte) (int, error) {
 
 ```go
 // mutex_detector.go
-package kbuffer
+package foo
 
 import (
     "sync"
@@ -196,7 +196,7 @@ func (d *MutexDetector) Exit() {
 
 ```go
 // channel_detector.go
-package kbuffer
+package foo
 
 // ChannelDetector uses channels for detection
 type ChannelDetector struct {
@@ -248,12 +248,12 @@ func (d *ChannelDetector) Exit() {
 ### Conditional Compilation Files
 
 ```
-buffer.go                 # Common interface
-buffer_safe.go           # Safe implementation
-buffer_unsafe.go         # Unsafe implementation
-buffer_unsafe_dev.go     # Development checks (build: !production)
-buffer_unsafe_prod.go    # No checks (build: production)
-buffer_unsafe_race.go    # Race detector fallback (build: race)
+widget.go                 # Common interface
+widget_safe.go           # Safe implementation
+widget_unsafe.go         # Unsafe implementation
+widget_unsafe_dev.go     # Development checks (build: !production)
+widget_unsafe_prod.go    # No checks (build: production)
+widget_unsafe_race.go    # Race detector fallback (build: race)
 ```
 
 ## Advanced Detection Patterns
@@ -262,7 +262,7 @@ buffer_unsafe_race.go    # Race detector fallback (build: race)
 
 ```go
 // stack_detector.go
-package kbuffer
+package foo
 
 import (
     "bytes"
@@ -303,7 +303,7 @@ func (d *StackDetector) RecordAccess() {
 
 ```go
 // time_detector.go
-package kbuffer
+package foo
 
 import (
     "sync/atomic"
@@ -337,7 +337,7 @@ func (d *TimeDetector) Enter(expectedDuration time.Duration) {
 //go:build debug
 // +build debug
 
-package kbuffer
+package foo
 
 import (
     "log"
@@ -377,7 +377,7 @@ func panicConcurrentAccess(details ...interface{}) {
     msg := fmt.Sprintf(`
 FATAL: Concurrent Access Violation
 ===================================
-This buffer does not support concurrent access.
+This widget does not support concurrent access.
 Use the thread-safe version or add external synchronization.
 
 Details: %v
@@ -400,7 +400,7 @@ func TestConcurrentAccessPanics(t *testing.T) {
         t.Skip("skipping concurrent access test in short mode")
     }
 
-    buf := newUnsafeBuffer(1024)
+    buf := newUnsafeWidget(1024)
     data := []byte("test")
 
     // This should panic
@@ -433,7 +433,7 @@ func TestConcurrentAccessPanics(t *testing.T) {
 
 ```go
 func TestSequentialAccessWorks(t *testing.T) {
-    buf := newUnsafeBuffer(1024)
+    buf := newUnsafeWidget(1024)
 
     // Sequential access should work
     for i := 0; i < 100; i++ {
@@ -464,7 +464,7 @@ func TestSequentialAccessWorks(t *testing.T) {
 - ❌ Don't use expensive detection methods
 - ❌ Don't silently ignore concurrent access
 - ❌ Don't use global state for detection
-- ❌ Don't forget to reset detectors in pooled objects
+- ❌ Don't forget to reset detectors in managered objects
 - ❌ Don't rely only on race detector
 
 ## Performance Impact

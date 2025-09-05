@@ -16,10 +16,10 @@ go test .
 go test -cover .
 
 # Run specific test
-go test -run TestBuffer_Write
+go test -run TestWidget_Write
 
 # Quick benchmark
-go test -bench=Buffer_Write -benchmem
+go test -bench=Widget_Write -benchmem
 
 # Build and check
 go build ./...
@@ -37,7 +37,7 @@ root = "."
 testdata_dir = "testdata"
 
 [build]
-  cmd = "go test -cover ./pkg/kernel/kbuffer"
+  cmd = "go test -cover ./pkg/kernel/foo"
   bin = ""
   include_ext = ["go", "tpl", "tmpl", "html"]
   exclude_dir = ["assets", "tmp", "vendor", "testdata"]
@@ -55,7 +55,7 @@ air
 #!/bin/bash
 # dev.sh - Fast development iteration
 
-PACKAGE=${1:-./pkg/kernel/kbuffer}
+PACKAGE=${1:-./pkg/kernel/foo}
 
 clear
 echo "Testing $PACKAGE..."
@@ -79,10 +79,10 @@ fi
 go install github.com/golang/mock/mockgen@latest
 
 # Generate mocks for interfaces
-mockgen -source=interface.go -destination=mocks/mock_buffer.go -package=mocks
+mockgen -source=interface.go -destination=mocks/mock_widget.go -package=mocks
 
 # With go:generate directive
-//go:generate mockgen -source=interface.go -destination=mocks/mock_buffer.go
+//go:generate mockgen -source=interface.go -destination=mocks/mock_widget.go
 go generate ./...
 ```
 
@@ -95,7 +95,7 @@ go generate ./...
 
 cat > benchmark_generated_test.go << 'EOF'
 // Code generated; DO NOT EDIT.
-package kbuffer
+package foo
 
 import "testing"
 
@@ -118,13 +118,13 @@ done
 
 ```bash
 # Build with debug symbols
-go build -gcflags="all=-N -l" ./pkg/kernel/kbuffer
+go build -gcflags="all=-N -l" ./pkg/kernel/foo
 
 # With race detector
-go build -race ./pkg/kernel/kbuffer
+go build -race ./pkg/kernel/foo
 
 # With escape analysis
-go build -gcflags="-m=2" ./pkg/kernel/kbuffer 2>&1 | grep escape
+go build -gcflags="-m=2" ./pkg/kernel/foo 2>&1 | grep escape
 ```
 
 ### Delve Debugger
@@ -134,10 +134,10 @@ go build -gcflags="-m=2" ./pkg/kernel/kbuffer 2>&1 | grep escape
 go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Debug test
-dlv test ./pkg/kernel/kbuffer -- -test.run TestBuffer_Write
+dlv test ./pkg/kernel/foo -- -test.run TestWidget_Write
 
 # Debug commands
-(dlv) break TestBuffer_Write
+(dlv) break TestWidget_Write
 (dlv) continue
 (dlv) print buf
 (dlv) step
@@ -148,7 +148,7 @@ dlv test ./pkg/kernel/kbuffer -- -test.run TestBuffer_Write
 
 ```bash
 # Generate trace
-go test -trace=trace.out ./pkg/kernel/kbuffer
+go test -trace=trace.out ./pkg/kernel/foo
 
 # View trace
 go tool trace trace.out
@@ -165,7 +165,7 @@ go test -cpuprofile=cpu.prof -bench=.
 # Analyze
 go tool pprof cpu.prof
 (pprof) top
-(pprof) list Buffer.Write
+(pprof) list Widget.Write
 (pprof) web
 ```
 
@@ -269,7 +269,7 @@ export GOMAXPROCS=4
 # Makefile
 .PHONY: test bench cover clean dev
 
-PACKAGE := ./pkg/kernel/kbuffer
+PACKAGE := ./pkg/kernel/foo
 
 test:
 	go test -v $(PACKAGE)
@@ -339,7 +339,7 @@ dev:
     <go_parameters value="-i" />
     <framework value="gotest" />
     <kind value="PACKAGE" />
-    <package value="github.com/org/project/pkg/kernel/kbuffer" />
+    <package value="github.com/org/project/pkg/kernel/foo" />
     <directory value="$PROJECT_DIR$" />
     <filePath value="$PROJECT_DIR$" />
     <coverage enabled="true" />

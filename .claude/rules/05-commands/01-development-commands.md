@@ -83,7 +83,7 @@ go tool cover -html=coverage.out
 go tool cover -func=coverage.out
 
 # Coverage for specific package
-go test -cover ./pkg/kernel/kbuffer/...
+go test -cover ./pkg/kernel/foo/...
 
 # Coverage with race detection
 go test -race -cover
@@ -213,7 +213,7 @@ bazel build --config=dev //pkg/kernel/kpackage/...
 bazel build --config=prod //pkg/kernel/kpackage/...
 
 # Build specific target
-bazel build //pkg/kernel/kbuffer:kbuffer
+bazel build //pkg/kernel/foo:foo
 
 # Build and run tests
 bazel test //pkg/kernel/kpackage:all
