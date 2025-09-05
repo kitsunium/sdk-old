@@ -5,234 +5,168 @@
 **Mode**: Test-Driven Development (TDD) avec approche incrémentale  
 **Règles**: Suit strictement `.claude/rules/` pour toutes les décisions d'architecture
 
-## 🎯 MISSION
+## 🚨 RÈGLES CRITIQUES
 
-Le package kbuffer est une bibliothèque de gestion mémoire minimaliste pour opérations kernel haute performance.
+**OBLIGATOIRE**: Lire `.claude/rules/00-critical-architecture.md` - Ces règles ont priorité absolue sur toute autre règle.
 
-### Concept Fondamental
+## 🎯 MISSION DÉTAILLÉE
 
-Deux composants simples qui travaillent ensemble :
+### Vue d'ensemble
 
-- **Buffer** - Un bloc mémoire fixe réutilisable qui agit comme un tampon circulaire
-- **Pool** - Un réservoir de buffers pré-alloués pour éviter le coût des allocations/désallocations
+Le package kbuffer est un système de gestion mémoire kernel ultra-optimisé conçu pour éliminer complètement les allocations dynamiques dans les chemins critiques. Il fournit des primitives de bas
+niveau pour la manipulation directe de la mémoire avec une performance maximale.
 
-C'est essentiellement un système de recyclage mémoire ultra-léger pour les hot paths du kernel.
+### Architecture Technique
+
+#### Buffer - Tampon Mémoire Haute Performance
+
+- **Bloc mémoire contigu pré-alloué** de taille fixe (configurable)
+- **Réutilisable à l'infini** sans allocation/désallocation
+- **Opérations zero-copy** pour lectures/écritures
+- **Accès direct via unsafe** pour éviter les vérifications de boundaries
+- **Support du mode circulaire** pour streaming continu
+- **Thread-safe** dans la version de base (mutex minimal)
+- **Version unsafe lock-free** disponible si benchmarks montrent >30% de gain
+
+#### Pool - Gestionnaire de Buffers
+
+- **Réservoir pré-alloué** de N buffers (taille configurable)
+- **Acquisition/libération O(1)** via free-list
+- **Zero allocation** après initialisation
+- **Statistiques internes minimales** (uniquement compteurs atomiques)
+- **Stratégie LIFO** pour maximiser la localité cache
+- **Protection contre les fuites** via finalizers optionnels en dev
+- **Support de pools hiérarchiques** pour différentes tailles
+
+### Cas d'Usage Cibles
+
+1. **Parsers haute fréquence** - Traitement de millions de messages/sec
+2. **Proxy/Gateway** - Transfert de données avec latence minimale
+3. **Serialization** - Marshaling/Unmarshaling sans allocation
+4. **Network I/O** - Buffers réutilisables pour sockets
+5. **File I/O** - Lecture/écriture par blocs optimisés
+6. **Message queues** - Ring buffers pour IPC haute performance
+
+### Objectifs de Performance
+
+- **Latence**: <10ns pour Get/Put sur Pool (P99)
+- **Throughput**: >100M ops/sec sur CPU moderne
+- **Allocations**: ZÉRO après warm-up
+- **Cache misses**: Minimisés via pool LIFO et alignment
+- **Contention**: Lock-free dans version unsafe pour scaling linéaire
 
 ## 📚 RÈGLES DE DÉVELOPPEMENT
 
-Ce package suit STRICTEMENT les règles définies dans `.claude/rules/`:
-
-### Architecture (`.claude/rules/01-architecture/`)
-
-- **Interfaces** → `01-interfaces.md`: Contrats d'API et types publics
-- **Structs** → `02-structs.md`: Optimisation de layout mémoire
-- **Organisation** → `03-file-organization.md`: Une type par fichier, structure plate
-- **Patterns** → `04-design-patterns.md`: Patterns architecturaux kernel
-
-### Implémentation (`.claude/rules/02-implementation/`)
-
-- **Safe/Unsafe** → `01-safe-unsafe-pattern.md`: Version safe obligatoire, unsafe si gain >30%
-- **Concurrence** → `02-concurrency-detection.md`: Détection runtime en dev
-- **Mémoire** → `03-memory-optimization.md`: Cache-line alignment, zero-alloc
-- **Erreurs** → `04-error-handling.md`: Patterns d'erreur kernel
-
-### Testing (`.claude/rules/03-testing/`)
-
-- **Unit Tests** → `01-unit-tests.md`: Test pour chaque fichier
-- **Benchmarks** → `02-benchmarks.md`: Fichier consolidé `*_bench_test.go`
-- **Integration** → `03-integration-tests.md`: Tests end-to-end
-- **Coverage** → `04-coverage-requirements.md`: 95% minimum pour kernel
-
-### Conventions (`.claude/rules/04-conventions/`)
-
-- **Naming** → `01-naming-conventions.md`: Conventions de nommage Go
-- **Documentation** → `02-documentation-standards.md`: 100% des exports documentés
-- **Organisation** → `03-code-organization.md`: Structure du code
-
-### Commandes (`.claude/rules/05-commands/`)
-
-- **Development** → `01-development.md`: Commandes de dev
-- **Validation** → `02-validation.md`: Tests et validation
-- **Production** → `03-production-builds.md`: Build de production
+**Voir `.claude/rules/` pour toutes les règles détaillées.**
 
 ## 🔄 APPROCHE TDD STRICTE
 
-### ⚠️ ORDRE IMPÉRATIF DES PHASES
-
-**CRITICAL**: Suivre l'ordre exact. Chaque phase valide la précédente.
-
-### Phase 0: Vérification Préalable
-
-1. **TOUJOURS** lire les fichiers existants avant toute création
-2. **JAMAIS** redéclarer des fonctions, types ou constantes existants
-3. **FORMATER** avec `make fmt` après CHAQUE création de fichier
-4. **COMPILER** avec `go build` pour vérifier (pas `make test` car TDD = tests avant code)
-
-### Principes Fondamentaux
-
-1. **Vérifier l'existant** - Toujours checker ce qui existe avec Read avant de créer
-2. **Interfaces & Constantes d'abord** - Définir le contrat complet avant toute implémentation
-3. **Tests avant code** - Écrire les tests (TDD) qui définissent le comportement attendu
-4. **Implémentation minimale** - Juste assez de code pour passer les tests
-5. **Thread-safe par défaut** - Toute implémentation de base DOIT être thread-safe
-6. **Version unsafe optionnelle** - Seulement si benchmarks montrent >30% de gain
-7. **Validation continue** - `make fmt && go build` après chaque fichier (TDD: tests échouent jusqu'à implémentation)
-8. **Benchmarks consolidés** - Un seul fichier `*_bench_test.go` pour tous les benchmarks
-
-## 📝 RÈGLES DE FORMATAGE
-
-### Limite de ligne: 150 caractères
-
-- **TOUTES** les lignes de code doivent faire 150 caractères maximum
-- Cela inclut les commentaires, les signatures de fonctions, etc.
-- Configuré dans `.golangci.yml` et `.editorconfig`
-
-### Comment diviser les lignes longues
-
-```go
-// Commentaires longs: divisez sur plusieurs lignes
-// Ceci est un commentaire très long qui dépasse la limite de 150 caractères
-// et doit donc être divisé sur plusieurs lignes pour respecter la règle
-
-// Signatures de fonctions: mettez les paramètres sur plusieurs lignes
-func ProcessComplexData(
-    ctx context.Context,
-    data []byte,
-    options ProcessOptions,
-    callback func(result Result) error,
-) (*Response, error) {
-    // ...
-}
-
-// Chaînes longues: utilisez la concaténation
-message := "Ceci est un message très long qui dépasse " +
-    "la limite de 150 caractères et doit être divisé " +
-    "sur plusieurs lignes"
-```
-
-## 📂 STRUCTURE KERNEL STANDARD
-
-Selon `.claude/rules/01-architecture/03-file-organization.md`:
-
-```bash
-pkg/kernel/kbuffer/
-├── interface.go            # [1] TOUTES les interfaces, Config struct, DefaultConfig()
-├── constants.go            # [2] TOUTES les constantes du package
-├── errors.go              # [3] Types et variables d'erreur (optionnel)
-├── options.go             # [4] Options de configuration (optionnel)
-├── buffer.go              # [5] Implémentation Buffer safe
-├── buffer_test.go         # [6] Tests unitaires Buffer
-├── pool.go                # [7] Implémentation Pool (pas de DefaultConfig ici!)
-├── pool_test.go           # [8] Tests unitaires Pool
-├── unsafe_buffer.go       # [9] Version unsafe (si gain >30%)
-├── unsafe_buffer_test.go  # [10] Tests unsafe buffer
-├── kbuffer_bench_test.go  # [11] TOUS les benchmarks consolidés
-└── BUILD.bazel            # [12] Configuration build
-```
-
-### Règles Critiques d'Organisation
-
-1. **Un type par fichier** - JAMAIS plusieurs types dans le même fichier
-2. **DefaultConfig() dans interface.go UNIQUEMENT** - Pas de duplication
-3. **Benchmarks consolidés** - Tous dans `kbuffer_bench_test.go`
-4. **Tests appariés** - Chaque `*.go` a son `*_test.go`
+**Voir `.claude/rules/03-testing/` pour les règles de tests et TDD.**
 
 ## 📋 PHASES DE DÉVELOPPEMENT TDD
 
-### ✅ Phase 1: Définition des Contrats
+### ✅ Phase 1: Fondations du Package
 
-**Objectif**: Établir l'API publique complète et les contraintes du système
+**Objectif**: Définir les types de base et constantes
 
-**Actions OBLIGATOIRES avant création**:
+- [ ] Créer constants.go avec DefaultBufferSize, MaxBufferSize, DefaultPoolSize
+- [ ] Exécuter `make fmt` sur constants.go
+- [ ] Créer errors.go avec ErrBufferFull, ErrPoolEmpty, ErrInvalidSize
+- [ ] Exécuter `make fmt` sur errors.go
+- [ ] Créer interface.go avec interfaces Buffer/Pool + DefaultConfig()
+- [ ] Exécuter `make fmt` sur interface.go
+- [ ] Créer types.go avec Config{Size, PoolSize} et Options
+- [ ] Exécuter `make fmt` sur types.go
+- [ ] Exécuter `go build ./...` pour vérifier la compilation
 
-1. Vérifier avec `ls pkg/kernel/kbuffer/` ce qui existe déjà
-2. Lire TOUS les fichiers existants avec Read
-3. Ne JAMAIS redéclarer ce qui existe déjà
+### ✅ Phase 2: Buffer - Élément Atomique
 
-- [ ] Créer interface.go avec toutes les interfaces documentées + DefaultConfig()
-- [ ] Créer constants.go avec toutes les constantes documentées
-- [ ] Documentation complète des attentes de performance et contraintes
-- [ ] Vérifier compilation: `go build ./pkg/kernel/kbuffer`
+**Objectif**: Implémenter le Buffer (plus petit élément réutilisable)
 
-### ✅ Phase 2: Tests Premier Composant (Buffer)
+- [ ] Créer buffer_test.go avec TestNewBuffer et TestBufferCapacity
+- [ ] Exécuter `go test ./...` et vérifier que les tests échouent
+- [ ] Créer buffer.go avec struct buffer et NewBuffer(), Cap() minimaux
+- [ ] Exécuter `make fmt` sur buffer.go
+- [ ] Exécuter `go test ./...` et vérifier que TestNewBuffer et TestBufferCapacity passent
+- [ ] Ajouter TestBufferReadWrite dans buffer_test.go
+- [ ] Exécuter `go test ./...` et vérifier échec de TestBufferReadWrite
+- [ ] Implémenter Read(), Write(), Len(), Bytes() dans buffer.go
+- [ ] Exécuter `go test ./...` jusqu'à ce que TestBufferReadWrite passe
+- [ ] Ajouter TestBufferReset dans buffer_test.go
+- [ ] Exécuter `go test ./...` et vérifier échec de TestBufferReset
+- [ ] Implémenter Reset(), Clear() dans buffer.go
+- [ ] Exécuter `go test ./...` jusqu'à ce que tous les tests passent
+- [ ] Ajouter BenchmarkBuffer dans buffer_test.go
+- [ ] Exécuter `go test -bench . -benchmem` et vérifier 0 allocs/op
 
-**Objectif**: Définir le comportement du Buffer via les tests
+### ✅ Phase 3: Pool - Gestionnaire de Buffers
 
-- [ ] Créer buffer_test.go avec cas nominaux
-- [ ] Ajouter cas d'erreur dans buffer_test.go
-- [ ] Ajouter benchmarks dans buffer_test.go
-- [ ] Implémenter buffer.go pour passer les tests
+**Objectif**: Implémenter le Pool qui gère plusieurs Buffers
 
-### ✅ Phase 3: Tests Composants Additionnels (Pool)
+- [ ] Créer pool_test.go avec TestNewPool
+- [ ] Exécuter `go test ./...` et vérifier que TestNewPool échoue
+- [ ] Créer pool.go avec struct pool et NewPool(size int) minimal
+- [ ] Exécuter `make fmt` sur pool.go
+- [ ] Exécuter `go test ./...` et vérifier que TestNewPool passe
+- [ ] Ajouter TestPoolGetPut dans pool_test.go
+- [ ] Exécuter `go test ./...` et vérifier échec de TestPoolGetPut
+- [ ] Implémenter Get(), Put(*buffer), Len(), Cap() dans pool.go
+- [ ] Exécuter `go test ./...` jusqu'à ce que TestPoolGetPut passe
+- [ ] Ajouter TestPoolConcurrent avec 100 goroutines dans pool_test.go
+- [ ] Exécuter `go test -race ./...` et vérifier 0 race détectée
+- [ ] Si races détectées, corriger pool.go avec synchronisation appropriée
+- [ ] Ajouter BenchmarkPoolGetPut dans pool_test.go
+- [ ] Exécuter `go test -bench GetPut` et vérifier latence <10ns
 
-**Objectif**: Définir et implémenter le Pool de buffers
+### ✅ Phase 4: Intégration et Benchmarks Consolidés
 
-- [ ] Créer pool_test.go avec cas nominaux
-- [ ] Ajouter cas d'erreur dans pool_test.go
-- [ ] Ajouter benchmarks dans pool_test.go
-- [ ] Implémenter pool.go pour passer les tests
+**Objectif**: Valider le système complet et consolider les benchmarks
 
-### ✅ Phase 4: Intégration
+- [ ] Créer integration_test.go avec TestRealWorldScenario (parsing JSON de 10MB)
+- [ ] Exécuter `go test ./...` et vérifier que TestRealWorldScenario passe
+- [ ] Ajouter BenchmarkBufferVsSlice dans buffer_test.go comparant Buffer vs []byte
+- [ ] Exécuter `go test -bench BufferVsSlice` et vérifier gain >30%
+- [ ] Ajouter BenchmarkPoolConcurrent dans pool_test.go avec 1000 goroutines
+- [ ] Exécuter `go test -bench PoolConcurrent` et mesurer throughput >100M ops/sec
+- [ ] Exécuter `go test -bench . -benchmem` et vérifier 0 allocs sur tous les chemins critiques
+- [ ] Exécuter `make test` pour validation complète
 
-**Objectif**: Valider les interactions entre Buffer et Pool
+### ✅ Phase 5: Optimisation et Version Unsafe
 
-- [ ] Tests d'intégration Buffer/Pool
-- [ ] Créer mocks_test.go si nécessaire
-- [ ] Valider cohérence du système complet
+**Objectif**: Optimiser et créer version unsafe si gains significatifs
 
-### ✅ Phase 5: Optimisation
+- [ ] Exécuter `go test -bench . -cpuprofile cpu.prof`
+- [ ] Analyser avec `go tool pprof cpu.prof` et identifier les hotspots
+- [ ] Exécuter `go build -gcflags="-m -m" ./...` pour identifier les escape allocations
+- [ ] Si hotspot identifié, créer unsafe_buffer.go avec UnsafeBuffer
+- [ ] Exécuter `make fmt` sur unsafe_buffer.go
+- [ ] Créer unsafe_buffer_test.go avec tests adaptés pour UnsafeBuffer
+- [ ] Exécuter `go test ./...` et vérifier que les tests unsafe passent
+- [ ] Exécuter `go test -bench . -benchmem` pour comparer Safe vs Unsafe
+- [ ] Si gain >30%, ajouter build tag `// +build unsafe` dans unsafe_buffer.go
+- [ ] Documenter les risques et gains dans unsafe_buffer.go
 
-**Objectif**: Améliorer les performances mesurées
+### ✅ Phase 6: Finalisation et Documentation
 
-- [ ] Profiler avec les benchmarks existants
-- [ ] Identifier et optimiser les hot paths
-- [ ] Ajouter directives compiler si nécessaire
-- [ ] Créer versions unsafe si gains >30%
+**Objectif**: Package production-ready avec documentation complète
 
-### ✅ Phase 6: Finalisation
-
-**Objectif**: Préparer pour la production
-
-- [ ] Créer BUILD.bazel
-- [ ] Valider coverage > 95%
-- [ ] Documentation finale
-- [ ] Validation performance globale
+- [ ] Créer README.md avec sections: Purpose, API Reference, Usage Examples, Performance, Thread Safety
+- [ ] Créer BUILD.bazel avec go_library et go_test targets
+- [ ] Exécuter `bazel build //pkg/kernel/kbuffer:all` si Bazel disponible
+- [ ] Exécuter `bazel test //pkg/kernel/kbuffer:all` si Bazel disponible
+- [ ] Exécuter `make fmt` et vérifier aucune modification
+- [ ] Exécuter `make test` et vérifier 100% PASS, 0 races, coverage ≥99%
+- [ ] Créer examples/basic_usage.go avec exemple complet
+- [ ] Exécuter `go run examples/basic_usage.go` pour validation
+- [ ] Mettre à jour instruction.md section "État Actuel" avec résultats finaux
 
 ## 🎬 PROCHAINE ACTION
 
-**Action**: Vérifier l'existant et corriger les erreurs de compilation
-
-1. Lancer `go build ./pkg/kernel/kbuffer` pour identifier les erreurs
-2. Corriger les redéclarations entre fichiers
-3. S'assurer que DefaultConfig() est UNIQUEMENT dans interface.go
-4. Valider que chaque type est dans son propre fichier
-
-## 📚 RÉFÉRENCES AUX RÈGLES
-
-### Architecture et Organisation
-
-- `.claude/rules/01-architecture/01-interfaces.md` - Design des interfaces
-- `.claude/rules/01-architecture/02-structs.md` - Optimisation des structs
-- `.claude/rules/01-architecture/03-file-organization.md` - Organisation des fichiers
-- `.claude/rules/01-architecture/04-design-patterns.md` - Patterns architecturaux
-
-### Implémentation
-
-- `.claude/rules/02-implementation/01-safe-unsafe-pattern.md` - Pattern safe/unsafe
-- `.claude/rules/02-implementation/02-concurrency-detection.md` - Détection concurrence
-- `.claude/rules/02-implementation/03-memory-optimization.md` - Optimisation mémoire
-- `.claude/rules/02-implementation/04-error-handling.md` - Gestion d'erreurs
-
-### Testing
-
-- `.claude/rules/03-testing/01-unit-tests.md` - Tests unitaires
-- `.claude/rules/03-testing/02-benchmarks.md` - Benchmarks
-- `.claude/rules/03-testing/03-integration-tests.md` - Tests d'intégration
-- `.claude/rules/03-testing/04-coverage-requirements.md` - Couverture de code
+**Action**: Implémenter le package kbuffer selon les phases TDD
 
 ## 💻 COMMANDES DE VALIDATION
 
-### Les 2 commandes essentielles
+### Commandes essentielles
 
 ```bash
 # 1. Formater le code (limite 150 caractères, gofmt, goimports)
@@ -242,87 +176,22 @@ make fmt
 make test
 ```
 
-### Workflow TDD (Test-Driven Development)
-
-```bash
-# 1. Créer les TESTS d'abord (buffer_test.go)
-make fmt
-go build ./pkg/kernel/kbuffer  # Compile mais tests échouent (normal!)
-
-# 2. Créer l'IMPLÉMENTATION ensuite (buffer.go)
-make fmt
-go build ./pkg/kernel/kbuffer  # Doit compiler
-
-# 3. Faire passer les tests
-make test  # Maintenant les tests doivent passer ✅
-
-# En TDD: Tests rouges 🔴 → Code → Tests verts ✅
-```
-
-### Commandes spécifiques (si besoin)
-
-```bash
-# Compilation uniquement
-go build ./pkg/kernel/kbuffer
-
-# Tests avec coverage détaillé
-go test -v -cover ./pkg/kernel/kbuffer
-
-# Benchmarks uniquement
-go test -bench=. -benchmem ./pkg/kernel/kbuffer
-
-# Race detection
-go test -race ./pkg/kernel/kbuffer
-```
-
-## 🚀 CHECKLIST DE VALIDATION
-
-### Avant de créer un fichier
-
-- [ ] Vérifier qu'il n'existe pas déjà
-- [ ] Lire les fichiers existants pour éviter les redéclarations
-- [ ] Confirmer l'emplacement selon `.claude/rules/01-architecture/03-file-organization.md`
-
-### Après création de CHAQUE fichier
-
-- [ ] Exécuter `make fmt` pour formater le code
-- [ ] Vérifier la compilation : `go build ./pkg/kernel/kbuffer`
-- [ ] Si erreurs de compilation → Corriger immédiatement
-- [ ] Vérifier qu'il n'y a pas de redéclaration
-
-### Validation TDD (après implémentation)
-
-- [ ] Les tests doivent être écrits AVANT le code (TDD)
-- [ ] Une fois le code implémenté → `make test` doit passer
-- [ ] Si tests échouent → Corriger le code jusqu'à ce qu'ils passent
-
-### Validation finale du package complet
-
-- [ ] `make fmt` sur tout le package
-- [ ] `make test` doit passer à 100%
-- [ ] Coverage ≥ 95%
-- [ ] Tous les benchmarks dans `kbuffer_bench_test.go`
-- [ ] Si version unsafe → Gain documenté >30%
-
 ## 📊 MÉTRIQUES DE SUCCÈS
 
-| Métrique     | Cible               | Validation                    |
-| ------------ | ------------------- | ----------------------------- |
-| Coverage     | ≥95%                | `go test -cover`              |
-| Race-free    | 0 races             | `go test -race`               |
-| Allocations  | 0/op idéal          | `go test -bench -benchmem`    |
-| Gain Unsafe  | >30% pour justifier | Benchmarks comparatifs        |
-| Compilation  | 0 erreurs           | `go build`                    |
-| Qualité Code | Grade A Codacy      | `codacy-analysis-cli analyze` |
-| Code Smells  | 0                   | Analyse Codacy                |
-| Complexité   | <10 par fonction    | Analyse Codacy                |
+| Métrique    | Cible               | Validation                 |
+| ----------- | ------------------- | -------------------------- |
+| Coverage    | ≥99% (kernel)       | `go test -cover`           |
+| Allocations | 0/op obligatoire    | `go test -bench -benchmem` |
+| Race-free   | 0 races             | `go test -race`            |
+| Gain Unsafe | >30% pour justifier | Benchmarks comparatifs     |
+| README.md   | 100% complet        | Documentation API complète |
 
 ## 🔄 ÉTAT ACTUEL
 
 **Itération**: 0  
 **Phase**: Initialisation  
 **Composant**: Aucun  
-**Prochain**: interface.go
+**Prochain**: -
 
 ## 📝 TEMPLATE LOG D'ITÉRATION
 

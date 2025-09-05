@@ -54,9 +54,10 @@ class TDDLoop:
         
         # Configuration
         self.iteration = 0
-        self.max_iterations = config.get('max_iterations', 50)
+        self.max_iterations = config.get('max_iterations', 500)
         self.timeout = config.get('timeout', 1800)
         self.sleep_between = config.get('sleep_between', 2)
+        self.debug = config.get('debug', False)
         
         # Create backup directory in working dir
         self.backup_dir = Path('.tdd-backups')
@@ -117,7 +118,7 @@ class TDDLoop:
         checked = re.findall(r'- \[x\] (.+)', content)
         return unchecked, checked
     
-    def update_instruction_file(self, files_created: list, message: str):
+    def update_instruction_file(self, files_created: list, commands_run: list, message: str):
         """Update instruction file with progress"""
         content = self.instructions_file.read_text()
         original_content = content
@@ -130,25 +131,34 @@ class TDDLoop:
             content
         )
         
-        # Check off tasks based on created files
+        # Check off tasks based on created files - MORE STRICT MATCHING
         for file_path in files_created:
-            # Get just filename
             filename = Path(file_path).name
-            # Also try without extension
-            name_no_ext = Path(filename).stem
             
-            # Try multiple patterns to check off related tasks
+            # Only check off tasks that explicitly mention creating this specific file
             patterns = [
-                # Direct filename mention
-                rf'(- \[)[ ](]\s*[^]]*{re.escape(filename)}[^]]*)',
-                # Without extension
-                rf'(- \[)[ ](]\s*[^]]*{re.escape(name_no_ext)}[^]]*)',
-                # With underscores as spaces
-                rf'(- \[)[ ](]\s*[^]]*{re.escape(filename.replace("_", " "))}[^]]*)',
+                # Match "Créer filename" exactly
+                rf'(- \[)[ ](]\s*Créer {re.escape(filename)}[^]]*)',
+                # Match "Create filename" exactly
+                rf'(- \[)[ ](]\s*Create {re.escape(filename)}[^]]*)',
             ]
             
             for pattern in patterns:
-                content = re.sub(pattern, r'\1x\2', content, flags=re.IGNORECASE)
+                content = re.sub(pattern, r'\1x\2', content, count=1)  # Only replace first match
+        
+        # Check off tasks based on commands run
+        for cmd_output in commands_run:
+            cmd = cmd_output.split(':')[0]
+            
+            # Check off tasks that mention executing this command
+            patterns = [
+                rf'(- \[)[ ](]\s*[^]]*exécuter[^]]*{re.escape(cmd)}[^]]*)',
+                rf'(- \[)[ ](]\s*[^]]*Exécuter[^]]*{re.escape(cmd)}[^]]*)',
+                rf'(- \[)[ ](]\s*[^]]*run[^]]*{re.escape(cmd)}[^]]*)',
+            ]
+            
+            for pattern in patterns:
+                content = re.sub(pattern, r'\1x\2', content, flags=re.IGNORECASE, count=1)
         
         # Add iteration log
         log_entry = f"""
@@ -189,6 +199,12 @@ class TDDLoop:
         existing_files = self.get_existing_files()
         unchecked_tasks, checked_tasks = self.extract_tasks()
         
+        # Debug mode
+        if self.debug:
+            print(f"🔍 Debug: {len(unchecked_tasks)} tâches non cochées")
+            if unchecked_tasks:
+                print(f"   Prochaines: {unchecked_tasks[:3]}")
+        
         # Format existing files
         files_list = []
         for dir_path, files in existing_files.items():
@@ -211,23 +227,29 @@ TÂCHES DÉJÀ FAITES (cochées):
 
 INSTRUCTION CRITIQUE:
 1. Lis attentivement {self.instructions_name} pour comprendre le projet
-2. Identifie le PROCHAIN fichier à créer selon l'ordre logique défini
-3. Crée UN SEUL fichier à la fois
-4. Le fichier doit être COMPLET et fonctionnel
-5. Utilise les chemins relatifs depuis le répertoire de travail
+2. Suis STRICTEMENT les règles dans .claude/rules/ (priorité absolue)
+3. Identifie la PROCHAINE tâche non cochée à réaliser
+4. Exécute EXACTEMENT UNE tâche à la fois (création de fichier OU exécution de commande)
+5. Si la tâche demande d'exécuter une commande (make fmt, go test, etc.), exécute-la
+6. Utilise les chemins relatifs depuis le répertoire de travail
 
 DÉCISION:
-- Si il reste des tâches non cochées ET des fichiers à créer → crée le prochain fichier
-- Si toutes les tâches sont cochées OU tous les fichiers existent → retourne status:"completed"
+- Si il reste des tâches non cochées → exécute la prochaine tâche
+- Si TOUTES les tâches sont cochées (et seulement dans ce cas) → retourne status:"completed"
 
 Réponds UNIQUEMENT avec un JSON valide (pas de texte avant ou après):
 {{
   "files": {{
     "chemin/relatif/fichier.ext": "contenu complet du fichier"
   }},
+  "commands": {{
+    "commande": "sortie de la commande (ou 'OK' si succès)"
+  }},
   "status": "in_progress" ou "completed",
   "message": "Description de ce qui a été fait"
 }}
+
+NOTE: Le champ "files" est pour créer des fichiers, "commands" pour exécuter des commandes.
 """
         return prompt
     
@@ -256,7 +278,7 @@ Réponds UNIQUEMENT avec un JSON valide (pas de texte avant ou après):
             # Extract JSON from output
             json_match = re.search(r'\{.*\}', output, re.DOTALL)
             if not json_match:
-                return [], "error", "No JSON found in response"
+                return [], [], "error", "No JSON found in response"
             
             data = json.loads(json_match.group())
             
@@ -268,15 +290,20 @@ Réponds UNIQUEMENT avec un JSON valide (pas de texte avant ou après):
                 path.write_text(content)
                 files_created.append(file_path)
             
+            commands_run = []
+            for cmd, output in data.get('commands', {}).items():
+                commands_run.append(f"{cmd}: {output[:100]}..." if len(output) > 100 else f"{cmd}: {output}")
+                print(f"    ⚡ Executed: {cmd}", Colors.CYAN)
+            
             status = data.get('status', 'in_progress')
             message = data.get('message', '')
             
-            return files_created, status, message
+            return files_created, commands_run, status, message
             
         except json.JSONDecodeError as e:
-            return [], "error", f"Invalid JSON: {e}"
+            return [], [], "error", f"Invalid JSON: {e}"
         except Exception as e:
-            return [], "error", str(e)
+            return [], [], "error", str(e)
     
     def save_iteration_debug(self, iteration: int, prompt: str, output: str):
         """Save iteration data for debugging"""
@@ -336,22 +363,28 @@ Réponds UNIQUEMENT avec un JSON valide (pas de texte avant ou après):
                 self.save_iteration_debug(self.iteration + 1, prompt, output)
                 
                 if success:
-                    files_created, status, message = self.parse_response(output)
+                    files_created, commands_run, status, message = self.parse_response(output)
                     
+                    # Verify completion claim
                     if status == "completed":
-                        print("🎯 Project completed!", Colors.GREEN + Colors.BOLD)
-                        break
+                        unchecked, _ = self.extract_tasks()
+                        if len(unchecked) > 0:
+                            print(f"    ⚠️ Claude dit 'completed' mais {len(unchecked)} tâches restent!", Colors.YELLOW)
+                            status = "in_progress"
+                        else:
+                            print("🎯 Project completed!", Colors.GREEN + Colors.BOLD)
+                            break
                     
-                    if files_created:
+                    if files_created or commands_run:
                         for file in files_created:
                             print(f"    ✅ Created: {file}", Colors.GREEN)
                         
-                        self.update_instruction_file(files_created, message)
+                        self.update_instruction_file(files_created, commands_run, message)
                         
                         if message:
                             print(f"    💬 {message[:100]}", Colors.CYAN)
                     else:
-                        print(f"    ⚠️ No files created", Colors.YELLOW)
+                        print(f"    ⚠️ No files created or commands run", Colors.YELLOW)
                         if message:
                             print(f"    💬 {message}", Colors.YELLOW)
                 else:
@@ -387,7 +420,7 @@ def print_colored(msg: str, color: str = ""):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generic TDD Loop Runner",
+        description="Generic TDD Loop Runner with Command Execution",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -399,19 +432,22 @@ Examples:
     
     parser.add_argument('instruction_file', 
                        help='Path to instruction file (any .md file)')
-    parser.add_argument('--max', type=int, default=50, 
-                       help='Max iterations (default: 50)')
+    parser.add_argument('--max', type=int, default=500, 
+                       help='Max iterations (default: 500)')
     parser.add_argument('--timeout', type=int, default=1800, 
                        help='Timeout per iteration in seconds (default: 1800)')
     parser.add_argument('--sleep', type=int, default=2, 
                        help='Sleep between iterations (default: 2)')
+    parser.add_argument('--debug', action='store_true',
+                       help='Enable debug mode for verbose output')
     
     args = parser.parse_args()
     
     config = {
         'max_iterations': args.max,
         'timeout': args.timeout,
-        'sleep_between': args.sleep
+        'sleep_between': args.sleep,
+        'debug': args.debug
     }
     
     try:

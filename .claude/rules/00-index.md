@@ -1,5 +1,15 @@
 # 📚 Go Kernel Package Development Rules - Index
 
+## ⚠️ CRITICAL: READ FIRST ⚠️
+
+**→ [00-critical-architecture.md](00-critical-architecture.md) ← MANDATORY READING BEFORE ANYTHING ELSE**
+
+This file contains the HIGHEST PRIORITY rules that override all other rules. It defines:
+
+- Kernel vs Core package distinctions
+- Performance vs observability requirements
+- Mandatory documentation and testing workflows
+
 ## Overview
 
 This documentation provides comprehensive guidelines for developing high-performance Go kernel packages with a focus on safety, performance, and maintainability.
@@ -8,6 +18,7 @@ This documentation provides comprehensive guidelines for developing high-perform
 
 ```
 .claude/rules/
+├── 00-critical-architecture.md    # 🚨 HIGHEST PRIORITY RULES
 ├── 00-index.md                    # This file - main overview
 ├── 01-architecture/                # Structural patterns and design
 │   ├── 01-interfaces.md           # Interface design and contracts
