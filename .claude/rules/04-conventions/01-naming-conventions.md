@@ -9,7 +9,7 @@ Establish consistent naming conventions that promote code clarity, maintainabili
 ### Kernel Package Names
 
 - **Pattern**: `k{function}` (lowercase, no underscores)
-- **Examples**: `foo`, `bar`, `baz`, `kqueue`
+- **Examples**: `foo`, `bar`, `baz`, `qux`
 - **Rationale**: `k` prefix identifies kernel-level optimized packages
 
 ```go
@@ -132,7 +132,7 @@ func (b *Widget) SetTimeout(time.Duration) { }
 // All caps with underscores for exported constants
 const (
     DEFAULT_SIZE = 4096
-    MAX_BUFFER_SIZE = 1 << 20
+    MAX_WIDGET_SIZE = 1 << 20
 )
 
 // CamelCase for unexported constants
@@ -162,7 +162,7 @@ var widgetManager *sync.Manager
 var globalInstance *Widget
 
 // Common abbreviations
-buf  // widget
+w    // widget
 err  // error
 ctx  // context
 req  // request
@@ -174,9 +174,9 @@ msg  // message
 
 ```go
 // Single letter or short abbreviation
-func (b *Widget) Write() { }       // b for Widget
-func (p *Manager) Get() { }            // p for Manager
-func (sw *SafeWidget) Lock() { }    // sw for SafeWidget
+func (w *Widget) Write() { }       // w for Widget
+func (m *Manager) Get() { }        // m for Manager
+func (sw *SafeWidget) Lock() { }   // sw for SafeWidget
 ```
 
 ## Error Naming

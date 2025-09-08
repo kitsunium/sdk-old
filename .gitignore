@@ -75,3 +75,7 @@ scripts/__pycache__/
 **/.tdd-backups/
 **/.claude-backups/
 **/instruction.working.md
+
+# Goclaude files
+.gctasks.json
+.gcproject.json

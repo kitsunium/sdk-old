@@ -2,6 +2,14 @@
 
 ## **THESE RULES OVERRIDE ALL OTHER RULES IN CASE OF CONFLICT**
 
+## ⚠️ FOR AUTOMATION (claude-loop.py): TEST FILES MUST USE \_test SUFFIX
+
+**EVERY TEST FILE MUST START WITH:**
+
+```go
+package packagename_test  // NEVER "package packagename"
+```
+
 ## 1. KERNEL vs CORE Package Distinction
 
 ### KERNEL Packages (`pkg/kernel/*`)
@@ -84,7 +92,59 @@ func (s *Service) Process() {
 }
 ```
 
-## 2. MANDATORY Package Documentation
+## 2. MANDATORY Testing Rules - BLACK-BOX ONLY
+
+### 🚫 ABSOLUTE RULE: ALL TESTS MUST BE BLACK-BOX
+
+**THIS RULE HAS NO EXCEPTIONS - VIOLATION = IMMEDIATE REJECTION**
+
+### CRITICAL FOR ALL TEST FILES:
+
+**FIRST LINE OF EVERY TEST FILE MUST BE:**
+
+```go
+package packagename_test  // NOT "package packagename"
+```
+
+**GENERIC EXAMPLE:**
+
+```go
+// ✅ CORRECT - ONLY ACCEPTED FORMAT
+package foo_test  // MANDATORY _test suffix
+
+import (
+    "testing"
+    "path/to/foo"  // Explicit import required
+)
+
+func TestNewWidget(t *testing.T) {
+    w := foo.NewWidget()  // Must use package prefix
+}
+```
+
+```go
+// ❌ FORBIDDEN - AUTOMATIC REJECTION
+package foo  // BANNED - Missing _test suffix
+
+func TestNewWidget(t *testing.T) {
+    w := NewWidget()  // Direct access = VIOLATION
+}
+```
+
+**AUTOMATION REQUIREMENTS:**
+
+- **claude-loop.py**: MUST create ALL test files with `package packagename_test`
+- **Test file creation**: ALWAYS append `_test` to package name
+- **Import statement**: MUST explicitly import the package being tested
+- **Function calls**: MUST use package prefix (e.g., `foo.NewWidget()` not `NewWidget()`)
+
+**WHY THIS MATTERS:**
+
+- Private functions MUST be tested through public API only
+- If private function needs direct testing, it MUST become public
+- Code architecture MUST be simple enough for black-box testing to achieve 100% coverage
+
+## 3. MANDATORY Package Documentation
 
 ### **EVERY PACKAGE MUST HAVE A COMPLETE README.md**
 
@@ -138,7 +198,7 @@ Document all error conditions and how to handle them.
 
 **NO PACKAGE CAN BE CONSIDERED COMPLETE WITHOUT FULL README**
 
-## 3. MANDATORY Development Workflow
+## 4. MANDATORY Development Workflow
 
 ### After EVERY File Creation/Modification
 
@@ -181,7 +241,7 @@ make test
 2. Re-run the ENTIRE validation sequence
 3. Repeat until 100% pass rate
 
-## 4. Anti-Pattern Prevention
+## 5. Anti-Pattern Prevention
 
 ### When Refactoring or Improving
 
@@ -220,7 +280,7 @@ func Process() {
 }
 ```
 
-## 5. Decision Tree for Package Placement
+## 6. Decision Tree for Package Placement
 
 ```
 Is this code performance-critical (nanoseconds matter)?
@@ -238,7 +298,7 @@ Is this code performance-critical (nanoseconds matter)?
     └─ NO → Goes in pkg/lib/ (utilities)
 ```
 
-## 6. Enforcement
+## 7. Enforcement
 
 **THESE RULES ARE ENFORCED BY:**
 
@@ -249,7 +309,7 @@ Is this code performance-critical (nanoseconds matter)?
 
 **NO EXCEPTIONS. NO NEGOTIATIONS.**
 
-## 7. Priority Order
+## 8. Priority Order
 
 When rules conflict, follow this priority:
 
