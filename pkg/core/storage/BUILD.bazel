@@ -1,8 +1,0 @@
-load("@rules_go//go:def.bzl", "go_library")
-
-go_library(
-    name = "storage",
-    srcs = ["storage.go"],
-    importpath = "github.com/kitsunium/sdk/pkg/core/storage",
-    visibility = ["//visibility:public"],
-)

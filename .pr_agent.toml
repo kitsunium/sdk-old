@@ -1,0 +1,48 @@
+# Qodo Merge (formerly PR-Agent) configuration for Kitsunium SDK
+# Docs: https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/
+
+[config]
+model = "claude-sonnet-4-5"
+fallback_models = ["claude-opus-4-6"]
+verbosity_level = 1
+ai_disclaimer_title = ""
+ai_disclaimer = ""
+
+[pr_reviewer]
+num_code_suggestions = 6
+inline_code_comments = true
+ask_and_reflect = false
+persistent_comment = true
+extra_instructions = """
+Focus on:
+1. Layer-hierarchy violations (kernel imports, core imports, component imports).
+2. Naming-convention violations (no `New` prefix, `package.Thing()` style).
+3. Missing tests or benchmarks (hot paths in kernel/).
+4. Third-party deps added to pkg/kernel/ (forbidden).
+5. Coverage impact (gate is 90%).
+Do not suggest stylistic changes — ktn-linter owns style.
+"""
+require_tests_review = true
+require_security_review = true
+require_focused_review = true
+
+[pr_description]
+publish_labels = true
+add_original_user_description = true
+generate_ai_title = false
+extra_instructions = """
+Write a concise 3-bullet summary of what the PR changes and WHY.
+Flag layer-hierarchy, naming, and coverage impacts in a distinct section.
+"""
+
+[pr_code_suggestions]
+num_code_suggestions = 6
+commitable_code_suggestions = false
+extra_instructions = """
+Only suggest changes that are objectively better for correctness, performance,
+or architectural clarity. Do not suggest style changes. Do not suggest adding
+third-party dependencies. Prefer functional options over positional booleans.
+"""
+
+[github]
+deployment_type = "app"

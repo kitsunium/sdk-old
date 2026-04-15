@@ -11,9 +11,8 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 # Tools
 BAZEL := bazel
 GO := go
-GOLANGCI_LINT := $(shell go env GOPATH)/bin/golangci-lint
+KTN_LINTER := $(shell go env GOPATH)/bin/ktn-linter
 GAZELLE := gazelle
-PRETTIER := prettier
 
 # Paths
 PKG_PATH := ./pkg/...
@@ -137,9 +136,9 @@ bench:
 		echo "$(YELLOW)▶ Running stable benchmarks for commit $$COMMIT...$(NC)"; \
 		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
 		bazel test --config=benchmark \
-			//pkg/kernel/kbuffer:kbuffer_bench_test \
-			//pkg/kernel/kcache:kcache_bench_test \
-			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+			//pkg/kernel/pool:bench \
+			//pkg/kernel/cache:bench \
+			//pkg/kernel/errs:bench 2>&1 | \
 			python3 scripts/bench_manager.py save --stdin; \
 		git checkout - >/dev/null 2>&1; \
 		if [ $$STASH_COUNT_AFTER -gt $$STASH_COUNT_BEFORE ]; then \
@@ -149,9 +148,9 @@ bench:
 		echo "$(YELLOW)▶ Running stable benchmarks...$(NC)"; \
 		echo "$(CYAN)→ Using single-core configuration for consistent results$(NC)"; \
 		bazel test --config=benchmark \
-			//pkg/kernel/kbuffer:kbuffer_bench_test \
-			//pkg/kernel/kcache:kcache_bench_test \
-			//pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+			//pkg/kernel/pool:bench \
+			//pkg/kernel/cache:bench \
+			//pkg/kernel/errs:bench 2>&1 | \
 			python3 scripts/bench_manager.py save --stdin $(if $(PRESERVE),--preserve-history); \
 	fi
 	@echo "$(GREEN)✓ Benchmark results saved$(NC)"
@@ -239,21 +238,15 @@ quality/analyze: quality/lint quality/security
 	@echo "$(GREEN)✓ Code analysis complete$(NC)"
 
 
-## quality/format: format all code (Go, YAML, JSON, MD)
+## quality/format: auto-fix Go code via ktn-linter
 .PHONY: quality/format
 quality/format:
-	@echo "$(YELLOW)▶ Formatting code...$(NC)"
-	@echo "  Formatting Go files..."
-	@gofmt -w -s $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./bazel-*/*")
-	@if command -v goimports >/dev/null 2>&1; then \
-		echo "  Running goimports..."; \
-		goimports -w $(shell find . -name "*.go" -not -path "./vendor/*" -not -path "./bazel-*/*"); \
+	@echo "$(YELLOW)▶ Formatting code with ktn-linter...$(NC)"
+	@if ! command -v $(KTN_LINTER) >/dev/null 2>&1; then \
+		echo "$(CYAN)→ Installing ktn-linter...$(NC)"; \
+		$(GO) install github.com/kodflow/ktn-linter/cmd/ktn-linter@latest; \
 	fi
-	@if command -v $(PRETTIER) >/dev/null 2>&1; then \
-		$(PRETTIER) --write "**/*.{json,yaml,yml,md}" --ignore-path .prettierignore; \
-	else \
-		echo "$(YELLOW)⚠ Prettier not installed, skipping non-Go files$(NC)"; \
-	fi
+	@$(KTN_LINTER) fix ./...
 	@$(BAZEL) run //:gazelle
 	@echo "$(GREEN)✓ Code formatted$(NC)"
 
@@ -261,45 +254,65 @@ quality/format:
 .PHONY: fmt
 fmt: quality/format
 
-## quality/lint: run linters
+## quality/lint: run ktn-linter
 .PHONY: quality/lint
 quality/lint:
-	@echo "$(YELLOW)▶ Running linters...$(NC)"
-	@if [ -f .golangci.yml ]; then \
-		if command -v $(GOLANGCI_LINT) >/dev/null 2>&1; then \
-			$(GOLANGCI_LINT) run ./...; \
-		else \
-			echo "$(YELLOW)⚠ golangci-lint not installed, trying with go vet$(NC)"; \
-			$(GO) vet ./...; \
-		fi \
-	else \
-		$(GO) vet ./...; \
+	@echo "$(YELLOW)▶ Running ktn-linter...$(NC)"
+	@if ! command -v $(KTN_LINTER) >/dev/null 2>&1; then \
+		echo "$(CYAN)→ Installing ktn-linter...$(NC)"; \
+		$(GO) install github.com/kodflow/ktn-linter/cmd/ktn-linter@latest; \
 	fi
+	@$(KTN_LINTER) run ./...
 	@echo "$(GREEN)✓ Linting complete$(NC)"
 
-## quality/security: run security analysis
+## quality/security: run security analysis with gosec
 .PHONY: quality/security
 quality/security:
 	@echo "$(YELLOW)▶ Running security checks...$(NC)"
 	@if command -v gosec >/dev/null 2>&1; then \
-		gosec -config .gosec.json ./...; \
+		gosec ./...; \
 	else \
 		echo "$(YELLOW)⚠ gosec not installed, install with: go install github.com/securego/gosec/v2/cmd/gosec@latest$(NC)"; \
 	fi
 	@echo "$(GREEN)✓ Security check complete$(NC)"
 
-## quality/fix: automatically fix all fixable issues
+## quality/fix: automatically fix all fixable issues via ktn-linter
 .PHONY: quality/fix
-quality/fix: quality/format
-	@echo "$(YELLOW)▶ Fixing issues...$(NC)"
-	@if command -v $(GOLANGCI_LINT) >/dev/null 2>&1; then \
-		$(GOLANGCI_LINT) run --fix ./...; \
+quality/fix:
+	@echo "$(YELLOW)▶ Fixing issues with ktn-linter...$(NC)"
+	@if ! command -v $(KTN_LINTER) >/dev/null 2>&1; then \
+		echo "$(CYAN)→ Installing ktn-linter...$(NC)"; \
+		$(GO) install github.com/kodflow/ktn-linter/cmd/ktn-linter@latest; \
 	fi
+	@$(KTN_LINTER) fix ./...
 	@echo "$(GREEN)✓ Issues fixed$(NC)"
+
+## quality/coverage: validate coverage >= 90%
+.PHONY: quality/coverage
+quality/coverage:
+	@echo "$(YELLOW)▶ Validating coverage gate (>= 90%)...$(NC)"
+	@$(BAZEL) coverage //... --combined_report=lcov --test_size_filters=small,medium \
+		--instrumentation_filter="//pkg[/:],//cmd[/:]" >/dev/null 2>&1 || true
+	@COVERAGE_FILE="bazel-out/_coverage/_coverage_report.dat"; \
+	if [ ! -f "$$COVERAGE_FILE" ]; then \
+		echo "$(RED)❌ No coverage report generated$(NC)"; \
+		exit 1; \
+	fi; \
+	LF=$$(grep -o '^LF:[0-9]*' "$$COVERAGE_FILE" | cut -d: -f2 | awk '{s+=$$1} END {print s}'); \
+	LH=$$(grep -o '^LH:[0-9]*' "$$COVERAGE_FILE" | cut -d: -f2 | awk '{s+=$$1} END {print s}'); \
+	if [ -z "$$LF" ] || [ "$$LF" -eq 0 ]; then \
+		echo "$(RED)❌ Invalid coverage data$(NC)"; exit 1; \
+	fi; \
+	PCT=$$(awk "BEGIN {printf \"%.2f\", ($$LH / $$LF) * 100}"); \
+	echo "Coverage: $${PCT}%"; \
+	awk -v t="$$PCT" 'BEGIN { if (t+0 < 90) exit 1 }' || { \
+		echo "$(RED)❌ Coverage $${PCT}% < 90%$(NC)"; exit 1; \
+	}; \
+	echo "$(GREEN)✓ Coverage $${PCT}% >= 90%$(NC)"
 
 ## quality/validate: validate all quality gates pass
 .PHONY: quality/validate
-quality/validate: quality/lint test
+quality/validate: quality/lint test quality/coverage
 	@echo "$(GREEN)✓ All quality gates passed$(NC)"
 
 # ==================================================================================== #
@@ -409,15 +422,9 @@ tools/check:
 	fi
 	@echo ""
 	@echo "$(YELLOW)▶ Checking optional tools...$(NC)"
-	@echo -n "  golangci-lint:"
-	@if command -v $(GOLANGCI_LINT) >/dev/null 2>&1; then \
-		echo "$(GREEN)✓$(NC) $(shell $(GOLANGCI_LINT) --version | head -1 | cut -d' ' -f4)"; \
-	else \
-		echo "$(YELLOW)○ Not installed (optional)$(NC)"; \
-	fi
-	@echo -n "  prettier:     "
-	@if command -v $(PRETTIER) >/dev/null 2>&1; then \
-		echo "$(GREEN)✓$(NC) $(shell $(PRETTIER) --version)"; \
+	@echo -n "  ktn-linter:   "
+	@if command -v $(KTN_LINTER) >/dev/null 2>&1; then \
+		echo "$(GREEN)✓$(NC) installed"; \
 	else \
 		echo "$(YELLOW)○ Not installed (optional)$(NC)"; \
 	fi
@@ -432,16 +439,10 @@ tools/check:
 .PHONY: tools/install
 tools/install:
 	@echo "$(YELLOW)▶ Installing optional tools...$(NC)"
-	@echo "$(CYAN)Installing golangci-lint...$(NC)"
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "$(CYAN)Installing ktn-linter...$(NC)"
+	@go install github.com/kodflow/ktn-linter/cmd/ktn-linter@latest
 	@echo "$(CYAN)Installing gosec...$(NC)"
 	@go install github.com/securego/gosec/v2/cmd/gosec@latest
-	@echo "$(CYAN)Installing prettier...$(NC)"
-	@if command -v npm >/dev/null 2>&1; then \
-		npm install -g prettier; \
-	else \
-		echo "$(YELLOW)⚠ npm not found, skipping prettier installation$(NC)"; \
-	fi
 	@echo "$(GREEN)✓ Tools installed$(NC)"
 
 # ==================================================================================== #

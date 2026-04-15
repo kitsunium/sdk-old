@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "files",
+    srcs = [
+        "archive.go",
+        "directory.go",
+        "file.go",
+        "host.go",
+        "option.go",
+        "stats.go",
+        "system.go",
+    ],
+    importpath = "github.com/kitsunium/sdk/pkg/kernel/files",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_x_sys//unix",
+    ],
+)
+
+go_test(
+    name = "files_test",
+    size = "small",
+    srcs = [
+        "archive_test.go",
+        "directory_test.go",
+        "file_test.go",
+        "stats_test.go",
+    ],
+    deps = [
+        ":files",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

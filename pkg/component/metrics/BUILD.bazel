@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metrics",
+    srcs = [
+        "counter.go",
+        "gauge.go",
+        "health.go",
+        "metrics.go",
+    ],
+    importpath = "github.com/kitsunium/sdk/pkg/component/metrics",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "metrics_test",
+    srcs = ["metrics_test.go"],
+    embed = [":metrics"],
+)

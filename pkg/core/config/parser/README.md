@@ -105,7 +105,7 @@ All parsers implement these methods:
 
 ## Error Handling
 
-The package uses the kerror package for structured error handling. Common errors
+The package uses the errs package for structured error handling. Common errors
 include:
 
 - `ErrInvalidExtension` - File has wrong extension

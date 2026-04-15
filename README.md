@@ -1,8 +1,7 @@
 # Kitsunium SDK
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/kitsunium/sdk.svg)](https://pkg.go.dev/github.com/kitsunium/sdk)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/b938f8b73d184cc7b6b298a18f16bc27)](https://app.codacy.com/gh/kitsunium/sdk/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
-[![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/b938f8b73d184cc7b6b298a18f16bc27)](https://app.codacy.com/gh/kitsunium/sdk/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
+[![codecov](https://codecov.io/gh/kitsunium/sdk/branch/main/graph/badge.svg)](https://codecov.io/gh/kitsunium/sdk)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/kitsunium/sdk/workflows/CI/badge.svg)](https://github.com/kitsunium/sdk/actions)
 
@@ -15,11 +14,11 @@ applications with a focus on efficiency, reliability, and developer experience.
 
 #### 🔧 **Kernel Components**
 
-- **kbuffer**: Buffer pool management with zero-allocation operations
-- **kcache**: Advanced caching with LRU, sharded, and atomic cache
+- **pool**: Buffer pool management with zero-allocation operations
+- **cache**: Advanced caching with LRU, sharded, and atomic cache
   implementations
-- **kerror**: Comprehensive error handling with stack traces and error registry
-- **kfs**: File system utilities with optimized file operations
+- **errs**: Comprehensive error handling with stack traces and error registry
+- **files**: File system utilities with optimized file operations
 
 #### 📦 **Core Utilities**
 
@@ -50,10 +49,10 @@ go get github.com/kitsunium/sdk
 ### Buffer Pool Example
 
 ```go
-import "github.com/kitsunium/sdk/pkg/kernel/kbuffer"
+import "github.com/kitsunium/sdk/pkg/kernel/pool"
 
 // Create a buffer pool
-pool := kbuffer.NewPool(1024)
+pool := pool.NewPool(1024)
 
 // Get a buffer
 buf := pool.Get()
@@ -67,10 +66,10 @@ data := buf.Bytes()
 ### LRU Cache Example
 
 ```go
-import "github.com/kitsunium/sdk/pkg/kernel/kcache"
+import "github.com/kitsunium/sdk/pkg/kernel/cache"
 
 // Create an LRU cache with 1000 entries
-cache := kcache.NewLRU(1000)
+cache := cache.NewLRU(1000)
 
 // Set a value
 cache.Set("key", "value")
@@ -84,17 +83,17 @@ if val, ok := cache.Get("key"); ok {
 ### Error Handling Example
 
 ```go
-import "github.com/kitsunium/sdk/pkg/kernel/kerror"
+import "github.com/kitsunium/sdk/pkg/kernel/errs"
 
 // Define custom errors
 var (
-    ErrNotFound = kerror.New(404, "NOT_FOUND", "Resource not found")
-    ErrInternal = kerror.New(500, "INTERNAL", "Internal server error")
+    ErrNotFound = errs.New(404, "NOT_FOUND", "Resource not found")
+    ErrInternal = errs.New(500, "INTERNAL", "Internal server error")
 )
 
 // Use errors with context
 err := ErrNotFound.WithDetail("user_id", userID)
-if kerror.Is(err, ErrNotFound) {
+if errs.Is(err, ErrNotFound) {
     // Handle not found error
 }
 ```
@@ -154,9 +153,9 @@ make hooks/install
 sdk/
 ├── pkg/
 │   ├── kernel/          # Core kernel packages
-│   │   ├── kbuffer/     # Buffer pool management
-│   │   ├── kcache/      # Caching implementations
-│   │   ├── kerror/      # Error handling
+│   │   ├── pool/        # Buffer pool management
+│   │   ├── cache/       # Caching implementations
+│   │   ├── errs/        # Error handling
 │   │   ├── kfs/         # File system utilities
 │   │   └── config/      # Configuration management
 │   └── core/            # Core utilities

@@ -45,6 +45,9 @@ config.yml
 *.swo
 *~
 
+# Claude
+.claude/
+
 # Test coverage
 coverage.out
 coverage-html/

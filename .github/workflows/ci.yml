@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 env:
-  GO_VERSION: 1.24.6
+  GO_VERSION: 1.26.1
   BAZEL_VERSION: 7.0.0
 
 jobs:
@@ -84,25 +84,10 @@ jobs:
           name: go-modules
           path: ~/go/pkg/mod
 
-      - name: 🎨 Check formatting
+      - name: 🔍 Run ktn-linter
         run: |
-          echo "🔍 Checking Go formatting..."
-          # Check if any files would be modified by gofmt
-          gofmt -l $(find . -name "*.go" -not -path "./vendor/*" -not -path "./bazel-*/*") > unformatted.txt
-          if [ -s unformatted.txt ]; then
-            echo "❌ The following files need formatting:"
-            cat unformatted.txt
-            echo ""
-            echo "💡 Run 'make fmt' locally before committing"
-            exit 1
-          fi
-          echo "✅ All files are properly formatted"
-
-      - name: 🔍 Run go vet
-        run: |
-          echo "🔍 Running go vet..."
-          go vet ./...
-          echo "✅ No issues found"
+          go install github.com/kodflow/ktn-linter/cmd/ktn-linter@latest
+          ktn-linter run ./...
 
       - name: 📤 Upload lint results
         if: always()
@@ -354,12 +339,34 @@ jobs:
           path: coverage.lcov
           retention-days: 1
 
-      - name: 📊 Upload coverage to Codacy
-        uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699 # v1.3.0
+      - name: 📊 Enforce 90% coverage gate
+        run: |
+          if [ ! -s coverage.lcov ]; then
+            echo "::error::No coverage data found (coverage.lcov is missing or empty)"
+            exit 1
+          fi
+          LINES_FOUND=$(grep -o '^LF:[0-9]*' coverage.lcov | cut -d: -f2 | awk '{sum += $1} END {print sum}')
+          LINES_HIT=$(grep -o '^LH:[0-9]*' coverage.lcov | cut -d: -f2 | awk '{sum += $1} END {print sum}')
+          if [ -z "$LINES_FOUND" ] || [ "$LINES_FOUND" -eq 0 ]; then
+            echo "::error::Invalid coverage data (LF=$LINES_FOUND)"
+            exit 1
+          fi
+          total=$(awk "BEGIN {printf \"%.2f\", ($LINES_HIT / $LINES_FOUND) * 100}")
+          threshold=90
+          echo "Total coverage: ${total}% (threshold: ${threshold}%)"
+          awk -v t="$total" -v th="$threshold" 'BEGIN { if (t+0 < th+0) exit 1 }' || {
+            echo "::error::Coverage ${total}% < ${threshold}%"
+            exit 1
+          }
+          echo "✅ Coverage gate passed: ${total}% >= ${threshold}%"
+
+      - name: 📊 Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
         with:
-          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          coverage-reports: coverage.lcov
-        continue-on-error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.lcov
+          flags: unittests
+          fail_ci_if_error: false
 
   # Job 6: Benchmark comparison for PRs
   benchmark-compare:
@@ -419,9 +426,9 @@ jobs:
           echo "⚡ Running stable benchmarks for current PR (single-core, optimized)..."
           echo "ℹ️ Using stable configuration for consistent results"
           bazel test --config=benchmark \
-            //pkg/kernel/kbuffer:kbuffer_bench_test \
-            //pkg/kernel/kcache:kcache_bench_test \
-            //pkg/kernel/kerror:kerror_bench_test 2>&1 | \
+            //pkg/kernel/pool:bench \
+            //pkg/kernel/cache:bench \
+            //pkg/kernel/errs:bench 2>&1 | \
             python3 scripts/bench_manager.py save --stdin
 
       - name: 📊 Compare benchmarks and display in summary

@@ -1,0 +1,11 @@
+version: 1
+
+exclude:
+  - "**/testdata/**"
+  - "**/*_generated.go"
+  - "**/*_mock.go"
+  - "vendor/**"
+  - "scripts/**"
+  - "**/BUILD.bazel"
+
+# All rules enabled with default thresholds

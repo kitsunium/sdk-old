@@ -10,7 +10,7 @@ When importing the SDK as a library, the optimizations are automatically
 applied. No special configuration needed.
 
 ```go
-import "github.com/kitsunium/sdk/pkg/kernel/kbuffer"
+import "github.com/kitsunium/sdk/pkg/kernel/pool"
 ```
 
 ### For Building Applications
@@ -50,9 +50,9 @@ This provides:
 
 ## Performance Features
 
-### kbuffer Package
+### pool Package
 
-The `kbuffer` package is heavily optimized with:
+The `pool` package is heavily optimized with:
 
 1. **Zero-allocation operations**
    - String conversions use unsafe.String
@@ -86,8 +86,8 @@ Latest optimizations show:
 
 ```go
 // Use pooled buffers for maximum performance
-buf := kbuffer.GetBuffer(1024)
-defer kbuffer.PutBuffer(buf)
+buf := pool.GetBuffer(1024)
+defer pool.PutBuffer(buf)
 
 // Zero-allocation string operations
 buf.WriteString("Hello ")
@@ -102,7 +102,7 @@ result := buf.String() // No allocation
 bazel build --config=perf //cmd/yourapp
 
 # For benchmarking
-bazel run --config=perf //pkg/kernel/kbuffer:kbuffer_bench_test
+bazel run --config=perf //pkg/kernel/pool:bench
 
 # For development with race detection
 bazel build --config=debug //cmd/yourapp
@@ -167,6 +167,6 @@ make bench
 make bench/compare <commit>
 
 # Profile CPU usage
-go test -cpuprofile=cpu.prof -bench=. ./pkg/kernel/kbuffer
+go test -cpuprofile=cpu.prof -bench=. ./pkg/kernel/pool
 go tool pprof cpu.prof
 ```
