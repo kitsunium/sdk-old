@@ -1,0 +1,6 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/kitsunium/sdk/v1
+# gazelle:exclude vendor
+# gazelle:exclude bazel-*
+gazelle(name = "gazelle")

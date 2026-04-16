@@ -1,5 +1,0 @@
-# Component layer - public SDK surface. Depends on ports/, internal/*, stdlib.
-package_group(
-    name = "components",
-    packages = ["//components/..."],
-)

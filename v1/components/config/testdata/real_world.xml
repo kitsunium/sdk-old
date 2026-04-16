@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Application Configuration.
+     Equivalent of real_world.ini / real_world.json — must decode to
+     the same normalized map under the implicit `config.` root prefix
+     (see real_world_external_test.go). -->
+<config>
+  <database>
+    <host>localhost</host>
+    <port>5432</port>
+    <name>myapp_production</name>
+    <user>dbuser</user>
+    <pass>secret123</pass>
+    <pool_size>10</pool_size>
+  </database>
+
+  <redis>
+    <host>redis.local</host>
+    <port>6379</port>
+    <db>0</db>
+    <pass></pass>
+    <cluster_enabled>false</cluster_enabled>
+  </redis>
+
+  <logging>
+    <level>info</level>
+    <format>json</format>
+    <output>stdout</output>
+    <file>/var/log/app.log</file>
+    <max_size>100</max_size>
+    <max_backups>3</max_backups>
+    <max_age>30</max_age>
+  </logging>
+
+  <features>
+    <new_ui>true</new_ui>
+    <beta_features>false</beta_features>
+    <experimental>false</experimental>
+    <feature_flags>flag1,flag2,flag3</feature_flags>
+  </features>
+
+  <server>
+    <host>0.0.0.0</host>
+    <port>8080</port>
+    <read_timeout>30</read_timeout>
+    <write_timeout>30</write_timeout>
+    <idle_timeout>120</idle_timeout>
+    <max_header_bytes>1048576</max_header_bytes>
+  </server>
+
+  <security>
+    <jwt_secret>super-secret-key-do-not-share</jwt_secret>
+    <bcrypt_cost>10</bcrypt_cost>
+    <session_timeout>3600</session_timeout>
+    <csrf_enabled>true</csrf_enabled>
+    <cors_origins>https://example.com,https://app.example.com</cors_origins>
+  </security>
+</config>

@@ -1,5 +1,9 @@
 version: 1
 
+# Kitsunium SDK — ktn-linter configuration.
+# The SDK code lives under v1/; v2/, v3/… share the same rules once scaffolded.
+# No per-package v1/ excludes — every file under v1/ passes the full ruleset.
+
 exclude:
   - "**/testdata/**"
   - "**/*_generated.go"
@@ -7,5 +11,4 @@ exclude:
   - "vendor/**"
   - "scripts/**"
   - "**/BUILD.bazel"
-
-# All rules enabled with default thresholds
+  - "bazel-*/**"

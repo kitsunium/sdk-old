@@ -1,5 +1,0 @@
-# Kernel packages - stdlib-only primitives. Private to the SDK (internal/).
-package_group(
-    name = "kernel",
-    packages = ["//internal/kernel/..."],
-)

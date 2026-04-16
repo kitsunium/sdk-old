@@ -1,5 +1,0 @@
-# Core packages - composition on top of internal/kernel. Private to the SDK.
-package_group(
-    name = "core",
-    packages = ["//internal/core/..."],
-)

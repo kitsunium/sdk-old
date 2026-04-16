@@ -47,6 +47,10 @@ config.yml
 
 # Claude
 .claude/
+mcp.json
+
+# ktn-linter
+.ktn-linter.yaml
 
 # Test coverage
 coverage.out
