@@ -106,8 +106,8 @@ description and recorded in `.ktn-linter.yaml` `exclude:` section.
 
 - **Never commit to `main` directly.**
 - **Branch naming**: `feat/*`, `fix/*`, `refactor/*`, `docs/*`, `chore/*`, `perf/*`.
-- **Conventional commits** enforced by `.githooks/commit-msg`.
-- **No AI references in commits** (`Co-Authored-By: Claude/AI`, etc.) enforced by `.githooks/pre-push`.
+- **Conventional commits** required (`feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|merge|wip`).
+- **No AI references in commits** (`Co-Authored-By: Claude/AI`, robot emoji, etc.).
 - **PR required** (even solo). CI must be green.
 - **Squash-only merge** into `main`.
 - Use `/git --commit` and `/git --merge` skills.
@@ -159,7 +159,7 @@ All skills in `~/.claude/commands/` are available. Key ones for this project:
 
 ## 14.0 Safeguards
 
-- Never delete `.claude/`, `.devcontainer/`, `.githooks/`, `scripts/` without explicit user confirmation.
+- Never delete `.claude/`, `.devcontainer/`, `scripts/` without explicit user confirmation.
 - When renaming packages: update BUILD.bazel + run gazelle + verify all imports.
 - When moving content: move, never delete logic.
 

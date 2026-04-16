@@ -143,14 +143,16 @@ type statsImpl struct {
 
 // NewStats returns a *statsImpl initialized from the given path.
 //
-// Missing paths yield a Stats with Exists() == false and no error.
+// Missing paths yield a handle with Exists() == false and no error.
+// The concrete type is returned to allow internal packages to access
+// cached meta fields directly; it still satisfies the Stats interface.
 //
 // Params:
 //   - path: the filesystem path to stat.
 //
 // Returns:
-//   - Stats: initialized stats handle (never nil).
-func NewStats(path string) Stats {
+//   - *statsImpl: initialized stats handle (never nil).
+func NewStats(path string) *statsImpl {
 	si := &statsImpl{
 		path: path,
 		meta: &fileMeta{},

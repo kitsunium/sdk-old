@@ -36,7 +36,7 @@ type directory struct {
 	chmod      *uint32
 	uid        *int
 	gid        *int
-	stats      *stats
+	stats      *statsImpl
 }
 
 // NewDirectory creates a new Directory object based on the given options.
