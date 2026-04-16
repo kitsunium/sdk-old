@@ -1,0 +1,8 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "contract",
+    srcs = ["doc.go"],
+    importpath = "github.com/kitsunium/sdk/internal/core/contract",
+    visibility = ["//:__subpackages__"],
+)

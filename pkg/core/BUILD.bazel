@@ -1,5 +1,0 @@
-# Core packages - higher-level SDK functionality
-package_group(
-    name = "core",
-    packages = ["//pkg/core/..."],
-)

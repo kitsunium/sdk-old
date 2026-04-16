@@ -1,5 +1,0 @@
-# Package group for SDK packages
-package_group(
-    name = "subpackages",
-    packages = ["//pkg/..."],
-)
