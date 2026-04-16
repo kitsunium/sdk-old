@@ -203,14 +203,6 @@ func (p *bufferPool) PutBuffer(b Buffer) {
 				p.PutBuffer(buf.shards[i].buffer)
 			}
 		}
-
-	case *unsafeShardedBuffer:
-		// Pool each shard's buffer
-		for i := uint32(0); i < buf.shardCount; i++ {
-			if buf.shards[i] != nil && buf.shards[i].buffer != nil {
-				p.PutBuffer(buf.shards[i].buffer)
-			}
-		}
 	}
 }
 

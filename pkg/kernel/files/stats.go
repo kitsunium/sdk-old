@@ -1,30 +1,119 @@
+//go:build !windows
+
+// Package files provides file system abstractions for the Kitsunium kernel layer.
+// It exposes File, Directory, and Stats interfaces backed by pure Go stdlib.
 package files
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strconv"
 	"sync"
-
-	"golang.org/x/sys/unix"
+	"syscall"
 )
+
+// maxUID is the maximum valid POSIX UID/GID value (2^31 - 1).
+const maxUID = 0x7FFFFFFF
 
 var (
-	ownerCache = &sync.Map{} // Cache for user names by UID.
-	groupCache = &sync.Map{} // Cache for group names by GID.
+	ownerCache = &sync.Map{} // UID → user name
+	groupCache = &sync.Map{} // GID → group name
 )
 
-// Stats interface provides operations to manage and query file or directory metadata..
+// POSIX permission bit masks (stdlib `syscall` exposes only a subset; we
+// inline the canonical values from <sys/stat.h> to avoid adding a dep).
+const (
+	sIFMT  uint32 = 0o170000
+	sIFREG uint32 = 0o100000
+	sIFDIR uint32 = 0o040000
+	sIFLNK uint32 = 0o120000
+
+	sIRUSR uint32 = 0o000400
+	sIWUSR uint32 = 0o000200
+	sIXUSR uint32 = 0o000100
+	sIRGRP uint32 = 0o000040
+	sIWGRP uint32 = 0o000020
+	sIXGRP uint32 = 0o000010
+	sIROTH uint32 = 0o000004
+	sIWOTH uint32 = 0o000002
+	sIXOTH uint32 = 0o000001
+)
+
+// PermissionSet is a decoded view of a `rwx` triple.
+//
+// It carries the read, write, and execute flags for a single POSIX
+// permission class (owner, group, or other).
+type PermissionSet struct {
+	//: individual permission flags decoded from the mode bits
+	Read, Write, Exec bool
+}
+
+// UserEntity carries the owning user's identity and permission bits.
+//
+// ID is the POSIX UID. Permissions holds the decoded rwx bits.
+// Name is resolved lazily from the system user database.
+type UserEntity struct {
+	//: user identity fields populated by Refresh
+	ID          uint32
+	Permissions PermissionSet
+	name        string
+}
+
+// Name returns the cached user name, resolving lazily on first call.
+//
+// Returns:
+//   - string: the user name or empty string if lookup fails.
+func (ui UserEntity) Name() (result string) {
+	if ui.name == "" {
+		ui.name = lookupUser(ui.ID)
+	}
+	//: return resolved or cached name
+	return ui.name
+}
+
+// GroupEntity carries the owning group's identity and permission bits.
+//
+// ID is the POSIX GID. Permissions holds the decoded rwx bits.
+// Name is resolved lazily from the system group database.
+type GroupEntity struct {
+	//: group identity fields populated by Refresh
+	ID          uint32
+	Permissions PermissionSet
+	name        string
+}
+
+// Name returns the cached group name, resolving lazily on first call.
+//
+// Returns:
+//   - string: the group name or empty string if lookup fails.
+func (gi GroupEntity) Name() (result string) {
+	if gi.name == "" {
+		gi.name = lookupGroup(gi.ID)
+	}
+	//: return resolved or cached name
+	return gi.name
+}
+
+// OtherEntity carries the "other" permission bits.
+//
+// It represents the third POSIX permission class (world/other).
+type OtherEntity struct {
+	//: other-class permission bits
+	Permissions PermissionSet
+}
+
+// Stats exposes filesystem metadata for a path.
 type Stats interface {
-	IsReadable() bool
-	IsWritable() bool
-	IsExecutable() bool
+	IsReadable(uid, gid uint32) bool
+	IsWritable(uid, gid uint32) bool
+	IsExecutable(uid, gid uint32) bool
 	HasPermissions(permissions os.FileMode) bool
-	Owner() UserInfo
-	Group() GroupInfo
-	Other() OtherInfo
+	Owner() UserEntity
+	Group() GroupEntity
+	Other() OtherEntity
 	Chmod(permissions uint32) error
 	Chown(uid, gid int) error
 	IsFile() bool
@@ -33,346 +122,347 @@ type Stats interface {
 	Refresh() error
 }
 
-type stats struct {
-	path   string       // Path to the file or directory
-	exists bool         // Indicates if the file or directory exists
-	mode   uint32       // Combined permissions
-	meta   *unix.Stat_t // File metadata
-
-	user  UserInfo  // File owner information
-	group GroupInfo // Group information
-	other OtherInfo // Other users' information
+// fileMeta is the subset of stat information we consume.
+type fileMeta struct {
+	Mode uint32
+	UID  uint32
+	GID  uint32
+	Size int64
 }
 
-// NewStats creates and initializes a stats object for a given path..
+type statsImpl struct {
+	path   string
+	exists bool
+	mode   uint32
+	meta   *fileMeta
+
+	user  UserEntity
+	group GroupEntity
+	other OtherEntity
+}
+
+// NewStats returns a *statsImpl initialized from the given path.
 //
-// Parameters:
-// - path: string - The path to the file or directory.
+// Missing paths yield a Stats with Exists() == false and no error.
+//
+// Params:
+//   - path: the filesystem path to stat.
 //
 // Returns:
-// - *stats: A pointer to the initialized stats object.
-func NewStats(path string) *stats {
-	s := &stats{
+//   - Stats: initialized stats handle (never nil).
+func NewStats(path string) Stats {
+	si := &statsImpl{
 		path: path,
-		meta: &unix.Stat_t{},
+		meta: &fileMeta{},
 	}
-
-	_ = s.Refresh() // Ignore refresh error in constructor
-
-	return s
+	//: ignore error; caller uses Exists() to detect missing paths
+	_ = si.Refresh()
+	return si
 }
 
-// UserInfo contains the owner information of a file or directory..
-type UserInfo struct {
-	ID          uint32      // UID of the user
-	Permissions Permissions // Permissions: RWX bits (read, write, execute)
-	name        string      // Name of the user
-}
-
-// Name retrieves the name of the user associated with the UID.
+// HasPermissions reports whether the permission bits in `permissions` are all set.
+//
+// Params:
+//   - permissions: the os.FileMode bits to check.
 //
 // Returns:
-// - string: The user name.
-func (u UserInfo) Name() string {
-	if u.name == "" {
-		if cachedName, ok := ownerCache.Load(u.ID); ok {
-			u.name = cachedName.(string)
-		} else {
-			u.name = lookupUser(u.ID)
-		}
-	}
-	return u.name
-}
-
-// GroupInfo contains the group information of a file or directory..
-type GroupInfo struct {
-	ID          uint32      // GID of the group
-	Permissions Permissions // Permissions: RWX bits
-	name        string      // Name of the group
-}
-
-// Name retrieves the name of the group associated with the GID.
-//
-// Returns:
-// - string: The group name.
-func (u GroupInfo) Name() string {
-	if u.name == "" {
-		if cachedName, ok := groupCache.Load(u.ID); ok {
-			u.name = cachedName.(string)
-		} else {
-			u.name = lookupGroup(u.ID)
-		}
-	}
-	return u.name
-}
-
-// OtherInfo contains the permissions for other users of a file or directory..
-type OtherInfo struct {
-	Permissions Permissions // Permissions: RWX bits
-}
-
-type Permissions struct {
-	Read, Write, Exec bool // Boolean flags for read, write, and execute permissions.
-}
-
-// HasPermissions checks if the file or directory has specific permissions.
-//
-// Parameters:
-// - permissions: os.FileMode - The permissions to check.
-//
-// Returns:
-// - bool: True if the file has the specified permissions, otherwise false.
-func (s *stats) HasPermissions(permissions os.FileMode) bool {
+//   - bool: true when all requested bits are set.
+func (si *statsImpl) HasPermissions(permissions os.FileMode) (ok bool) {
+	//: reject modes that exceed the valid 0o777 range
 	if permissions > os.ModePerm {
-		return false // Invalid permissions
+		return false
 	}
-	return s.mode&uint32(permissions) == uint32(permissions)
+	//: bitwise intersection must equal the requested mask
+	return si.mode&uint32(permissions) == uint32(permissions)
 }
 
-// IsReadable checks if the file or directory is readable by a specific user.
+// IsReadable reports whether the given (uid, gid) can read the file.
 //
-// Parameters:
-// - uid: uint32 - User ID to check.
-// - gid: uint32 - Group ID to check.
+// It applies the standard POSIX lookup: owner → group → other.
+//
+// Params:
+//   - uid: the user ID to check.
+//   - gid: the group ID to check.
 //
 // Returns:
-// - bool: True if the file is readable by the user or group, otherwise false.
-func (s *stats) IsReadable(uid, gid uint32) bool {
-	if s.user.ID == uid {
-		return s.user.Permissions.Read
-	} else if s.group.ID == gid {
-		return s.group.Permissions.Read
+//   - bool: true when the identity has read access.
+func (si *statsImpl) IsReadable(uid, gid uint32) (ok bool) {
+	switch {
+	case si.user.ID == uid:
+		//: owner match — use owner read bit
+		return si.user.Permissions.Read
+	case si.group.ID == gid:
+		//: group match — use group read bit
+		return si.group.Permissions.Read
+	default:
+		//: fall back to other read bit
+		return si.other.Permissions.Read
 	}
-	return s.other.Permissions.Read
 }
 
-// IsWritable checks if the file or directory is writable by a specific user.
+// IsWritable reports whether the given (uid, gid) can write the file.
 //
-// Parameters:
-// - uid: uint32 - User ID to check.
-// - gid: uint32 - Group ID to check.
+// Params:
+//   - uid: the user ID to check.
+//   - gid: the group ID to check.
 //
 // Returns:
-// - bool: True if the file is writable by the user or group, otherwise false.
-func (s *stats) IsWritable(uid, gid uint32) bool {
-	if s.user.ID == uid {
-		return s.user.Permissions.Write
-	} else if s.group.ID == gid {
-		return s.group.Permissions.Write
+//   - bool: true when the identity has write access.
+func (si *statsImpl) IsWritable(uid, gid uint32) (ok bool) {
+	switch {
+	case si.user.ID == uid:
+		//: owner match — use owner write bit
+		return si.user.Permissions.Write
+	case si.group.ID == gid:
+		//: group match — use group write bit
+		return si.group.Permissions.Write
+	default:
+		//: fall back to other write bit
+		return si.other.Permissions.Write
 	}
-	return s.other.Permissions.Write
 }
 
-// IsExecutable checks if the file or directory is executable by a specific user.
+// IsExecutable reports whether the given (uid, gid) can execute the file.
 //
-// Parameters:
-// - uid: uint32 - User ID to check.
-// - gid: uint32 - Group ID to check.
+// Params:
+//   - uid: the user ID to check.
+//   - gid: the group ID to check.
 //
 // Returns:
-// - bool: True if the file is executable by the user or group, otherwise false.
-func (s *stats) IsExecutable(uid, gid uint32) bool {
-	if s.user.ID == uid {
-		return s.user.Permissions.Exec
-	} else if s.group.ID == gid {
-		return s.group.Permissions.Exec
+//   - bool: true when the identity has execute access.
+func (si *statsImpl) IsExecutable(uid, gid uint32) (ok bool) {
+	switch {
+	case si.user.ID == uid:
+		//: owner match — use owner exec bit
+		return si.user.Permissions.Exec
+	case si.group.ID == gid:
+		//: group match — use group exec bit
+		return si.group.Permissions.Exec
+	default:
+		//: fall back to other exec bit
+		return si.other.Permissions.Exec
 	}
-	return s.other.Permissions.Exec
 }
 
-// IsFile checks if the path corresponds to a regular file.
+// IsFile reports whether the path is a regular file.
 //
 // Returns:
-// - bool: True if the path is a regular file, otherwise false.
-func (s *stats) IsFile() bool {
-	return s.mode&unix.S_IFREG != 0
+//   - bool: true when the mode indicates a regular file.
+func (si *statsImpl) IsFile() (ok bool) {
+	//: check file type bits against regular-file mask
+	return si.mode&sIFMT == sIFREG
 }
 
-// IsDirectory checks if the path corresponds to a directory.
+// IsDirectory reports whether the path is a directory.
 //
 // Returns:
-// - bool: True if the path is a directory, otherwise false.
-func (s *stats) IsDirectory() bool {
-	return s.mode&unix.S_IFDIR != 0
+//   - bool: true when the mode indicates a directory.
+func (si *statsImpl) IsDirectory() (ok bool) {
+	//: check file type bits against directory mask
+	return si.mode&sIFMT == sIFDIR
 }
 
-// Exists checks if the file or directory exists.
+// Exists reports whether the last Refresh found the path on disk.
 //
 // Returns:
-// - bool: True if the file or directory exists, otherwise false.
-func (s *stats) Exists() bool {
-	return s.exists
+//   - bool: true when the path exists.
+func (si *statsImpl) Exists() (ok bool) {
+	//: return cached existence flag
+	return si.exists
 }
 
-// Owner retrieves the owner information of the file or directory.
+// Owner returns a snapshot of the owning user's UserEntity.
 //
 // Returns:
-// - UserInfo: The owner information (UID, permissions, and name).
-func (s *stats) Owner() UserInfo {
-	return s.user
+//   - UserEntity: the owning user's identity and permissions.
+func (si *statsImpl) Owner() (result UserEntity) {
+	//: return snapshot copy to avoid mutation
+	return si.user
 }
 
-// Group retrieves the group information of the file or directory.
+// Group returns a snapshot of the owning group's GroupEntity.
 //
 // Returns:
-// - GroupInfo: The group information (GID, permissions, and name).
-func (s *stats) Group() GroupInfo {
-	return s.group
+//   - GroupEntity: the owning group's identity and permissions.
+func (si *statsImpl) Group() (result GroupEntity) {
+	//: return snapshot copy to avoid mutation
+	return si.group
 }
 
-// Other retrieves the permissions information for other users of the file or directory.
+// Other returns a snapshot of the "other" class's OtherEntity.
 //
 // Returns:
-// - OtherInfo: The permissions for other users (read, write, execute).
-func (s *stats) Other() OtherInfo {
-	return s.other
+//   - OtherEntity: the other-class permission bits.
+func (si *statsImpl) Other() (result OtherEntity) {
+	//: return snapshot copy to avoid mutation
+	return si.other
 }
 
-// Chmod changes the permissions of the file or directory.
+// Chmod changes the file mode.
 //
-// Parameters:
-// - permissions: uint32 - The new permissions to set.
+// Params:
+//   - permissions: new permission bits to apply.
 //
 // Returns:
-// - error: Error if the operation fails, otherwise nil.
-func (s *stats) Chmod(permissions uint32) error {
-	if err := unix.Chmod(s.path, permissions); err != nil {
-		return fmt.Errorf("failed to chmod %s: %w", s.path, err)
+//   - error: wrapped error if chmod fails.
+func (si *statsImpl) Chmod(permissions uint32) (err error) {
+	//: guard against chmod failure
+	if chmodErr := os.Chmod(si.path, os.FileMode(permissions)); chmodErr != nil {
+		return fmt.Errorf("failed to chmod %s: %w", si.path, chmodErr)
 	}
+	//: success path
 	return nil
 }
 
-// Chown changes the owner and group of the file or directory.
+// Chown changes the owning user and group.
 //
-// Parameters:
-// - uid: int - New user ID.
-// - gid: int - New group ID.
+// Params:
+//   - uid: new user ID to assign.
+//   - gid: new group ID to assign.
 //
 // Returns:
-// - error: Error if the operation fails, otherwise nil.
-func (s *stats) Chown(uid, gid int) error {
-	if uid < 0 || gid < 0 || uid > 0x7FFFFFFF || gid > 0x7FFFFFFF {
-		return unix.EINVAL
+//   - error: syscall.EINVAL for out-of-range IDs or wrapped OS error.
+func (si *statsImpl) Chown(uid, gid int) (err error) {
+	//: validate UID/GID range before syscall
+	if uid < 0 || gid < 0 || uid > maxUID || gid > maxUID {
+		return syscall.EINVAL
 	}
-	if err := unix.Chown(s.path, uid, gid); err != nil {
-		return fmt.Errorf("failed to chown %s: %w", s.path, err)
+	//: delegate to os.Chown with range-validated values
+	if chownErr := os.Chown(si.path, uid, gid); chownErr != nil {
+		return fmt.Errorf("failed to chown %s: %w", si.path, chownErr)
 	}
+	//: success path
 	return nil
 }
 
-// Refresh reloads the file or directory metadata.
+// Refresh re-reads stat info from disk and repopulates cached fields.
 //
 // Returns:
-// - error: Error if the operation fails, otherwise nil.
-func (s *stats) Refresh() error {
-	// Perform Lstat to retrieve basic metadata.
-	err := unix.Lstat(s.path, s.meta)
-	if err != nil {
-		s.exists = false
-		return fmt.Errorf("failed to stat file %s: %w", s.path, err)
+//   - error: wrapped error if stat or symlink resolution fails.
+func (si *statsImpl) Refresh() (err error) {
+	info, statErr := os.Lstat(si.path)
+	//: mark missing on any stat error
+	if statErr != nil {
+		si.exists = false
+		return fmt.Errorf("failed to stat file %s: %w", si.path, statErr)
 	}
 
-	// Check if the file is a symbolic link.
-	if s.meta.Mode&unix.S_IFMT == unix.S_IFLNK {
-		// Resolve symbolic links only if necessary.
-		resolvedPath, err := filepath.EvalSymlinks(s.path)
-		if err != nil {
-			return fmt.Errorf("failed to resolve symlink %s: %w", s.path, err)
+	//: resolve symlinks so the rest of the object reflects the target
+	if info.Mode()&os.ModeSymlink != 0 {
+		resolved, resolveErr := filepath.EvalSymlinks(si.path)
+		//: fail on unresolvable symlink
+		if resolveErr != nil {
+			return fmt.Errorf("failed to resolve symlink %s: %w", si.path, resolveErr)
 		}
-		s.path = resolvedPath
-		// Re-stat the resolved target
-		targetInfo, err := os.Stat(resolvedPath)
-		if err != nil {
-			return err
-		}
-		s.mode = uint32(targetInfo.Mode())
-		if stat, ok := targetInfo.Sys().(*unix.Stat_t); ok {
-			s.meta = stat
+		si.path = resolved
+		info, statErr = os.Stat(resolved)
+		//: guard after stat of resolved target
+		if statErr != nil {
+			return fmt.Errorf("failed to stat resolved path %s: %w", resolved, statErr)
 		}
 	}
 
-	// Mark the file as existing.
-	s.exists = true
+	sys, ok := info.Sys().(*syscall.Stat_t)
+	//: platform must provide a *syscall.Stat_t
+	if !ok {
+		return errors.New(fmt.Sprintf("unsupported FileInfo.Sys() for %s", si.path))
+	}
 
-	// Set direct permissions to avoid repeated calls.
-	s.mode = uint32(s.meta.Mode)
-	s.group.ID = s.meta.Gid
-	s.user.ID = s.meta.Uid
+	si.exists = true
+	si.meta.Mode = sys.Mode
+	si.meta.UID = sys.Uid
+	si.meta.GID = sys.Gid
+	si.meta.Size = info.Size()
 
-	// Calculate permissions inline.
-	s.user.Permissions = s.calculatePermissions(unix.S_IRUSR, unix.S_IWUSR, unix.S_IXUSR)
-	s.group.Permissions = s.calculatePermissions(unix.S_IRGRP, unix.S_IWGRP, unix.S_IXGRP)
-	s.other.Permissions = s.calculatePermissions(unix.S_IROTH, unix.S_IWOTH, unix.S_IXOTH)
+	si.mode = si.meta.Mode
+	si.user.ID = si.meta.UID
+	si.group.ID = si.meta.GID
 
+	si.user.Permissions = si.permissionSet(sIRUSR, sIWUSR, sIXUSR)
+	si.group.Permissions = si.permissionSet(sIRGRP, sIWGRP, sIXGRP)
+	si.other.Permissions = si.permissionSet(sIROTH, sIWOTH, sIXOTH)
+	//: all fields refreshed successfully
 	return nil
 }
 
-// calculatePermissions computes the read, write, and execute permissions for a user, group, or others.
+// permissionSet decodes a rwx triple from the cached mode bits.
 //
-// Parameters:
-// - readMask: uint32 - Bitmask for read permission.
-// - writeMask: uint32 - Bitmask for write permission.
-// - execMask: uint32 - Bitmask for execute permission.
+// Params:
+//   - readMask: bit mask for the read permission.
+//   - writeMask: bit mask for the write permission.
+//   - execMask: bit mask for the execute permission.
 //
 // Returns:
-// - Permissions: The computed permissions.
-func (s *stats) calculatePermissions(readMask, writeMask, execMask uint32) Permissions {
-	return Permissions{
-		Read:  s.mode&readMask != 0,
-		Write: s.mode&writeMask != 0,
-		Exec:  s.mode&execMask != 0,
+//   - PermissionSet: the decoded permission triple.
+func (si *statsImpl) permissionSet(readMask, writeMask, execMask uint32) (ps PermissionSet) {
+	//: decode each bit independently
+	return PermissionSet{
+		Read:  si.mode&readMask != 0,
+		Write: si.mode&writeMask != 0,
+		Exec:  si.mode&execMask != 0,
 	}
 }
 
-// _lookupCache retrieves a cached value or performs a lookup if not cached.
+// lookupCached is the shared cached-resolver for uid/gid → name.
 //
-// Parameters:
-// - id: uint32 - The ID (UID or GID) to look up.
-// - cache: *sync.Map - The cache to use for storing and retrieving values.
-// - lookup: func(string) string - A function to perform the lookup if the value is not cached.
+// Params:
+//   - id: the numeric UID or GID.
+//   - cache: the sync.Map used for caching resolved names.
+//   - resolve: function that resolves a string ID to a name.
 //
 // Returns:
-// - string: The cached or looked-up value.
-func _lookupCache(id uint32, cache *sync.Map, lookup func(string) string) string {
-	if name, found := cache.Load(id); found {
-		return name.(string)
+//   - string: the resolved name or empty string on failure.
+func lookupCached(id uint32, cache *sync.Map, resolve func(string) string) (result string) {
+	//: fast path — return cached value if present
+	if name, ok := cache.Load(id); ok {
+		cached, assertOK := name.(string)
+		//: guard against unexpected non-string value
+		if assertOK {
+			return cached
+		}
 	}
-
-	result := lookup(strconv.Itoa(int(id)))
+	result = resolve(strconv.Itoa(int(id)))
 	cache.Store(id, result)
+	//: return freshly resolved name
 	return result
 }
 
-// lookupUser retrieves the username associated with a given UID.
+// lookupUser resolves a UID to a username using the system user database.
 //
-// Parameters:
-// - uid: uint32 - User ID to look up.
+// Params:
+//   - uid: the POSIX user ID to resolve.
 //
 // Returns:
-// - string: The username, or an empty string if not found.
-func lookupUser(uid uint32) string {
-	return _lookupCache(uid, ownerCache, func(id string) string {
-		usr, err := user.LookupId(id)
-		if err != nil {
+//   - string: the username or empty string if lookup fails.
+func lookupUser(uid uint32) (result string) {
+	//: delegate to cached resolver
+	return lookupCached(uid, ownerCache, func(id string) string {
+		userInfo, lookupErr := user.LookupId(id)
+		//: return empty string on any lookup failure
+		if lookupErr != nil {
 			return ""
 		}
-		return usr.Username
+		//: return resolved username
+		return userInfo.Username
 	})
 }
 
-// lookupGroup retrieves the group name associated with a given GID.
+// lookupGroup resolves a GID to a group name using the system group database.
 //
-// Parameters:
-// - gid: uint32 - Group ID to look up.
+// Params:
+//   - gid: the POSIX group ID to resolve.
 //
 // Returns:
-// - string: The group name, or an empty string if not found.
-func lookupGroup(gid uint32) string {
-	return _lookupCache(gid, groupCache, func(id string) string {
-		grp, err := user.LookupGroupId(id)
-		if err != nil {
+//   - string: the group name or empty string if lookup fails.
+func lookupGroup(gid uint32) (result string) {
+	//: delegate to cached resolver
+	return lookupCached(gid, groupCache, func(id string) string {
+		groupInfo, lookupErr := user.LookupGroupId(id)
+		//: return empty string on any lookup failure
+		if lookupErr != nil {
 			return ""
 		}
-		return grp.Name
+		//: return resolved group name
+		return groupInfo.Name
 	})
 }

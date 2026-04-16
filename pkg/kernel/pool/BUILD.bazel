@@ -84,14 +84,12 @@ go_test(
     name = "pool_test",
     srcs = [
         "global_test.go",
-        "goroutine_check_test.go",
         "interface_test.go",
+        "legacy_test_helpers_test.go",
         "safe_buffer_test.go",
         "safe_sharded_test.go",
         "unsafe_buffer_race_test.go",
         "unsafe_buffer_test.go",
-        "unsafe_sharded_race_test.go",
-        "unsafe_sharded_test.go",
     ],
     embed = [":pool"],
 )

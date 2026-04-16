@@ -99,42 +99,35 @@ func newFastLRU[K comparable, V any](capacity int) *FastLRU[K, V] {
 }
 
 // Get retrieves a value from the sharded cache.
+//
+// A single write lock is taken for the whole operation: the two-step
+// RLock/Lock pattern previously used here had a TOCTOU hole where another
+// goroutine could Delete or evict the entry between the two acquisitions,
+// leaving moveToFront to unlink an already-unlinked node and corrupt the
+// shard's linked list.
 func (c *ShardedLRU[K, V]) Get(key K) (V, bool) {
 	shard := c.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
-	// Try read lock first for better performance
-	shard.mu.RLock()
 	entry, exists := shard.cache.items[key]
 	if !exists {
-		shard.mu.RUnlock()
 		c.incrementMisses(shard)
 		var zero V
 		return zero, false
 	}
 
-	// Check expiration without upgrading lock
 	if entry.expiration > 0 && time.Now().UnixNano() > entry.expiration {
-		shard.mu.RUnlock()
-		// Need write lock to remove expired entry
-		shard.mu.Lock()
 		shard.cache.removeEntry(entry)
 		delete(shard.cache.items, key)
-		shard.mu.Unlock()
 		c.incrementMisses(shard)
 		var zero V
 		return zero, false
 	}
 
-	value := entry.value
-	shard.mu.RUnlock()
-
-	// Move to front with write lock
-	shard.mu.Lock()
 	shard.cache.moveToFront(entry)
-	shard.mu.Unlock()
-
 	c.incrementHits(shard)
-	return value, true
+	return entry.value, true
 }
 
 // Set stores a key-value pair in the sharded cache.

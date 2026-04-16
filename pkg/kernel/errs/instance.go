@@ -1,623 +1,288 @@
+// Package errs instance types for the Kitsunium error catalog.
+//
+// See error.go for the full package documentation.
 package errs
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
-	"sync"
 )
 
-// Instance represents an instance of an error with context
+// Instance is a concrete occurrence of an Err.
+//
+// It may wrap a cause, carry string tags, and typed details.
+// Create instances via Err.New, Err.Newf, Err.Wrap, or Err.Wrapf.
 type Instance struct {
-	err     KError
+	err     Err
 	cause   error
 	message string
 	tags    map[string]string
 	details map[string]any
-	stack   []uintptr // Stack trace
-	context context.Context
-	mu      sync.RWMutex
 }
 
-// Pool for reusing Instance objects to reduce allocations
-var instancePool = &sync.Pool{
-	New: func() any {
-		return &Instance{
-			tags:    make(map[string]string, 4),
-			details: make(map[string]any, 4),
-		}
-	},
+// New returns a fresh Instance using the Err default message.
+//
+// Returns:
+//   - inst: the new Instance; never nil
+func (e Err) New() (inst *Instance) {
+	//: allocate a new occurrence with the catalog default message
+	return &Instance{err: e, message: e.message}
 }
 
-// Pool for string builders
-var builderPool = &sync.Pool{
-	New: func() any {
-		return &strings.Builder{}
-	},
+// Newf returns a fresh Instance with a formatted message.
+//
+// Params:
+//   - format: printf-style format string
+//   - args: format arguments
+//
+// Returns:
+//   - inst: the new Instance; never nil
+func (e Err) Newf(format string, args ...any) (inst *Instance) {
+	//: allocate with a caller-provided formatted message
+	return &Instance{err: e, message: fmt.Sprintf(format, args...)}
 }
 
-// New creates a new error instance from a KError
-func (e KError) New() *Instance {
-	inst := instancePool.Get().(*Instance)
-	inst.err = e
-	inst.message = e.message
-	inst.cause = nil
-	inst.context = nil
-	inst.stack = inst.stack[:0] // Reset slice but keep capacity
-
-	// Capture stack trace if enabled
-	if GetConfig().EnableStackTrace {
-		inst.CaptureStack(3) // Skip New, CaptureStack, and runtime.Callers
-	}
-
-	// Record metrics if enabled
-	if GetConfig().EnableMetrics {
-		recordErrorInstance(e.pkg, e.code)
-	}
-
-	return inst
-}
-
-// Newf creates a new error instance with formatted message
-func (e KError) Newf(format string, args ...any) *Instance {
-	inst := instancePool.Get().(*Instance)
-	inst.err = e
-	inst.message = fmt.Sprintf(format, args...)
-	inst.cause = nil
-	inst.context = nil
-	inst.stack = inst.stack[:0]
-
-	if GetConfig().EnableStackTrace {
-		inst.CaptureStack(3)
-	}
-
-	if GetConfig().EnableMetrics {
-		recordErrorInstance(e.pkg, e.code)
-	}
-
-	return inst
-}
-
-// Wrap wraps an existing error
-func (e KError) Wrap(cause error) *Instance {
+// Wrap returns an Instance that wraps cause.
+//
+// Params:
+//   - cause: the underlying error to wrap; nil returns nil
+//
+// Returns:
+//   - inst: the new Instance, or nil when cause is nil
+func (e Err) Wrap(cause error) (inst *Instance) {
+	//: nil cause means "no error to wrap" — propagate nil
 	if cause == nil {
+		//: caller can test the result for nil safely
 		return nil
 	}
-	inst := instancePool.Get().(*Instance)
-	inst.err = e
-	inst.cause = cause
-	inst.message = e.message
-	inst.context = nil
-	inst.stack = inst.stack[:0]
-
-	if GetConfig().EnableStackTrace {
-		inst.CaptureStack(3)
-	}
-
-	if GetConfig().EnableMetrics {
-		recordErrorWrapped(e.pkg, e.code)
-	}
-
-	return inst
+	//: embed cause for errors.Is/As chain traversal
+	return &Instance{err: e, cause: cause, message: e.message}
 }
 
-// Wrapf wraps an existing error with formatted message
-func (e KError) Wrapf(cause error, format string, args ...any) *Instance {
+// Wrapf returns an Instance that wraps cause with a formatted message.
+//
+// Params:
+//   - cause: the underlying error to wrap; nil returns nil
+//   - format: printf-style format string
+//   - args: format arguments
+//
+// Returns:
+//   - inst: the new Instance, or nil when cause is nil
+func (e Err) Wrapf(cause error, format string, args ...any) (inst *Instance) {
+	//: nil cause means "no error to wrap" — propagate nil
 	if cause == nil {
+		//: caller can test the result for nil safely
 		return nil
 	}
-	inst := instancePool.Get().(*Instance)
-	inst.err = e
-	inst.cause = cause
-	inst.message = fmt.Sprintf(format, args...)
-	inst.context = nil
-	inst.stack = inst.stack[:0]
-
-	if GetConfig().EnableStackTrace {
-		inst.CaptureStack(3)
-	}
-
-	if GetConfig().EnableMetrics {
-		recordErrorWrapped(e.pkg, e.code)
-	}
-
-	return inst
+	//: embed cause and use the caller-provided message
+	return &Instance{err: e, cause: cause, message: fmt.Sprintf(format, args...)}
 }
 
-// CaptureStack captures the current stack trace
-func (i *Instance) CaptureStack(skip int) *Instance {
-	cfg := GetConfig()
-	if cap(i.stack) < cfg.StackTraceDepth {
-		i.stack = make([]uintptr, cfg.StackTraceDepth)
-	} else {
-		i.stack = i.stack[:cfg.StackTraceDepth]
+// Error implements the error interface. Format: "[pkg:code] message: cause".
+//
+// Returns:
+//   - s: the fully formatted error string
+func (i *Instance) Error() (s string) {
+	var b strings.Builder
+	b.WriteByte('[')
+	b.WriteString(i.err.pkg)
+	b.WriteByte(':')
+	fmt.Fprintf(&b, "%d", i.err.code)
+	b.WriteByte(']')
+	b.WriteByte(' ')
+	b.WriteString(i.message)
+	//: append wrapped cause only when present
+	if i.cause != nil {
+		//: separator matches stdlib convention
+		b.WriteString(": ")
+		b.WriteString(i.cause.Error())
 	}
-	n := runtime.Callers(skip, i.stack)
-	i.stack = i.stack[:n]
-	return i
+	return b.String()
 }
 
-// StackTrace returns the stack trace as a string
-func (i *Instance) StackTrace() string {
-	if len(i.stack) == 0 {
-		return ""
-	}
-
-	sb := builderPool.Get().(*strings.Builder)
-	defer func() {
-		sb.Reset()
-		builderPool.Put(sb)
-	}()
-
-	frames := runtime.CallersFrames(i.stack)
-	for {
-		frame, more := frames.Next()
-		fmt.Fprintf(sb, "%s\n\t%s:%d\n", frame.Function, frame.File, frame.Line)
-		if !more {
-			break
-		}
-	}
-
-	return sb.String()
-}
-
-// WithContext attaches a context to the error instance
-func (i *Instance) WithContext(ctx context.Context) *Instance {
-	i.context = ctx
-
-	// Extract trace ID if available
-	if traceID := ExtractTraceID(ctx); traceID != "" {
-		i.WithTag("trace_id", traceID)
-	}
-
-	// Extract span ID if available
-	if spanID := ExtractSpanID(ctx); spanID != "" {
-		i.WithTag("span_id", spanID)
-	}
-
-	return i
-}
-
-// Context returns the attached context
-func (i *Instance) Context() context.Context {
-	return i.context
-}
-
-// Error implements the error interface
-func (i *Instance) Error() string {
-	if i.cause == nil {
-		return i.message
-	}
-
-	// Use string builder from pool
-	sb := builderPool.Get().(*strings.Builder)
-	defer func() {
-		sb.Reset()
-		builderPool.Put(sb)
-	}()
-
-	sb.Grow(len(i.message) + 2 + 50) // Pre-allocate
-	sb.WriteString(i.message)
-	sb.WriteString(": ")
-	sb.WriteString(i.cause.Error())
-	return sb.String()
-}
-
-// Unwrap implements errors.Unwrap
-func (i *Instance) Unwrap() error {
+// Cause returns the wrapped cause, or nil.
+//
+// Returns:
+//   - err: the wrapped error, or nil when none was provided
+func (i *Instance) Cause() (err error) {
+	//: expose wrapped cause for errors.Unwrap chain
 	return i.cause
 }
 
-// Is implements errors.Is
-func (i *Instance) Is(target error) bool {
-	// Check if target is the same KError
-	if t, ok := target.(KError); ok {
-		return i.err.Is(t)
+// Unwrap returns the wrapped cause for compatibility with errors.Unwrap.
+//
+// Returns:
+//   - err: the wrapped error, or nil when none was provided
+func (i *Instance) Unwrap() (err error) {
+	//: delegate to Cause to satisfy the errors.Unwrap interface
+	return i.cause
+}
+
+// Is reports whether this Instance matches the given target.
+//
+// An Instance matches another Instance or an Err by catalog ID.
+//
+// Params:
+//   - target: the error to compare against
+//
+// Returns:
+//   - match: true when target refers to the same catalog entry
+func (i *Instance) Is(target error) (match bool) {
+	//: compare by catalog ID, accepting Instance, Err, and pointer forms
+	switch t := target.(type) {
+	//: *Instance match — compare catalog IDs (nil pointer never matches)
+	case *Instance:
+		return t != nil && i.err.id == t.err.id
+	//: Err value match
+	case Err:
+		return i.err.id == t.id
+	//: *Err pointer match — nil pointer never matches
+	case *Err:
+		return t != nil && i.err.id == t.id
 	}
-	if t, ok := target.(*KError); ok {
-		return i.err.Is(t)
-	}
-	// Check if target is the same Instance
-	if t, ok := target.(*Instance); ok {
-		return i.err.Is(t.err)
-	}
+	//: unrecognised type — no match
 	return false
 }
 
-// KError returns the underlying KError
-func (i *Instance) KError() KError {
+// As delegates to errors.As on the wrapped cause.
+//
+// Params:
+//   - target: pointer to the target type (same semantics as errors.As)
+//
+// Returns:
+//   - ok: true when the cause chain contains a value assignable to target
+func (i *Instance) As(target any) (ok bool) {
+	//: no cause means nothing to unwrap into
+	if i.cause == nil {
+		//: report no match immediately
+		return false
+	}
+	//: delegate chain traversal to the standard library
+	return errors.As(i.cause, target)
+}
+
+// Err returns the catalog entry this Instance was built from.
+//
+// Returns:
+//   - entry: the originating Err catalog entry
+func (i *Instance) Err() (entry Err) {
+	//: expose the originating catalog entry for comparison
 	return i.err
 }
 
-// Package returns the package name
-func (i *Instance) Package() string {
+// Package returns the catalog package.
+//
+// Returns:
+//   - pkg: the package name from the catalog entry
+func (i *Instance) Package() (pkg string) {
+	//: delegate to the embedded catalog entry
 	return i.err.pkg
 }
 
-// Code returns the error code
-func (i *Instance) Code() int {
+// Code returns the catalog code.
+//
+// Returns:
+//   - code: the integer error code from the catalog entry
+func (i *Instance) Code() (code int) {
+	//: delegate to the embedded catalog entry
 	return i.err.code
 }
 
-// WithTag adds a tag (returns same instance for chaining)
-func (i *Instance) WithTag(key, value string) *Instance {
-	cfg := GetConfig()
-
-	// Validate if enabled
-	if cfg.EnableValidation {
-		if len(key) > cfg.MaxTagKeyLen || len(value) > cfg.MaxTagValueLen {
-			return i // Silently ignore
-		}
-
-		i.mu.Lock()
-		defer i.mu.Unlock()
-
-		if len(i.tags) >= cfg.MaxTags {
-			return i // Maximum tags reached
-		}
-	} else {
-		i.mu.Lock()
-		defer i.mu.Unlock()
+// WithTag attaches a key/value tag and returns i for chaining.
+//
+// Params:
+//   - key: the tag name
+//   - value: the tag value
+//
+// Returns:
+//   - inst: i itself for method chaining
+func (i *Instance) WithTag(key, value string) (inst *Instance) {
+	//: lazy-allocate to avoid map overhead on Instances that never use tags
+	if i.tags == nil {
+		//: preallocate with a small capacity to reduce rehashing
+		i.tags = make(map[string]string, initialMapCapacity)
 	}
-
 	i.tags[key] = value
 	return i
 }
 
-// WithTags adds multiple tags
-func (i *Instance) WithTags(tags map[string]string) *Instance {
-	if len(tags) == 0 {
-		return i
+// WithDetail attaches a typed detail and returns i for chaining.
+//
+// Params:
+//   - key: the detail name
+//   - value: the detail value (any type)
+//
+// Returns:
+//   - inst: i itself for method chaining
+func (i *Instance) WithDetail(key string, value any) (inst *Instance) {
+	//: lazy-allocate to avoid map overhead on Instances that never use details
+	if i.details == nil {
+		//: preallocate with a small capacity to reduce rehashing
+		i.details = make(map[string]any, initialMapCapacity)
 	}
-
-	cfg := GetConfig()
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	for k, v := range tags {
-		// Validate if enabled
-		if cfg.EnableValidation {
-			if len(i.tags) >= cfg.MaxTags {
-				break
-			}
-			if len(k) > cfg.MaxTagKeyLen || len(v) > cfg.MaxTagValueLen {
-				continue
-			}
-		}
-		i.tags[k] = v
-	}
-
-	return i
-}
-
-// BatchWithTags adds multiple tags efficiently in one operation
-func (i *Instance) BatchWithTags(tags ...struct{ Key, Value string }) *Instance {
-	cfg := GetConfig()
-
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	for _, tag := range tags {
-		if cfg.EnableValidation {
-			if len(i.tags) >= cfg.MaxTags {
-				break
-			}
-			if len(tag.Key) > cfg.MaxTagKeyLen || len(tag.Value) > cfg.MaxTagValueLen {
-				continue
-			}
-		}
-		i.tags[tag.Key] = tag.Value
-	}
-
-	return i
-}
-
-// Tag returns a tag value
-func (i *Instance) Tag(key string) (string, bool) {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-	val, ok := i.tags[key]
-	return val, ok
-}
-
-// Tags returns all tags (safe copy)
-func (i *Instance) Tags() map[string]string {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-	result := make(map[string]string, len(i.tags))
-	for k, v := range i.tags {
-		result[k] = v
-	}
-	return result
-}
-
-// WithDetail adds a detail (returns same instance for chaining)
-func (i *Instance) WithDetail(key string, value any) *Instance {
-	cfg := GetConfig()
-
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	if cfg.EnableValidation && len(i.details) >= cfg.MaxDetails {
-		return i // Maximum details reached
-	}
-
 	i.details[key] = value
 	return i
 }
 
-// WithDetails adds multiple details
-func (i *Instance) WithDetails(details map[string]any) *Instance {
-	if len(details) == 0 {
-		return i
-	}
-
-	cfg := GetConfig()
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	for k, v := range details {
-		if cfg.EnableValidation && len(i.details) >= cfg.MaxDetails {
-			break
-		}
-		i.details[k] = v
-	}
-
-	return i
+// Tag returns the value of a tag and whether it was present.
+//
+// Params:
+//   - key: the tag name to look up
+//
+// Returns:
+//   - value: the tag value, or empty string when absent
+//   - ok: true when the tag was found
+func (i *Instance) Tag(key string) (value string, ok bool) {
+	//: nil-safe map lookup
+	v, found := i.tags[key]
+	return v, found
 }
 
-// BatchWithDetails adds multiple details efficiently in one operation
-func (i *Instance) BatchWithDetails(details ...struct {
-	Key   string
-	Value any
-}) *Instance {
-	cfg := GetConfig()
-
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	for _, detail := range details {
-		if cfg.EnableValidation && len(i.details) >= cfg.MaxDetails {
-			break
-		}
-		i.details[detail.Key] = detail.Value
-	}
-
-	return i
+// Detail returns the value of a detail and whether it was present.
+//
+// Params:
+//   - key: the detail name to look up
+//
+// Returns:
+//   - value: the stored value, or nil when absent
+//   - ok: true when the detail was found
+func (i *Instance) Detail(key string) (value any, ok bool) {
+	//: nil-safe map lookup
+	v, found := i.details[key]
+	return v, found
 }
 
-// Detail returns a detail value
-func (i *Instance) Detail(key string) (any, bool) {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-	val, ok := i.details[key]
-	return val, ok
-}
-
-// DetailAs retrieves a detail with type assertion (using generics for type safety)
-func DetailAs[T any](i *Instance, key string) (T, bool) {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-
+// DetailAs returns a typed view over a detail value.
+//
+// It returns the zero value of T and false when the key is absent or
+// the stored value has a different type.
+//
+// Params:
+//   - i: the Instance to inspect; nil returns zero, false
+//   - key: the detail name to look up
+//
+// Returns:
+//   - value: the typed value, or zero when absent or wrong type
+//   - ok: true when the detail was found and successfully typed
+func DetailAs[T any](i *Instance, key string) (value T, ok bool) {
 	var zero T
-	if val, ok := i.details[key]; ok {
-		if typed, ok := val.(T); ok {
-			return typed, true
-		}
+	//: guard against nil receiver and missing map
+	if i == nil || i.details == nil {
+		//: nothing to look up — return zero
+		return zero, false
 	}
-	return zero, false
-}
-
-// DetailResult retrieves a detail as a Result type
-func (i *Instance) DetailResult(key string) Result[any] {
-	val, ok := i.Detail(key)
-	return NewResult(val, ok)
-}
-
-// TagResult retrieves a tag as a Result type
-func (i *Instance) TagResult(key string) Result[string] {
-	val, ok := i.Tag(key)
-	return NewResult(val, ok)
-}
-
-// Details returns all details (safe copy)
-func (i *Instance) Details() map[string]any {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-	result := make(map[string]any, len(i.details))
-	for k, v := range i.details {
-		result[k] = v
+	v, found := i.details[key]
+	//: key absent
+	if !found {
+		//: key not present — return zero
+		return zero, false
 	}
-	return result
-}
-
-// Clone creates a deep copy of the instance
-func (i *Instance) Clone() *Instance {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-
-	clone := &Instance{
-		err:     i.err,
-		cause:   i.cause,
-		message: i.message,
-		tags:    make(map[string]string, len(i.tags)),
-		details: make(map[string]any, len(i.details)),
-		stack:   make([]uintptr, len(i.stack)),
-		context: i.context,
+	out, typed := v.(T)
+	//: stored type does not match requested type
+	if !typed {
+		//: type mismatch — return zero
+		return zero, false
 	}
-
-	// Copy tags
-	for k, v := range i.tags {
-		clone.tags[k] = v
-	}
-
-	// Copy details
-	for k, v := range i.details {
-		clone.details[k] = v
-	}
-
-	// Copy stack
-	copy(clone.stack, i.stack)
-
-	return clone
-}
-
-// MapTags transforms all tags using a function
-func (i *Instance) MapTags(fn func(string, string) (string, string)) *Instance {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Create new map to avoid mutation during iteration
-	newTags := make(map[string]string, len(i.tags))
-	for k, v := range i.tags {
-		newK, newV := fn(k, v)
-		newTags[newK] = newV
-	}
-	// Atomic replacement of the entire map
-	i.tags = newTags
-
-	return i
-}
-
-// FilterTags removes tags that don't match predicate
-func (i *Instance) FilterTags(predicate func(string, string) bool) *Instance {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	for k, v := range i.tags {
-		if !predicate(k, v) {
-			delete(i.tags, k)
-		}
-	}
-
-	return i
-}
-
-// MergeTags merges tags from another instance
-func (i *Instance) MergeTags(other *Instance) *Instance {
-	if other == nil {
-		return i
-	}
-
-	otherTags := other.Tags()
-	return i.WithTags(otherTags)
-}
-
-// Release returns the instance to the pool for reuse
-func (i *Instance) Release() {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Clear maps without reallocating
-	for k := range i.tags {
-		delete(i.tags, k)
-	}
-	for k := range i.details {
-		delete(i.details, k)
-	}
-
-	i.cause = nil
-	i.message = ""
-	i.context = nil
-	i.stack = i.stack[:0] // Keep capacity
-
-	instancePool.Put(i)
-}
-
-// OTelAttributes returns OpenTelemetry compatible attributes
-func (i *Instance) OTelAttributes() map[string]any {
-	i.mu.RLock()
-
-	// Calculate exact size needed
-	size := 4 // Standard attributes
-	size += len(i.tags)
-	size += len(i.details)
-	if i.cause != nil {
-		size++
-	}
-	if len(i.stack) > 0 {
-		size++
-	}
-
-	attrs := make(map[string]any, size)
-
-	// Standard attributes
-	attrs["error.id"] = i.err.id
-	attrs["error.package"] = i.err.pkg
-	attrs["error.code"] = i.err.code
-	attrs["error.message"] = i.message
-
-	// Use string builder from pool
-	sb := builderPool.Get().(*strings.Builder)
-	defer func() {
-		sb.Reset()
-		builderPool.Put(sb)
-	}()
-
-	sb.Grow(32) // Pre-allocate
-
-	for k, v := range i.tags {
-		sb.Reset()
-		sb.WriteString("error.tag.")
-		sb.WriteString(k)
-		attrs[sb.String()] = v
-	}
-
-	for k, v := range i.details {
-		sb.Reset()
-		sb.WriteString("error.detail.")
-		sb.WriteString(k)
-		attrs[sb.String()] = v
-	}
-
-	if i.cause != nil {
-		attrs["error.cause"] = i.cause.Error()
-	}
-
-	if len(i.stack) > 0 {
-		attrs["error.stack_trace"] = i.StackTrace()
-	}
-
-	i.mu.RUnlock()
-	return attrs
-}
-
-// MarshalJSON implements json.Marshaler
-func (i *Instance) MarshalJSON() ([]byte, error) {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-
-	data := map[string]any{
-		"error":   i.err,
-		"message": i.message,
-		"tags":    i.tags,
-		"details": i.details,
-	}
-
-	if i.cause != nil {
-		data["cause"] = i.cause.Error()
-	}
-
-	if len(i.stack) > 0 {
-		data["stack_trace"] = i.StackTrace()
-	}
-
-	return json.Marshal(data)
-}
-
-// As implements errors.As
-func (i *Instance) As(target any) bool {
-	switch t := target.(type) {
-	case **Instance:
-		*t = i
-		return true
-	case *KError:
-		*t = i.err
-		return true
-	default:
-		return errors.As(i.cause, target)
-	}
+	return out, true
 }

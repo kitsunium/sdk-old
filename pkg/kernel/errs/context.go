@@ -1,69 +1,45 @@
+// Package errs provides a typed error catalog for the Kitsunium SDK.
+//
+// See error.go for the full package documentation.
 package errs
 
-import (
-	"context"
-)
+import "context"
 
-// contextKey is the type for context keys
-type contextKey int
+type ctxKey struct{}
 
-const (
-	// errorContextKey is the key for storing error instances in context
-	errorContextKey contextKey = iota
-)
+// ToContext returns a new context carrying inst.
+//
+// Params:
+//   - ctx: the parent context to enrich
+//   - inst: the Instance to store; if nil, ctx is returned unchanged
+//
+// Returns:
+//   - ctx: the enriched context (or original when inst is nil)
+func ToContext(ctx context.Context, inst *Instance) (result context.Context) {
+	//: return ctx unchanged when there is nothing to propagate
+	if inst == nil {
+		//: nothing to attach — pass through
+		return ctx
+	}
+	//: embed the instance in a typed key to avoid collisions
+	return context.WithValue(ctx, ctxKey{}, inst)
+}
 
-// FromContext extracts an error instance from context
-func FromContext(ctx context.Context) (*Instance, bool) {
+// FromContext returns the Instance attached to ctx, if any.
+//
+// Params:
+//   - ctx: the context to inspect; nil returns (nil, false)
+//
+// Returns:
+//   - inst: the attached Instance, or nil
+//   - ok: true when an Instance was found
+func FromContext(ctx context.Context) (inst *Instance, ok bool) {
+	//: nil context cannot carry values
 	if ctx == nil {
+		//: fast-path: nothing to look up
 		return nil, false
 	}
-
-	val := ctx.Value(errorContextKey)
-	if inst, ok := val.(*Instance); ok && inst != nil {
-		return inst, true
-	}
-	return nil, false
-}
-
-// ToContext adds an error instance to context
-func ToContext(ctx context.Context, inst *Instance) context.Context {
-	return context.WithValue(ctx, errorContextKey, inst)
-}
-
-// Variables for trace/span extraction functions (allows mocking in tests)
-var (
-	extractTraceIDFunc = defaultExtractTraceID
-	extractSpanIDFunc  = defaultExtractSpanID
-)
-
-// ExtractTraceID extracts a trace ID from context if available
-func ExtractTraceID(ctx context.Context) string {
-	return extractTraceIDFunc(ctx)
-}
-
-// ExtractSpanID extracts a span ID from context if available
-func ExtractSpanID(ctx context.Context) string {
-	return extractSpanIDFunc(ctx)
-}
-
-// defaultExtractTraceID is the default implementation
-// This is a placeholder - implement based on your tracing library
-func defaultExtractTraceID(ctx context.Context) string {
-	// This would integrate with your tracing library
-	// For example, with OpenTelemetry:
-	// if span := trace.SpanFromContext(ctx); span.SpanContext().HasTraceID() {
-	//     return span.SpanContext().TraceID().String()
-	// }
-	return ""
-}
-
-// defaultExtractSpanID is the default implementation
-// This is a placeholder - implement based on your tracing library
-func defaultExtractSpanID(ctx context.Context) string {
-	// This would integrate with your tracing library
-	// For example, with OpenTelemetry:
-	// if span := trace.SpanFromContext(ctx); span.SpanContext().HasSpanID() {
-	//     return span.SpanContext().SpanID().String()
-	// }
-	return ""
+	//: extract the typed value using the unexported key
+	inst, ok = ctx.Value(ctxKey{}).(*Instance)
+	return inst, ok
 }

@@ -1,237 +1,220 @@
-// Package errs provides error management for the Kitsunium SDK.
-// It offers constant error definitions with unique IDs and error tracking.
+// Package errs provides a typed error catalog for the Kitsunium SDK.
+//
+// Catalog entries are registered once via Define and carry a unique ID,
+// a package name, a code, and a default message. Each entry can be turned
+// into a concrete Instance at the call-site to attach a cause, tags, and
+// typed details, while remaining comparable via errors.Is.
 package errs
 
 import (
-	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/kitsunium/sdk/pkg/kernel/cache"
 )
 
-// KConfig represents configuration for defining a KError.
-// It allows specifying the package, error code, and message for error definitions.
-type KConfig struct {
-	Package string // Package name (auto-detected if empty)
-	Code    int    // Error code (can be used as exit code)
-	Message string // Error message
+// Config is the input passed to Define.
+//
+// Package may be left empty to let Define auto-detect from the call stack.
+// Message may be left empty; Define will produce "error <Code>" as default.
+type Config struct {
+	Package string
+	Code    int
+	Message string
 }
 
-// KError represents a unique error identifier that can be used as a constant.
-// Each KError has a globally unique ID and can be used to create error instances
-// with additional context like stack traces, tags, and details.
-type KError struct {
-	id      uint32 // Unique identifier (auto-incremented)
-	pkg     string // Package name
-	code    int    // Error code (can be used as exit code)
-	message string // Default message
+// Err is a catalog entry. It is comparable by ID and safe to pass by value.
+//
+// Create entries via Define; do not construct Err literals directly.
+type Err struct {
+	id      uint32
+	pkg     string
+	code    int
+	message string
 }
 
-// Global variables are defined in registry.go to avoid duplication
+// initialMapCapacity is the preallocated capacity hint for inline maps.
+const initialMapCapacity = 2
+
+// callerSkip is the depth passed to runtime.Caller inside Define.
+const callerSkip = 2
+
 var (
+	// errorCounter is the monotonic ID source for catalog entries.
 	errorCounter uint32
-	defineMu     sync.Mutex // Mutex for atomic Define operations
+	// registry maps (pkg, code) pairs to their catalog entry pointers.
+	registry sync.Map
+	// defineMu serialises duplicate-detection during Define.
+	defineMu sync.Mutex
 )
 
-const (
-	// MaxErrorsPerPackage limits the number of errors per package
-	MaxErrorsPerPackage = 1000
-	// MaxTotalErrors limits the total number of errors in the system
-	MaxTotalErrors = 10000
-)
-
-// getCallerPackage returns the package name of the caller with caching.
-func getCallerPackage() string {
-	// Skip 2 frames: getCallerPackage and Define
-	pc, _, _, ok := runtime.Caller(2)
-	if !ok {
-		return GetConfig().DefaultPackage
-	}
-
-	// Ensure caches are initialized
-	initCaches()
-
-	// Check cache first
-	if cached, found := callerPackageCache.Get(pc); found {
-		return cached
-	}
-
-	fn := runtime.FuncForPC(pc)
-	if fn == nil {
-		return GetConfig().DefaultPackage
-	}
-
-	// Get the full function name
-	fullName := fn.Name()
-
-	var pkg string
-	lastSlash := strings.LastIndexByte(fullName, '/')
-	if lastSlash < 0 {
-		if dot := strings.IndexByte(fullName, '.'); dot >= 0 {
-			pkg = fullName[:dot]
-		} else {
-			pkg = fullName
-		}
-	} else {
-		remaining := fullName[lastSlash+1:]
-		if dot := strings.IndexByte(remaining, '.'); dot >= 0 {
-			pkg = remaining[:dot]
-		} else {
-			pkg = remaining
-		}
-	}
-
-	// Store in cache
-	callerPackageCache.Set(pc, pkg)
-	return pkg
-}
-
-// Define creates a new error constant for a package using a config struct
-func Define(config KConfig) KError {
-	// Initialize caches once at the beginning
-	initCaches()
-
-	// Auto-detect package if not provided
+// Define registers a new catalog entry and returns its Err handle.
+//
+// It panics on a duplicate (package, code) pair — duplicates indicate a
+// programmer error, not a runtime condition.
+//
+// Params:
+//   - config: the registration parameters (Package, Code, Message)
+//
+// Returns:
+//   - entry: the registered catalog handle
+func Define(config Config) (entry Err) {
 	pkg := config.Package
+	//: fall back to automatic package detection when caller omits it
 	if pkg == "" {
-		pkg = getCallerPackage()
+		//: walk up callerSkip frames to find the caller's package
+		pkg = callerPackage(callerSkip)
 	}
 
-	// Lock for atomic operations on registry
 	defineMu.Lock()
 	defer defineMu.Unlock()
 
-	// Check global limit under lock to avoid TOCTOU
-	if atomic.LoadUint32(&errorCounter) >= MaxTotalErrors {
-		panic(fmt.Sprintf("errs: maximum total error definitions exceeded (%d)", MaxTotalErrors))
-	}
-
-	// Get or create package cache
-	var pkgCache cache.Cache[int, *KError]
-	if existing, ok := registryByPkgCode.Get(pkg); ok {
-		pkgCache = existing
-		// Check package-specific limit
-		if pkgCache.Size() >= MaxErrorsPerPackage {
-			panic(fmt.Sprintf("errs: maximum error definitions for package %s exceeded (%d)", pkg, MaxErrorsPerPackage))
+	key := registryKey{pkg: pkg, code: config.Code}
+	//: reject programmer errors at startup rather than silently shadowing
+	if existing, ok := registry.Load(key); ok {
+		existingEntry, _ := existing.(*Err)
+		//: panic is intentional — duplicate catalog codes are always a bug
+		if existingEntry != nil {
+			panic(fmt.Sprintf("errs: duplicate error code %d in package %s (existing id=%d)", config.Code, pkg, existingEntry.id))
 		}
-	} else {
-		// Create new cache with reasonable initial size
-		pkgCache = cache.NewAtomicCache[int, *KError](min(100, MaxErrorsPerPackage))
-		registryByPkgCode.Set(pkg, pkgCache)
 	}
 
-	// Get message or generate default
 	message := config.Message
+	//: provide a sensible default so callers can omit Message
 	if message == "" {
+		//: format matches the convention used in error identifiers
 		message = fmt.Sprintf("error %d", config.Code)
 	}
 
-	// Check for duplicates BEFORE allocating a new ID
-	if existing, ok := pkgCache.Get(config.Code); ok {
-		panic(fmt.Sprintf("errs: duplicate error code %d in package %s (already defined with ID %d)",
-			config.Code, pkg, existing.id))
-	}
-
-	// Generate ID after duplicate check (avoids gaps)
 	id := atomic.AddUint32(&errorCounter, 1)
-
-	err := &KError{
-		id:      id,
-		pkg:     pkg,
-		code:    config.Code,
-		message: message,
-	}
-
-	pkgCache.Set(config.Code, err)
-
-	// Store in optimized registry
-	registryByID.Set(id, err)
-
-	// Record metrics if enabled
-	if GetConfig().EnableMetrics {
-		recordErrorDefinition(pkg, config.Code)
-	}
-
-	return *err
+	reg := &Err{id: id, pkg: pkg, code: config.Code, message: message}
+	registry.Store(key, reg)
+	return *reg
 }
 
-// ID returns the unique identifier
-func (e KError) ID() uint32 {
+type registryKey struct {
+	pkg  string
+	code int
+}
+
+// ID returns the globally unique identifier.
+//
+// Returns:
+//   - id: monotonically assigned at Define time
+func (e Err) ID() (id uint32) {
+	//: expose the immutable identifier for comparison
 	return e.id
 }
 
-// Package returns the package name
-func (e KError) Package() string {
+// Pkg returns the owning package name.
+//
+// Returns:
+//   - pkg: the package that registered this entry
+func (e Err) Pkg() (pkg string) {
+	//: expose for logging and structured output
 	return e.pkg
 }
 
-// Code returns the error code
-func (e KError) Code() int {
+// Code returns the package-scoped error code.
+//
+// Returns:
+//   - code: the integer code assigned at registration
+func (e Err) Code() (code int) {
+	//: expose for structured output
 	return e.code
 }
 
-// Message returns the default message
-func (e KError) Message() string {
+// Message returns the default message.
+//
+// Returns:
+//   - msg: the default human-readable description
+func (e Err) Message() (msg string) {
+	//: expose for display without formatting
 	return e.message
 }
 
-// Error implements the error interface
-func (e KError) Error() string {
+// Error implements the error interface.
+//
+// Returns:
+//   - msg: the default message (same as Message)
+func (e Err) Error() (msg string) {
+	//: satisfy the error interface using the catalog message
 	return e.message
 }
 
-// Is implements errors.Is for comparison
-func (e KError) Is(target error) bool {
-	if t, ok := target.(KError); ok {
+// Is reports whether target is the same catalog entry.
+//
+// Params:
+//   - target: the error to compare against
+//
+// Returns:
+//   - match: true when target refers to the same catalog ID
+func (e Err) Is(target error) (match bool) {
+	//: compare by catalog ID, accepting both value and pointer forms
+	switch t := target.(type) {
+	//: match value form
+	case Err:
 		return e.id == t.id
-	}
-	if t, ok := target.(*KError); ok {
+	//: match pointer form (nil pointer never matches)
+	case *Err:
 		return t != nil && e.id == t.id
 	}
+	//: unrecognised type — no match
 	return false
 }
 
-// MarshalJSON implements json.Marshaler
-func (e KError) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		ID      uint32 `json:"id"`
-		Package string `json:"package"`
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}{
-		ID:      e.id,
-		Package: e.pkg,
-		Code:    e.code,
-		Message: e.message,
+// String returns "[pkg:code] message".
+//
+// Returns:
+//   - s: human-readable representation of the catalog entry
+func (e Err) String() (s string) {
+	//: format matches Instance.Error for consistent log output
+	return fmt.Sprintf("[%s:%d] %s", e.pkg, e.code, e.message)
+}
+
+// callerPackage returns the package name of the Nth caller up the stack.
+//
+// Params:
+//   - skip: the number of stack frames to skip
+//
+// Returns:
+//   - pkg: the package name, or "unknown" when unavailable
+func callerPackage(skip int) (pkg string) {
+	pc, _, _, ok := runtime.Caller(skip)
+	//: no PC available — degrade gracefully
+	if !ok {
+		//: sentinel value that callers can detect
+		return "unknown"
+	}
+	fn := runtime.FuncForPC(pc)
+	//: no function info — degrade gracefully
+	if fn == nil {
+		//: sentinel value that callers can detect
+		return "unknown"
+	}
+	full := fn.Name()
+	//: strip the module path prefix (everything before the last slash)
+	if slash := strings.LastIndexByte(full, '/'); slash >= 0 {
+		full = full[slash+1:]
+	}
+	//: extract the package segment (before the first dot)
+	if pkg, _, ok := strings.Cut(full, "."); ok {
+		return pkg
+	}
+	return full
+}
+
+// clearRegistry resets the registry. Test-only.
+func clearRegistry() {
+	defineMu.Lock()
+	defer defineMu.Unlock()
+	//: iterate and delete all entries to allow tests to re-register codes
+	registry.Range(func(k, _ any) bool {
+		registry.Delete(k)
+		//: continue ranging
+		return true
 	})
-}
-
-// UnmarshalJSON implements json.Unmarshaler
-func (e *KError) UnmarshalJSON(data []byte) error {
-	var temp struct {
-		ID      uint32 `json:"id"`
-		Package string `json:"package"`
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}
-
-	if err := json.Unmarshal(data, &temp); err != nil {
-		return err
-	}
-
-	e.id = temp.ID
-	e.pkg = temp.Package
-	e.code = temp.Code
-	e.message = temp.Message
-
-	return nil
-}
-
-// String implements fmt.Stringer
-func (e KError) String() string {
-	return fmt.Sprintf("[%s:%d] %s (ID:%d)", e.pkg, e.code, e.message, e.id)
+	//: reset the ID counter so tests get predictable IDs
+	atomic.StoreUint32(&errorCounter, 0)
 }

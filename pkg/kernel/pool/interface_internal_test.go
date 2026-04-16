@@ -2,18 +2,13 @@ package pool
 
 import (
 	"testing"
-	"unsafe"
 )
 
-// TestConstants verifies that all constant values are correctly defined.
-// Tests compile-time constants for expected values and relationships.
+// TestConstants verifies that live size/shape constants match expectations.
 func TestConstants(t *testing.T) {
-	// Test cache line size
 	if cacheLineSize != 64 {
 		t.Errorf("cacheLineSize = %d, want 64", cacheLineSize)
 	}
-
-	// Test buffer size constants
 	if minBufferSize != 64 {
 		t.Errorf("minBufferSize = %d, want 64", minBufferSize)
 	}
@@ -23,11 +18,6 @@ func TestConstants(t *testing.T) {
 	if maxBufferSize != 16<<20 {
 		t.Errorf("maxBufferSize = %d, want %d", maxBufferSize, 16<<20)
 	}
-	if optimalIOSize != 65536 {
-		t.Errorf("optimalIOSize = %d, want 65536", optimalIOSize)
-	}
-
-	// Test pool constants
 	if poolMinSize != 64 {
 		t.Errorf("poolMinSize = %d, want 64", poolMinSize)
 	}
@@ -37,8 +27,6 @@ func TestConstants(t *testing.T) {
 	if poolClassCount != 17 {
 		t.Errorf("poolClassCount = %d, want 17", poolClassCount)
 	}
-
-	// Test sharding constants
 	if defaultShardCount != 16 {
 		t.Errorf("defaultShardCount = %d, want 16", defaultShardCount)
 	}
@@ -48,35 +36,9 @@ func TestConstants(t *testing.T) {
 	if shardCachePadding != cacheLineSize {
 		t.Errorf("shardCachePadding = %d, want %d", shardCachePadding, cacheLineSize)
 	}
-
-	// Test atomic operation constants
-	if spinLimit != 100 {
-		t.Errorf("spinLimit = %d, want 100", spinLimit)
-	}
-	if backoffInitial != 10 {
-		t.Errorf("backoffInitial = %d, want 10", backoffInitial)
-	}
-	if backoffMax != 10000 {
-		t.Errorf("backoffMax = %d, want 10000", backoffMax)
-	}
-
-	// Test memory alignment constants
-	if ptrSize != unsafe.Sizeof(uintptr(0)) {
-		t.Errorf("ptrSize mismatch")
-	}
-	if wordSize != unsafe.Sizeof(uint(0)) {
-		t.Errorf("wordSize mismatch")
-	}
-	if alignment16 != 16 {
-		t.Errorf("alignment16 = %d, want 16", alignment16)
-	}
-	if alignment32 != 32 {
-		t.Errorf("alignment32 = %d, want 32", alignment32)
-	}
 }
 
 // TestBufferError verifies the bufferError type implementation.
-// Tests that error constants work correctly without allocations.
 func TestBufferError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -86,8 +48,6 @@ func TestBufferError(t *testing.T) {
 		{"BufferFull", errBufferFull, "buffer full"},
 		{"InvalidSize", errInvalidSize, "invalid size"},
 		{"InvalidOffset", errInvalidOffset, "invalid offset"},
-		{"NilBuffer", errNilBuffer, "nil buffer"},
-		{"ConcurrentModification", errConcurrentModification, "concurrent modification"},
 		{"ShardOutOfBounds", errShardOutOfBounds, "shard index out of bounds"},
 	}
 
@@ -100,52 +60,25 @@ func TestBufferError(t *testing.T) {
 	}
 }
 
-// TestStateFlags verifies state flag constants are powers of 2.
-// Ensures bit flags don't overlap for correct bitwise operations.
+// TestStateFlags verifies state flag constants are powers of 2 and non-overlapping.
 func TestStateFlags(t *testing.T) {
-	// Test that flags are unique powers of 2
 	flags := []uint32{
 		stateFlagFull,
-		stateFlagLocked,
 		stateFlagPooled,
 		stateFlagCleared,
-		stateFlagReadOnly,
 	}
-
 	for i, flag := range flags {
-		// Check it's a power of 2 (has only one bit set)
 		if flag != 0 && (flag&(flag-1)) != 0 {
 			t.Errorf("flags[%d] = %d is not a power of 2", i, flag)
 		}
-
-		// Check no overlap with other flags
 		for j, other := range flags {
 			if i != j && flag&other != 0 {
 				t.Errorf("flags[%d] (%d) overlaps with flags[%d] (%d)", i, flag, j, other)
 			}
 		}
 	}
-
-	// Test normal state is zero
 	if stateFlagNormal != 0 {
 		t.Errorf("stateFlagNormal = %d, want 0", stateFlagNormal)
-	}
-}
-
-// TestPerformanceHints verifies performance hint constants.
-// Tests that hint values are as expected for optimization.
-func TestPerformanceHints(t *testing.T) {
-	if likelyTrue != 1 {
-		t.Errorf("likelyTrue = %d, want 1", likelyTrue)
-	}
-	if likelyFalse != 0 {
-		t.Errorf("likelyFalse = %d, want 0", likelyFalse)
-	}
-	if prefetchRead != 0 {
-		t.Errorf("prefetchRead = %d, want 0", prefetchRead)
-	}
-	if prefetchWrite != 1 {
-		t.Errorf("prefetchWrite = %d, want 1", prefetchWrite)
 	}
 }
 
@@ -171,17 +104,6 @@ func TestFactoryFunctions(t *testing.T) {
 		// Verify it's actually a safe buffer
 		if _, ok := buf.(*safeBuffer); !ok {
 			t.Error("NewSafeBuffer did not return *safeBuffer")
-		}
-	})
-
-	t.Run("UnsafeShardedBuffer", func(t *testing.T) {
-		buf := NewUnsafeShardedBuffer(1024, 4)
-		if buf == nil {
-			t.Fatal("NewUnsafeShardedBuffer returned nil")
-		}
-		// Verify it's actually an unsafe sharded buffer
-		if _, ok := buf.(*unsafeShardedBuffer); !ok {
-			t.Error("NewUnsafeShardedBuffer did not return *unsafeShardedBuffer")
 		}
 	})
 
@@ -226,13 +148,8 @@ func TestInterfaceCompliance(t *testing.T) {
 	// These are compile-time checks
 	var _ Buffer = (*unsafeBuffer)(nil)
 	var _ Buffer = (*safeBuffer)(nil)
-	var _ Sharded = (*unsafeShardedBuffer)(nil)
 	var _ Sharded = (*safeShardedBuffer)(nil)
 	var _ Pool = (*bufferPool)(nil)
-
-	// Test that buffers implement standard interfaces
-	var _ Writer = (*unsafeBuffer)(nil)
-	var _ Writer = (*safeBuffer)(nil)
 
 	t.Log("All interface compliance checks passed")
 }

@@ -1,176 +1,47 @@
-// Package pool provides ultra-optimized, lock-free byte buffers for kernel operations.
-// This implementation provides maximum performance through extensive unsafe operations,
-// atomic primitives, and CPU cache optimization.
+// Package pool provides high-performance byte buffers with a global sync.Pool.
+//
+// Two flavors are exposed:
+//
+//   - safeBuffer / safeShardedBuffer  — thread-safe via spinlock or sharding.
+//   - unsafeBuffer                    — single-goroutine, amd64/arm64 only.
+//
+// The package also exposes a package-level sync.Pool via Get/Put/GetBuffer/PutBuffer.
 package pool
 
-import (
-	"io"
-	"unsafe"
-)
-
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
-// CPU cache line size for optimal memory alignment.
-// Most modern x86_64 and ARM64 processors use 64-byte cache lines.
-// Aligning hot data to cache lines prevents false sharing and improves performance.
-const cacheLineSize = 64
-
-// Buffer size constants optimized for common use cases and memory hierarchy.
+// Sizing and shape constants. All values are referenced by the live code.
 const (
-	// minBufferSize is the minimum allocation size to avoid excessive small allocations.
-	// 64 bytes fits exactly in one cache line for optimal CPU cache utilization.
-	minBufferSize = 64
-
-	// defaultBufferSize is the default when no size specified.
-	// 4KB matches common memory page size for efficient virtual memory usage.
+	cacheLineSize     = 64
+	minBufferSize     = 64
 	defaultBufferSize = 4096
+	maxBufferSize     = 16 << 20 // 16MB
 
-	// maxBufferSize is the maximum size for a single buffer.
-	// 16MB prevents excessive memory usage while supporting large operations.
-	maxBufferSize = 16 << 20 // 16MB
-
-	// optimalIOSize is the optimal size for I/O operations.
-	// 64KB balances between syscall overhead and memory usage.
-	optimalIOSize = 65536
-)
-
-// Pool size class boundaries using power-of-2 for efficient bit operations.
-// Size classes reduce fragmentation and improve allocation performance.
-const (
-	// poolMinSize is the minimum pooled buffer size (64 bytes = 2^6).
-	// Smaller allocations use stack or are not worth pooling.
-	poolMinSize = 1 << 6
-
-	// poolMaxSize is the maximum pooled buffer size (4MB = 2^22).
-	// Larger buffers are rare and not worth pooling.
-	poolMaxSize = 1 << 22
-
-	// poolClassCount is the number of size classes (2^6 to 2^22 = 17 classes).
-	// Each class represents a power-of-2 size for efficient memory management.
-	poolClassCount = 17
-
-	// poolPrewarmCount is buffers per size class to prewarm.
-	// Prevents initial allocation overhead during startup.
+	poolMinSize      = 1 << 6  // 64
+	poolMaxSize      = 1 << 22 // 4MB
+	poolClassCount   = 17      // log2(poolMaxSize/poolMinSize) + 1
 	poolPrewarmCount = 4
-)
 
-// Sharding constants for concurrent access optimization.
-const (
-	// defaultShardCount is the default number of shards.
-	// 16 shards balance between concurrency and memory overhead.
 	defaultShardCount = 16
-
-	// maxShardCount limits the maximum shards to prevent excessive overhead.
-	// 256 shards support up to 256-core systems effectively.
-	maxShardCount = 256
-
-	// shardCachePadding adds padding between shards to prevent false sharing.
-	// Ensures each shard occupies separate cache lines.
+	maxShardCount     = 256
 	shardCachePadding = cacheLineSize
 )
 
-// Atomic operation constants for lock-free algorithms.
+// Sentinel errors. Using a named string type keeps these allocation-free.
 const (
-	// spinLimit is the maximum spin iterations before yielding.
-	// Prevents excessive CPU usage in contended scenarios.
-	spinLimit = 100
-
-	// backoffInitial is the initial backoff delay in nanoseconds.
-	// Reduces contention through exponential backoff.
-	backoffInitial = 10
-
-	// backoffMax is the maximum backoff delay in nanoseconds.
-	// Prevents excessive delays in highly contended scenarios.
-	backoffMax = 10000
-)
-
-// Memory alignment constants for optimal performance.
-const (
-	// ptrSize is the size of a pointer on the current architecture.
-	// Used for proper memory alignment calculations.
-	ptrSize = unsafe.Sizeof(uintptr(0))
-
-	// wordSize is the native word size for efficient operations.
-	// Aligning to word boundaries improves memory access performance.
-	wordSize = unsafe.Sizeof(uint(0))
-
-	// alignment16 ensures 16-byte alignment for SIMD operations.
-	// Required for SSE/AVX instructions on x86_64.
-	alignment16 = 16
-
-	// alignment32 ensures 32-byte alignment for AVX operations.
-	// Required for AVX2/AVX-512 instructions.
-	alignment32 = 32
-)
-
-// Error sentinel values for zero-allocation error handling.
-// Using constants avoids heap allocations in error paths.
-const (
-	// errBufferFull indicates write operation exceeds capacity.
-	errBufferFull = bufferError("buffer full")
-
-	// errInvalidSize indicates invalid size parameter.
-	errInvalidSize = bufferError("invalid size")
-
-	// errInvalidOffset indicates offset out of bounds.
-	errInvalidOffset = bufferError("invalid offset")
-
-	// errNilBuffer indicates operation on nil buffer.
-	errNilBuffer = bufferError("nil buffer")
-
-	// errConcurrentModification indicates unsafe concurrent modification.
-	errConcurrentModification = bufferError("concurrent modification")
-
-	// errShardOutOfBounds indicates invalid shard index.
+	errBufferFull       = bufferError("buffer full")
+	errInvalidSize      = bufferError("invalid size")
+	errInvalidOffset    = bufferError("invalid offset")
 	errShardOutOfBounds = bufferError("shard index out of bounds")
 )
 
-// State flags for buffer status using bit flags for efficiency.
-// Allows multiple states to be checked with single operation.
+// State flags set on buffers. `stateFlagNormal` is the zero value.
 const (
-	// stateFlagNormal indicates normal operational state.
-	stateFlagNormal uint32 = 0
-
-	// stateFlagFull indicates buffer is at capacity.
-	stateFlagFull uint32 = 1 << 0
-
-	// stateFlagLocked indicates buffer is locked for exclusive access.
-	stateFlagLocked uint32 = 1 << 1
-
-	// stateFlagPooled indicates buffer is from pool.
-	stateFlagPooled uint32 = 1 << 2
-
-	// stateFlagCleared indicates buffer was security-cleared.
-	stateFlagCleared uint32 = 1 << 3
-
-	// stateFlagReadOnly indicates buffer is read-only.
-	stateFlagReadOnly uint32 = 1 << 4
-)
-
-// Performance hint constants for compiler optimization.
-// These hints help the compiler generate better code.
-const (
-	// likelyTrue hints that condition is likely true.
-	// Used for hot path optimization.
-	likelyTrue = 1
-
-	// likelyFalse hints that condition is likely false.
-	// Used for cold path optimization.
-	likelyFalse = 0
-
-	// prefetchRead hints to prefetch for reading.
-	// Improves cache performance for sequential access.
-	prefetchRead = 0
-
-	// prefetchWrite hints to prefetch for writing.
-	// Improves cache performance for write operations.
-	prefetchWrite = 1
+	stateFlagNormal  uint32 = 0
+	stateFlagFull    uint32 = 1 << 0
+	stateFlagPooled  uint32 = 1 << 1
+	stateFlagCleared uint32 = 1 << 2
 )
 
 // bufferError is a compile-time constant error type.
-// Avoids allocations when returning errors.
 type bufferError string
 
 // Error returns the error message.
@@ -227,42 +98,12 @@ type Pool interface {
 	SetMaxSize(size int64)    // Maximum pooled size
 }
 
-// Writer defines the interface for write-only buffer operations.
-// Useful for APIs that only need write capabilities.
-type Writer interface {
-	io.Writer       // Standard io.Writer
-	io.ByteWriter   // Single byte writer
-	io.StringWriter // String writer
-	io.WriterAt     // Position writer
-}
-
-// Reader defines the interface for read-only buffer operations.
-// Provides zero-copy reads without modifying buffer state.
-type Reader interface {
-	io.Reader     // Standard io.Reader
-	io.ByteReader // Single byte reader
-	io.ReaderAt   // Position reader
-	io.RuneReader // Rune reader
-}
-
-// Sharded defines the interface for sharded buffer implementations.
-// Provides concurrent write access through sharding for scalability.
+// Sharded extends Buffer with shard-local operations.
 type Sharded interface {
-	Buffer // Extends Buffer interface
-
-	// Sharded operations
-	WriteToShard(shard int, p []byte) (int, error) // Direct shard write
-	ShardCount() int                               // Number of shards
-	Balance()                                      // Rebalance shards
-}
-
-// Factory defines the interface for buffer creation.
-// Allows custom buffer implementations and configurations.
-type Factory interface {
-	NewUnsafeBuffer(size int) Buffer                 // Create unsafe buffer
-	NewSafeBuffer(size int) Buffer                   // Create thread-safe buffer
-	NewUnsafeShardedBuffer(size, shards int) Sharded // Create unsafe sharded buffer
-	NewSafeShardedBuffer(size, shards int) Sharded   // Create safe sharded buffer
+	Buffer
+	WriteToShard(shard int, p []byte) (int, error)
+	ShardCount() int
+	Balance()
 }
 
 // Option defines functional options for buffer configuration.
@@ -310,13 +151,6 @@ func NewUnsafeBuffer(capacity int, opts ...Option) Buffer {
 // for writes (faster than mutex).
 func NewSafeBuffer(capacity int, opts ...Option) Buffer {
 	return newSafeBuffer(capacity, opts...)
-}
-
-// NewUnsafeShardedBuffer creates a NON-THREAD-SAFE sharded buffer.
-// ⚠️ WARNING: NOT thread-safe! Use ONLY in single-threaded contexts.
-// Performance: Fastest sharded option when no concurrency is needed.
-func NewUnsafeShardedBuffer(capacity, shards int, opts ...Option) Sharded {
-	return newUnsafeShardedBuffer(capacity, shards, opts...)
 }
 
 // NewSafeShardedBuffer creates a THREAD-SAFE sharded buffer.

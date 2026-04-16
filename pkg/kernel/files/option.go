@@ -72,11 +72,11 @@ func (o *Option) Validate() bool {
 	}
 
 	if o.UID == nil {
-		o.UID = ptr(uid)
+		o.UID = ptr(uid())
 	}
 
 	if o.GID == nil {
-		o.GID = ptr(gid)
+		o.GID = ptr(gid())
 	}
 
 	if o.BufferSize == nil {

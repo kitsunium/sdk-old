@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -133,16 +131,15 @@ func (d *directory) Parent() (Directory, error) {
 // - Directory: The created or updated directory object.
 // - error: Error if the operation fails.
 func (d *directory) Create() (Directory, error) {
-	if err := unix.Mkdir(d.path, *d.chmod); err != nil && !os.IsExist(err) {
+	if err := os.Mkdir(d.path, os.FileMode(*d.chmod)); err != nil && !os.IsExist(err) {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Update permissions and ownership if specified.
-	if err := unix.Chmod(d.path, *d.chmod); err != nil {
+	if err := os.Chmod(d.path, os.FileMode(*d.chmod)); err != nil {
 		return nil, fmt.Errorf("failed to set permissions: %w", err)
 	}
 
-	if err := unix.Chown(d.path, *d.uid, *d.gid); err != nil {
+	if err := os.Chown(d.path, *d.uid, *d.gid); err != nil {
 		return nil, fmt.Errorf("failed to set ownership: %w", err)
 	}
 
@@ -206,7 +203,7 @@ func (d *directory) List() ([]File, []Directory, error) {
 	var directories []Directory
 
 	for _, entry := range dirEntries {
-		entryPath := fmt.Sprintf("%s/%s", d.path, entry.Name())
+		entryPath := filepath.Join(d.path, entry.Name())
 		stats := NewStats(entryPath)
 
 		if entry.IsDir() {

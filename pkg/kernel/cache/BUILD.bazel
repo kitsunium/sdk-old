@@ -3,7 +3,6 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "cache",
     srcs = [
-        "atomic.go",
         "cache.go",
         "sharded.go",
     ],
@@ -15,10 +14,10 @@ go_test(
     name = "cache_test",
     size = "small",
     srcs = [
-        "atomic_test.go",
         "cache_bench_test.go",
         "cache_test.go",
         "sharded_test.go",
+        "toctou_test.go",
     ],
     embed = [":cache"],
     deps = [

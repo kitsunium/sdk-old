@@ -3,27 +3,42 @@ package files
 import (
 	"os/user"
 	"strconv"
+	"sync"
 )
 
 var (
-	uid int = 0
-	gid int = 0
+	hostUIDOnce sync.Once
+	hostGIDOnce sync.Once
+	hostUID     int
+	hostGID     int
 )
 
-func init() {
-	u, err := user.Current()
-	if err != nil {
-		uid, gid = 0, 0
-		return
-	}
+// uid returns the current process UID, cached after first lookup.
+// Returns 0 if lookup fails.
+func uid() int {
+	hostUIDOnce.Do(func() {
+		u, err := user.Current()
+		if err != nil {
+			return
+		}
+		if n, err := strconv.Atoi(u.Uid); err == nil {
+			hostUID = n
+		}
+	})
+	return hostUID
+}
 
-	uid, err = strconv.Atoi(u.Uid)
-	if err != nil {
-		uid = 0
-	}
-
-	gid, err = strconv.Atoi(u.Gid)
-	if err != nil {
-		gid = 0
-	}
+// gid returns the current process GID, cached after first lookup.
+// Returns 0 if lookup fails.
+func gid() int {
+	hostGIDOnce.Do(func() {
+		u, err := user.Current()
+		if err != nil {
+			return
+		}
+		if n, err := strconv.Atoi(u.Gid); err == nil {
+			hostGID = n
+		}
+	})
+	return hostGID
 }

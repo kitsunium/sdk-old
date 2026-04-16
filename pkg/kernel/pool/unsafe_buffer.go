@@ -35,11 +35,10 @@ type unsafeBuffer struct {
 	flag uint32         // Status flags (4 bytes)
 	_    [44]byte       // Cache line padding
 
-	// Cache line 2 (64 bytes) - Safety and metadata
-	checker goroutineChecker // Goroutine safety checker (16 bytes)
-	origin  unsafe.Pointer   // Original allocation pointer (8 bytes)
-	pooled  bool             // From pool flag (1 byte)
-	_       [39]byte         // Cache line padding
+	// Cache line 2 (64 bytes) - Metadata
+	origin unsafe.Pointer // Original allocation pointer (8 bytes)
+	pooled bool           // From pool flag (1 byte)
+	_      [55]byte       // Cache line padding
 }
 
 // newUnsafeBuffer creates a new non-thread-safe buffer.
@@ -92,7 +91,6 @@ func newUnsafeBuffer(capacity int, opts ...Option) Buffer {
 //go:nosplit
 func (b *unsafeBuffer) Write(p []byte) (n int, err error) {
 	// Check for concurrent access
-	b.checker.checkSafety()
 
 	if len(p) == 0 {
 		return 0, nil
@@ -125,7 +123,6 @@ func (b *unsafeBuffer) Write(p []byte) (n int, err error) {
 //go:nosplit
 func (b *unsafeBuffer) WriteString(s string) (n int, err error) {
 	// Check for concurrent access
-	b.checker.checkSafety()
 
 	if len(s) == 0 {
 		return 0, nil
@@ -159,7 +156,6 @@ func (b *unsafeBuffer) WriteString(s string) (n int, err error) {
 //go:nosplit
 func (b *unsafeBuffer) WriteByte(c byte) error {
 	// Check for concurrent access
-	b.checker.checkSafety()
 
 	if b.len >= b.cap {
 		return errBufferFull
@@ -181,7 +177,6 @@ func (b *unsafeBuffer) WriteByte(c byte) error {
 // Returns number of bytes written, limited by available space from offset.
 func (b *unsafeBuffer) WriteAt(p []byte, off int64) (n int, err error) {
 	// Check for concurrent access
-	b.checker.checkSafety()
 
 	if off < 0 || off >= int64(b.cap) {
 		return 0, errInvalidOffset
