@@ -45,7 +45,7 @@ var rules = []layerRule{
 	{
 		name:          "ports",
 		root:          "ports",
-		allowedExtra:  []string{"ports"},
+		allowedExtra:  []string{"ports/"},
 		forbiddenPkgs: []string{"internal/", "components/", "adapters/"},
 		externalAllow: false,
 	},

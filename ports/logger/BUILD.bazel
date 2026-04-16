@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logger",
+    srcs = ["sink.go"],
+    importpath = "github.com/kitsunium/sdk/ports/logger",
+    visibility = ["//visibility:public"],
+    deps = ["//ports/common"],
+)
+
+go_test(
+    name = "logger_test",
+    srcs = ["logger_external_test.go"],
+    deps = [":logger"],
+)

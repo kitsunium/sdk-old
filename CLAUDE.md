@@ -26,9 +26,13 @@ stays insulated from the stdlib wrappers, caches, and pools that power them.
 |---|---|---|
 | `internal/kernel/` | private (Go `internal/`) | Stdlib-only primitives (`pool`, `cache`, `errs`, `files`) |
 | `internal/core/` | private | Composition on top of kernel (`config/parser`, `config/normalize`, future `fanout`, `lifecycle`, `contract`) |
-| `ports/` | **public** | Interfaces (`Sink`, `Entry`, `Exporter`, lifecycle). Zero impl. |
+| `ports/common/` | **public** | Lifecycle interfaces shared by all components (`Opener`, `Closer`, `Flusher`) |
+| `ports/logger/` | **public** | Logger-specific contract (`Sink`, `EntryEvent`, `Severity`, `Format`) |
+| `ports/metrics/` | **public** | Metrics-specific contract (`Exporter`, `SampleRecord`, `SampleKind`) |
 | `components/` | **public** | Consumable products (`logger`, `metrics`, future `server`). Declare the ports they need. |
-| `adapters/` | **public** | Implementations of ports (`console`, `syslog`, `aws/cloudwatch`, …). |
+| `adapters/logger/` | **public** | Implementations of `ports/logger.Sink` (`console`, `syslog`, `file`, `cloud/aws/*`, …) |
+| `adapters/metrics/` | **public** | Implementations of `ports/metrics.Exporter` (`prometheus`, `statsd`, `cloud/aws/*`, …) |
+| `adapters/shared/` | **public** | Cross-cutting backends reused by multiple adapter families (e.g. AWS client) |
 
 ### Dependency rules (MECHANICALLY ENFORCED)
 
@@ -132,9 +136,12 @@ See `~/.claude/CLAUDE.md` for global rules. `mcp__grepai__*` before `Grep`, `mcp
 /workspace/CLAUDE.md                    ← this file (project)
 ├── .devcontainer/CLAUDE.md             ← container setup
 │   └── images/.claude/CLAUDE.md        ← Claude container layer
-├── ports/                              ← (no CLAUDE.md — contracts only)
+├── ports/                              ← common/, logger/, metrics/ (no CLAUDE.md — contracts only)
 ├── components/CLAUDE.md                ← component contract v1
-├── adapters/CLAUDE.md                  ← (future) adapter conventions
+├── adapters/CLAUDE.md                  ← adapter conventions
+│   ├── logger/CLAUDE.md
+│   ├── metrics/CLAUDE.md
+│   └── shared/CLAUDE.md
 └── internal/
     ├── kernel/CLAUDE.md                ← kernel-layer rules
     └── core/CLAUDE.md                  ← core-layer rules
@@ -149,7 +156,7 @@ concrete I/O (including external-dep-heavy providers like AWS).
 
 - [x] **Phase 0-1**: `pkg/kernel → internal/kernel`, `pkg/core → internal/core`, `pkg/component → components` physical move, imports rewritten, Bazel regenerated
 - [x] **Phase 1b**: `internal/core/contract/arch_external_test.go` — mechanical layering enforcement
-- [x] **Phase 2**: `ports/` package — `Sink`, `Entry`, `Exporter`, `Opener/Closer/Flusher`
+- [x] **Phase 2**: `ports/` split into `common/`, `logger/`, `metrics/` + `adapters/{logger,metrics,shared}/` scaffolding
 - [ ] **Phase 3**: component contract v1 — uniform `FromConfig` / `Repository` / `Instance(name, sink, sinks...)` interfaces
 - [ ] **Phase 4**: `internal/core/fanout/` — ring buffer + worker pool per sink
 - [ ] **Phase 5**: `adapters/console/` + `adapters/stream/` (first adapters)

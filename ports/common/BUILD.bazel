@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "common",
+    srcs = ["lifecycle.go"],
+    importpath = "github.com/kitsunium/sdk/ports/common",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "common_test",
+    srcs = ["common_external_test.go"],
+    deps = [":common"],
+)
