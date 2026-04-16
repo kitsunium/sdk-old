@@ -25,10 +25,10 @@ const (
 	SampleHistogram
 )
 
-// SampleRecord is a single metric observation. Components (metrics
-// today, tracing later) emit SampleRecords; adapters implementing
+// SampleEvent is a single metric observation. Components (metrics
+// today, tracing later) emit SampleEvents; adapters implementing
 // Exporter pump batches of them to their backend.
-type SampleRecord struct {
+type SampleEvent struct {
 	// Name is the metric identifier (e.g. "http_requests_total").
 	Name string
 	// Tags carries label key/value pairs for dimensionality.
@@ -41,7 +41,7 @@ type SampleRecord struct {
 	Kind SampleKind
 }
 
-// Exporter batches SampleRecords to a backend. Separate from
+// Exporter batches SampleEvents to a backend. Separate from
 // logger.Sink because metrics are batch-oriented (fanout amortizes
 // overhead over many observations) while logs are entry-oriented
 // (per-call latency). A single adapter MAY satisfy both interfaces.
@@ -60,7 +60,7 @@ type Exporter interface {
 	//
 	// Returns:
 	//   - err: non-nil when the batch could not be delivered
-	Export(ctx context.Context, samples []SampleRecord) (err error)
+	Export(ctx context.Context, samples []SampleEvent) (err error)
 }
 
 // Re-exported lifecycle interfaces for ergonomics — adapters typically

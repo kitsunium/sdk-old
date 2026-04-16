@@ -222,11 +222,8 @@ func (c *ShardedLRU[K, V]) Has(key K) bool {
 	defer shard.mu.RUnlock()
 
 	entry, exists := shard.cache.items[key]
-	if !exists {
-		return false
-	}
-
-	if entry.expiration > 0 && time.Now().UnixNano() > entry.expiration {
+	//: missing entry and expired entry both return false — merged guard
+	if !exists || (entry.expiration > 0 && time.Now().UnixNano() > entry.expiration) {
 		return false
 	}
 

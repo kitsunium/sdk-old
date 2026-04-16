@@ -24,7 +24,7 @@ var (
 //   - t: the testing harness
 func TestExporterBatch(t *testing.T) {
 	e := &memoryExporter{}
-	err := e.Export(context.Background(), []metrics.SampleRecord{
+	err := e.Export(context.Background(), []metrics.SampleEvent{
 		{Name: "m", Value: 1, Kind: metrics.SampleCounter},
 		{Name: "m", Value: 2, Kind: metrics.SampleGauge},
 	})
@@ -40,7 +40,7 @@ func TestExporterBatch(t *testing.T) {
 // covering the full lifecycle.
 type memoryExporter struct {
 	// batches captures every payload passed to Export.
-	batches [][]metrics.SampleRecord
+	batches [][]metrics.SampleEvent
 	// opened records that Open was called.
 	opened bool
 	// flushed records that Flush was called.
@@ -63,7 +63,7 @@ func (m *memoryExporter) Name() (name string) { return "memory-metrics" }
 //
 // Returns:
 //   - err: always nil
-func (m *memoryExporter) Export(_ context.Context, s []metrics.SampleRecord) (err error) {
+func (m *memoryExporter) Export(_ context.Context, s []metrics.SampleEvent) (err error) {
 	m.batches = append(m.batches, s)
 	return nil
 }

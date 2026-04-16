@@ -13,6 +13,6 @@ go_library(
 
 go_test(
     name = "logger_test",
-    srcs = ["logger_test.go"],
+    srcs = ["logger_internal_test.go"],
     embed = [":logger"],
 )

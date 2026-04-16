@@ -320,11 +320,8 @@ func (c *LRU[K, V]) Has(key K) bool {
 	defer c.mu.RUnlock()
 
 	e, exists := c.items[key]
-	if !exists {
-		return false
-	}
-
-	if e.expiration > 0 && time.Now().UnixNano() > e.expiration {
+	//: missing entry and expired entry both return false — merged guard
+	if !exists || (e.expiration > 0 && time.Now().UnixNano() > e.expiration) {
 		return false
 	}
 

@@ -18,11 +18,6 @@ import (
 // maxUID is the maximum valid POSIX UID/GID value (2^31 - 1).
 const maxUID = 0x7FFFFFFF
 
-var (
-	ownerCache = &sync.Map{} // UID → user name
-	groupCache = &sync.Map{} // GID → group name
-)
-
 // POSIX permission bit masks (stdlib `syscall` exposes only a subset; we
 // inline the canonical values from <sys/stat.h> to avoid adding a dep).
 const (
@@ -40,6 +35,11 @@ const (
 	sIROTH uint32 = 0o000004
 	sIWOTH uint32 = 0o000002
 	sIXOTH uint32 = 0o000001
+)
+
+var (
+	ownerCache = &sync.Map{} // UID → user name
+	groupCache = &sync.Map{} // GID → group name
 )
 
 // PermissionSet is a decoded view of a `rwx` triple.

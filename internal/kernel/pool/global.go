@@ -109,13 +109,8 @@ func (p *bufferPool) Put(buf []byte) {
 
 	capacity := cap(buf)
 
-	// Don't pool oversized buffers
-	if capacity > int(p.maxSize.Load()) {
-		return
-	}
-
-	// Don't pool non-power-of-2 sizes (indicates non-pooled allocation)
-	if !isPowerOfTwo(capacity) {
+	//: oversized and non-power-of-2 buffers both bail out — merged guard
+	if capacity > int(p.maxSize.Load()) || !isPowerOfTwo(capacity) {
 		return
 	}
 

@@ -9,6 +9,6 @@ go_library(
 
 go_test(
     name = "normalize_test",
-    srcs = ["normalize_test.go"],
+    srcs = ["normalize_internal_test.go"],
     embed = [":normalize"],
 )

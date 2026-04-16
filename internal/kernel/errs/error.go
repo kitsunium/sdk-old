@@ -14,6 +14,23 @@ import (
 	"sync/atomic"
 )
 
+// Declaration order: const → var → type → func (enforced by KTN-CONST-ORDER).
+
+// initialMapCapacity is the preallocated capacity hint for inline maps.
+const initialMapCapacity = 2
+
+// callerSkip is the depth passed to runtime.Caller inside Define.
+const callerSkip = 2
+
+var (
+	// errorCounter is the monotonic ID source for catalog entries.
+	errorCounter uint32
+	// registry maps (pkg, code) pairs to their catalog entry pointers.
+	registry sync.Map
+	// defineMu serialises duplicate-detection during Define.
+	defineMu sync.Mutex
+)
+
 // Config is the input passed to Define.
 //
 // Package may be left empty to let Define auto-detect from the call stack.
@@ -33,21 +50,6 @@ type Err struct {
 	code    int
 	message string
 }
-
-// initialMapCapacity is the preallocated capacity hint for inline maps.
-const initialMapCapacity = 2
-
-// callerSkip is the depth passed to runtime.Caller inside Define.
-const callerSkip = 2
-
-var (
-	// errorCounter is the monotonic ID source for catalog entries.
-	errorCounter uint32
-	// registry maps (pkg, code) pairs to their catalog entry pointers.
-	registry sync.Map
-	// defineMu serialises duplicate-detection during Define.
-	defineMu sync.Mutex
-)
 
 // Define registers a new catalog entry and returns its Err handle.
 //

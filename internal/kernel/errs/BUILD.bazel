@@ -18,7 +18,7 @@ go_test(
     srcs = [
         "error_external_test.go",
         "error_internal_test.go",
-        "export_test.go",
+        "export_internal_test.go",
     ],
     embed = [":errs"],
 )

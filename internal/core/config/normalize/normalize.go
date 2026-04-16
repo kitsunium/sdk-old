@@ -76,11 +76,8 @@ func init() {
 //	Key("Redis_Host")   // returns "redis.host"
 //	Key("api.key")      // returns "api.key" (unchanged)
 func Key(key string) string {
-	if len(key) == startIndex {
-		return key
-	}
-
-	if !needsKeyTransform(key) {
+	//: empty keys and already-canonical keys short-circuit — same effect so merged
+	if len(key) == startIndex || !needsKeyTransform(key) {
 		return key
 	}
 
