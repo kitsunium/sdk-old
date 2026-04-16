@@ -1,5 +1,5 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/kernel/errs
+# internal/kernel/errs
 
 Typed error catalog. Entries are registered once via `Define`, each carries a stable ID + (package, code) pair + default message. Catalog entries turn into concrete `Instance` objects at call sites with an optional cause, tags, and typed details.
 
@@ -47,7 +47,7 @@ if got, ok := errs.FromContext(ctx); ok {
 
 Removed during the 2026-04 rebuild (see `/workspace/.claude/contexts/kernel-errs-audit.md`):
 - `Result[T]`, `NewResult` — ambiguous wrapper, replaced by idiomatic `(T, error)`.
-- `MetricsCollector` / `SetMetricsCollector` / `GetMetricsSnapshot` — belongs in `pkg/component/metrics`, not here.
+- `MetricsCollector` / `SetMetricsCollector` / `GetMetricsSnapshot` — belongs in `components/metrics`, not here.
 - `GlobalConfig` / `Configure` / `GetConfig` — unused runtime knobs.
 - `ExtractTraceID` / `ExtractSpanID` — stubs returning `""`.
 - `WithContext` / `Context()` — context stored in a struct is a Go anti-pattern; use `ToContext`/`FromContext`.
@@ -56,6 +56,6 @@ Removed during the 2026-04 rebuild (see `/workspace/.claude/contexts/kernel-errs
 ## Validation
 
 ```bash
-bazel test //pkg/kernel/errs/...
-go test -race ./pkg/kernel/errs
+bazel test //internal/kernel/errs/...
+go test -race ./internal/kernel/errs
 ```

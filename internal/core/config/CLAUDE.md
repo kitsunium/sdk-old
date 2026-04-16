@@ -1,5 +1,5 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/core/config
+# internal/core/config
 
 Configuration primitives: file/env/args parsers + key/value normalization. All children stay within the `core` layer dependency contract (kernel + stdlib only).
 
@@ -20,14 +20,14 @@ clean := normalize.Map(rawAny)          // normalized keys + stringified values
 
 ## Rules
 
-1. **Buffering** on file parsers goes through `pkg/kernel/pool` when `WithPool(true)`.
-2. **Errors** constructed here must use `pkg/kernel/errs` — no raw `errors.New` / `fmt.Errorf` in new code.
-3. Do not import `pkg/component/*` from anywhere under `config/`.
+1. **Buffering** on file parsers goes through `internal/kernel/pool` when `WithPool(true)`.
+2. **Errors** constructed here must use `internal/kernel/errs` — no raw `errors.New` / `fmt.Errorf` in new code.
+3. Do not import `components/*` from anywhere under `config/`.
 4. A new file format = new file in `parser/` following the existing `JSON/YAML/TOML/INI/XML` template (type struct, `NewXxx`, `Type()`, `Load()`, `LoadReader(io.Reader)`).
 
 ## Validation
 
 ```bash
-bazel test //pkg/core/config/...
-go test -race ./pkg/core/config/...
+bazel test //internal/core/config/...
+go test -race ./internal/core/config/...
 ```

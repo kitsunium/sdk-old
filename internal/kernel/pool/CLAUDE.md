@@ -1,5 +1,5 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/kernel/pool
+# internal/kernel/pool
 
 Reusable byte buffers and global `sync.Pool`. Hottest path in the SDK — changes here must be benchmarked.
 
@@ -26,6 +26,16 @@ Reusable byte buffers and global `sync.Pool`. Hottest path in the SDK — change
 
 `Sharded` adds: `WriteToShard`, `ShardCount`, `Balance`.
 
+## Buffer choice (callers must pick deliberately)
+
+| Constructor | Thread-safe | Typical perf | Use when |
+|---|---|---|---|
+| `NewUnsafeBuffer(n)` | ❌ no | ~2-3 ns/op | single goroutine owns the buffer for its lifetime |
+| `NewSafeBuffer(n)` | ✅ spinlock | ~15-25 ns/op | 2-10 concurrent writers |
+| `NewSafeShardedBuffer(n, s)` | ✅ per-shard spinlock | ~70-85 ns/op at 100 goroutines | high-contention write paths |
+
+Spinlock over `sync.Mutex`: shorter critical sections + exponential backoff + cache locality beat mutex by ~2-3× at low contention. Handing an `unsafeBuffer` across goroutines is undefined behaviour — there is no runtime check; pick `NewSafeBuffer` instead.
+
 ## Rules
 
 1. **Never** hand an `unsafeBuffer` to another goroutine — it has no synchronization. For shared access use `NewSafeBuffer`; for high-contention writers use `NewSafeShardedBuffer`.
@@ -48,6 +58,6 @@ Removed during the 2026-04 rebuild (see `/workspace/.claude/contexts/kernel-pool
 ## Validation
 
 ```bash
-bazel test //pkg/kernel/pool/...
-go test -race -bench=. -benchmem ./pkg/kernel/pool
+bazel test //internal/kernel/pool/...
+go test -race -bench=. -benchmem ./internal/kernel/pool
 ```

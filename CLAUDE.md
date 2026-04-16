@@ -109,8 +109,8 @@ Pinned to **Go 1.26.1** (`go.mod`, `MODULE.bazel`, `.github/workflows/ci.yml`). 
 
 ## 10.0 Documentation
 
-- Every public package has a `README.md` (usage + perf notes).
-- Every exported symbol has a one-line godoc.
+- **Single source of truth per package: `CLAUDE.md`**. No per-package `README.md`. The only `README.md` is the repo root (landing for GitHub / pkg.go.dev).
+- Every exported symbol has a one-line godoc. Rich usage lives in package-level `doc.go` comments consumed by pkg.go.dev.
 
 ## 11.0 MCP-First / GrepAI-First
 
@@ -147,7 +147,7 @@ ports-and-adapters model where `components/` is the single public surface
 for end users, `internal/*` is Go-enforced private, and `adapters/` carries
 concrete I/O (including external-dep-heavy providers like AWS).
 
-- [x] **Phase 0-1**: `pkg/* → internal/*` + `pkg/component → components` physical move, imports rewritten, Bazel regenerated
+- [x] **Phase 0-1**: `pkg/kernel → internal/kernel`, `pkg/core → internal/core`, `pkg/component → components` physical move, imports rewritten, Bazel regenerated
 - [x] **Phase 1b**: `internal/core/contract/arch_external_test.go` — mechanical layering enforcement
 - [x] **Phase 2**: `ports/` package — `Sink`, `Entry`, `Exporter`, `Opener/Closer/Flusher`
 - [ ] **Phase 3**: component contract v1 — uniform `FromConfig` / `Repository` / `Instance(name, sink, sinks...)` interfaces

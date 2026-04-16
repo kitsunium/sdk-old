@@ -1,5 +1,5 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/core/config/parser
+# internal/core/config/parser
 
 Multi-format configuration parsers sharing a common `baseParser` (via `ParserOption`).
 
@@ -37,7 +37,7 @@ All file-format types (JSON/YAML/TOML/INI/XML) implement `FileParser`. `ENV` and
 
 1. **Uppercase type names** (`JSON`, `YAML`, not `Json`, `Yaml`) — matches the target API `parser.YAML.Load(...)` in roadmap §16.
 2. **Errors**: define once in `errors.go` with `errs.Define(KConfig{Package:"parser", ...})`. Never inline `fmt.Errorf` at call sites.
-3. **Buffering**: the `WithPool(true)` option routes reads through `pkg/kernel/pool` — keep parity across all file parsers.
+3. **Buffering**: the `WithPool(true)` option routes reads through `internal/kernel/pool` — keep parity across all file parsers.
 4. **Map output**: `Load` always returns `map[string]string`. Nested structures are flattened with dot-notation keys by the parser; normalization is the `normalize` package's job, not this one.
 5. A new format = new file + new type following the template exactly (constructor signature, `Type()`, `Load()`, `LoadReader(io.Reader)`).
 6. Target naming migration (roadmap §16): `NewJSON(path)` → `parser.JSON.Load(path)`. Pending the refactor, prefer the existing form and do not introduce a third spelling.
@@ -45,6 +45,6 @@ All file-format types (JSON/YAML/TOML/INI/XML) implement `FileParser`. `ENV` and
 ## Validation
 
 ```bash
-bazel test //pkg/core/config/parser/...
-go test -race ./pkg/core/config/parser
+bazel test //internal/core/config/parser/...
+go test -race ./internal/core/config/parser
 ```

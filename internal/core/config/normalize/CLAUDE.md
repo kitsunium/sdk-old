@@ -1,5 +1,5 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/core/config/normalize
+# internal/core/config/normalize
 
 Canonical key/value formatting for configuration maps, plus zero-allocation `string↔[]byte` conversions used on the hot path.
 
@@ -30,6 +30,6 @@ Canonical key/value formatting for configuration maps, plus zero-allocation `str
 ## Validation
 
 ```bash
-bazel test //pkg/core/config/normalize/...
-go test -race -bench=. -benchmem ./pkg/core/config/normalize
+bazel test //internal/core/config/normalize/...
+go test -race -bench=. -benchmem ./internal/core/config/normalize
 ```

@@ -1,5 +1,5 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/kernel/cache
+# internal/kernel/cache
 
 Generic in-memory caches parametrized on `[K comparable, V any]`. TTL-aware.
 
@@ -46,6 +46,6 @@ Removed during the 2026-04 rebuild (see `/workspace/.claude/contexts/kernel-cach
 ## Validation
 
 ```bash
-bazel test //pkg/kernel/cache/...
-go test -race -bench=. -benchmem ./pkg/kernel/cache
+bazel test //internal/kernel/cache/...
+go test -race -bench=. -benchmem ./internal/kernel/cache
 ```

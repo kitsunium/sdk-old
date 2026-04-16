@@ -5,233 +5,134 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/kitsunium/sdk/workflows/CI/badge.svg)](https://github.com/kitsunium/sdk/actions)
 
-A high-performance Go SDK providing essential building blocks for modern
-applications with a focus on efficiency, reliability, and developer experience.
+High-performance Go SDK. Import ready-to-use **components** (logger, metrics,
+future: server), wire in the **adapters** you need (console, syslog, AWS
+CloudWatch…), and the private plumbing (pool, cache, errs, files) stays out
+of your way.
 
-## 🚀 Features
+## Status
 
-### Core Packages
+**Pre-1.0 — API in flux.** The SDK is being restructured into a
+ports-and-adapters layout. Track the roadmap in [CLAUDE.md §15](./CLAUDE.md#150-roadmap--deep-restructure-in-progress).
 
-#### 🔧 **Kernel Components**
+## Architecture
 
-- **pool**: Buffer pool management with zero-allocation operations
-- **cache**: Advanced caching with LRU, sharded, and atomic cache
-  implementations
-- **errs**: Comprehensive error handling with stack traces and error registry
-- **files**: File system utilities with optimized file operations
-
-#### 📦 **Core Utilities**
-
-- **Config Management**: Multi-format configuration parser (YAML, JSON, TOML,
-  XML, INI)
-- **Config Normalization**: Automatic configuration key normalization
-- **Performance Optimized**: Extensive benchmarking and performance tuning
-
-## 📊 Performance
-
-The SDK is extensively benchmarked for optimal performance. Run benchmarks with:
-
-```bash
-make bench                    # Benchmark current commit
-make bench <commit>          # Benchmark specific commit
-make bench/compare           # Compare with main branch
-make bench/compare <c1> <c2>  # Compare two commits
+```
+                 ┌──────── PUBLIC ────────┐
+ adapters/ ──────┤                        │
+                 ▼                        ▼
+              ports/ ◀─────────── components/
+                                        │
+              ┌──────── PRIVATE ────────┘
+              ▼
+      internal/core/ ──▶ internal/kernel/ ──▶ Go stdlib
 ```
 
-## 🛠️ Installation
+- `components/` — the stable public surface (what you import)
+- `ports/` — interfaces components declare, adapters implement
+- `adapters/` — concrete backends (console, syslog, cloud providers) — not yet populated
+- `internal/{core,kernel}/` — private plumbing, Go-enforced
+
+Layering is enforced mechanically via `go/ast` in
+`internal/core/contract/arch_external_test.go`.
+
+## Installation
 
 ```bash
 go get github.com/kitsunium/sdk
 ```
 
-## 📖 Usage
+## Quick look — current state (legacy API)
 
-### Buffer Pool Example
+The constructors listed here still use the `New*` form; the v1 target (per
+roadmap §16) is bare-form with functional options:
+`logger.JSON(opts...)`, `pool.Buffer(n, pool.Safe())`, etc.
 
-```go
-import "github.com/kitsunium/sdk/pkg/kernel/pool"
-
-// Create a buffer pool
-pool := pool.NewPool(1024)
-
-// Get a buffer
-buf := pool.Get()
-defer pool.Put(buf)
-
-// Use the buffer
-buf.WriteString("Hello, World!")
-data := buf.Bytes()
-```
-
-### LRU Cache Example
+### Logger
 
 ```go
-import "github.com/kitsunium/sdk/pkg/kernel/cache"
+import "github.com/kitsunium/sdk/components/logger"
 
-// Create an LRU cache with 1000 entries
-cache := cache.NewLRU(1000)
-
-// Set a value
-cache.Set("key", "value")
-
-// Get a value
-if val, ok := cache.Get("key"); ok {
-    fmt.Println(val)
-}
-```
-
-### Error Handling Example
-
-```go
-import "github.com/kitsunium/sdk/pkg/kernel/errs"
-
-// Define custom errors
-var (
-    ErrNotFound = errs.New(404, "NOT_FOUND", "Resource not found")
-    ErrInternal = errs.New(500, "INTERNAL", "Internal server error")
+log := logger.JSON(
+    logger.WithLevel(logger.LevelInfo),
+    logger.WithOutput(os.Stdout),
 )
 
-// Use errors with context
-err := ErrNotFound.WithDetail("user_id", userID)
-if errs.Is(err, ErrNotFound) {
-    // Handle not found error
+log.Info("server started", logger.String("addr", ":8080"), logger.Int("pid", os.Getpid()))
+
+svc := log.With(logger.String("service", "api"))
+if err := doWork(); err != nil {
+    svc.Error(err, "worker failed", logger.String("job", "ingest"))
 }
 ```
 
-### Configuration Parser Example
+### Metrics
 
 ```go
-import "github.com/kitsunium/sdk/pkg/core/config/parser"
+import "github.com/kitsunium/sdk/components/metrics"
 
-// Parse YAML configuration
-config, err := parser.YAML.LoadFile("config.yaml")
+requests := metrics.Counter("http_requests_total", metrics.WithHelp("Total HTTP requests"))
+requests.Inc()
 
-// Parse JSON configuration
-data, err := parser.JSON.LoadBytes(jsonBytes)
+queueDepth := metrics.Gauge("queue_depth")
+queueDepth.Set(42)
 
-// Parse from environment variables
-envConfig, err := parser.ENV.Load("APP_")
+db := metrics.Health("db", func(ctx context.Context) metrics.Status {
+    if err := ping(ctx); err != nil {
+        return metrics.Down(err.Error())
+    }
+    return metrics.OK("reachable")
+})
 ```
 
-## 🏗️ Development
+## Development
 
 ### Prerequisites
 
-- Go 1.21+
-- Bazel (optional, for build system)
-- Make
+- Go 1.26.1
+- Bazel (source of truth for builds)
 
-### Building
-
-```bash
-make build              # Build all packages
-make test              # Run tests
-make test/coverage     # Run tests with coverage
-make quality/validate  # Run all quality checks
-```
-
-### Code Quality
+### Build & test
 
 ```bash
-make quality/lint      # Run linters
-make quality/format    # Format code
-make quality/security  # Run security analysis
-make quality/fix       # Auto-fix issues
+bazel build //...                                          # full build
+bazel test //...                                           # full test
+go test -tags=archcheck ./internal/core/contract/...       # architecture enforcement
+bazel run //:gazelle                                       # regenerate BUILD.bazel after moves
 ```
 
-### Git Hooks
+Non-Bazel fallback: `go build ./...`, `go test ./...`.
 
-Install Git hooks for automatic code quality checks:
+### Code quality
+
+- **Linter**: `ktn-linter` only (148 rules, 8 phases, `.ktn-linter.yaml`).
+- **Coverage**: 90% gate in CI, per-package exemptions in `.ktn-linter.yaml`.
+- **Review**: human + CodeRabbit + Qodo Merge + local `/review` skill.
+
+### Benchmarks
+
+Hot-path code in `internal/kernel/` requires benchmarks
+(`*_bench_test.go`). Regressions >5% block the PR.
 
 ```bash
-make hooks/install
+bazel test //internal/kernel/pool:bench --test_arg=-bench=.
+go test -bench=. -benchmem ./internal/kernel/pool
 ```
 
-## 📦 Package Structure
+## Contributing
 
-```text
-sdk/
-├── pkg/
-│   ├── kernel/          # Core kernel packages
-│   │   ├── pool/        # Buffer pool management
-│   │   ├── cache/       # Caching implementations
-│   │   ├── errs/        # Error handling
-│   │   ├── kfs/         # File system utilities
-│   │   └── config/      # Configuration management
-│   └── core/            # Core utilities
-│       └── config/      # Configuration parsers
-│           ├── parser/  # Multi-format parsers
-│           └── normalize/ # Key normalization
-└── scripts/             # Development scripts
-```
+- No direct commits to `main` — PRs only, CI green, squash-merge.
+- Branch naming: `feat/*`, `fix/*`, `refactor/*`, `docs/*`, `chore/*`, `perf/*`.
+- Conventional commits enforced.
+- No AI references in commit messages (enforced by `git-guard.sh`).
+- See [CLAUDE.md](./CLAUDE.md) for project instructions consumed by Claude Code.
 
-## 🤝 Contributing
+## License
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Apache 2.0 — see [LICENSE](LICENSE).
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+## Links
 
-## 📈 Benchmarks
-
-The SDK includes comprehensive benchmarks for all performance-critical
-components:
-
-- **Buffer Operations**: Optimized for minimal allocations
-- **Cache Operations**: Sub-microsecond access times
-- **Error Handling**: Zero-allocation error creation
-- **Config Parsing**: Fast multi-format parsing
-
-View the latest benchmark results:
-
-```bash
-make bench/list        # List saved benchmarks
-make bench/compare     # Compare performance
-```
-
-## 🛡️ Development Setup
-
-### Git Hooks
-
-This project uses Git hooks to maintain code quality and enforce standards.
-Install them with:
-
-```bash
-# Install git hooks (required for contributors)
-bash .githooks/install.sh
-```
-
-The hooks will:
-
-- **pre-commit**: Format code automatically
-- **commit-msg**: Validate conventional commit format
-- **pre-push**: Block AI-related content
-
-To temporarily bypass hooks (not recommended):
-
-```bash
-git commit --no-verify  # Skip pre-commit
-ALLOW_AI_MENTIONS=1 git push  # Skip AI content check
-```
-
-## 📄 License
-
-This project is licensed under the Apache License 2.0 - see the
-[LICENSE](LICENSE) file for details.
-
-## 🔗 Links
-
-- [Documentation](https://pkg.go.dev/github.com/kitsunium/sdk)
-- [GitHub Repository](https://github.com/kitsunium/sdk)
-- [Issue Tracker](https://github.com/kitsunium/sdk/issues)
-
-## ⭐ Support
-
-If you find this project useful, please consider giving it a star on GitHub!
-
----
-
-Made with ❤️ by the Kitsunium Team
+- [API docs](https://pkg.go.dev/github.com/kitsunium/sdk)
+- [Issues](https://github.com/kitsunium/sdk/issues)
+- [Roadmap](./CLAUDE.md#150-roadmap--deep-restructure-in-progress)

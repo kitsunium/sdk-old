@@ -1,5 +1,5 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/kernel/files
+# internal/kernel/files
 
 Filesystem abstractions: files, directories, stats, host/system. **POSIX-only** (`//go:build !windows`).
 
@@ -63,6 +63,6 @@ Removed during the 2026-04 rebuild (see `/workspace/.claude/contexts/kernel-file
 ## Validation
 
 ```bash
-bazel test //pkg/kernel/files/...
-go test -race ./pkg/kernel/files
+bazel test //internal/kernel/files/...
+go test -race ./internal/kernel/files
 ```

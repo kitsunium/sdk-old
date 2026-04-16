@@ -1,7 +1,7 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/component/metrics
+# components/metrics
 
-Instrumentation primitives: counters, gauges, health checks. Product layer on top of `pkg/kernel/*`.
+Instrumentation primitives: counters, gauges, health checks. Product layer on top of `internal/kernel/*`.
 
 ## Files
 
@@ -48,6 +48,6 @@ OK(reason), Degraded(reason), Down(reason)
 ## Validation
 
 ```bash
-bazel test //pkg/component/metrics/...
-go test -race ./pkg/component/metrics
+bazel test //components/metrics/...
+go test -race ./components/metrics
 ```

@@ -1,5 +1,5 @@
 <!-- updated: 2026-04-16T00:00:00Z -->
-# pkg/component/logger
+# components/logger
 
 Structured logger with typed fields. Two flavors: `logger.JSON(...)` (machine-readable) and `logger.Text(...)` (human-readable).
 
@@ -52,6 +52,6 @@ WithTimeFormat(layout string)
 ## Validation
 
 ```bash
-bazel test //pkg/component/logger/...
-go test -race ./pkg/component/logger
+bazel test //components/logger/...
+go test -race ./components/logger
 ```
