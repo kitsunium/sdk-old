@@ -7,3 +7,10 @@ exclude_paths:
   - "vendor/**"
   - "**/*.md"
   - "scripts/bench_manager.py"
+  # Workflow definitions. The post-commit gate references
+  # kodflow/post-commit@main on purpose — a rule added in the central repo
+  # must be live here on the next run, so a SHA pin would freeze this repo
+  # out of every future fix. Codacy scores that mutable ref as a new
+  # security issue and the "0 max" gate then blocks every PR that touches
+  # a workflow.
+  - ".github/workflows/**"
