@@ -1,8 +1,6 @@
 # Kitsunium SDK
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/kitsunium/sdk.svg)](https://pkg.go.dev/github.com/kitsunium/sdk)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/b938f8b73d184cc7b6b298a18f16bc27)](https://app.codacy.com/gh/kitsunium/sdk/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
-[![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/b938f8b73d184cc7b6b298a18f16bc27)](https://app.codacy.com/gh/kitsunium/sdk/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_coverage)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/kitsunium/sdk/workflows/CI/badge.svg)](https://github.com/kitsunium/sdk/actions)
 
